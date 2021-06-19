@@ -11,13 +11,3 @@ coverage:
 	go tool cover -html=coverage.out
 clean:
 	rm coverage.out
-
-
-#one:
-    #touch one
-#two:
-    #touch two
-#three:
-    #touch three
-#clean:
-    #rm -f one two three
