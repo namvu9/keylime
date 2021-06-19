@@ -1,29 +1,69 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
+type NodeReadWriter interface {
+	Write(string, []byte) (int, error)
+	Read(string, *BNode) error
+}
+
 type BNode struct {
+	loaded   bool
+	ID       string
 	children []*BNode
-	records  Records
-	leaf     bool
-	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
+	Records  Records
+	Leaf     bool
+	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
+
+	storage NodeReadWriter
+}
+
+func (b *BNode) newNode() *BNode {
+	node := newNode(b.T)
+	node.storage = b.storage
+	return node
+}
+
+func (b *BNode) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "-----\nBNode\n-----\n")
+	if b.ID != "" {
+		fmt.Fprintf(&sb, "ID:\t\t%s\n", b.ID)
+	} else {
+		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
+	}
+	fmt.Fprintf(&sb, "t:\t\t%d\n", b.T)
+	fmt.Fprintf(&sb, "Loaded:\t\t%v\n", b.loaded)
+	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", b.Leaf)
+	fmt.Fprintf(&sb, "Children:\t%v\n", len(b.children))
+	fmt.Fprintf(&sb, "Keys:\t\t")
+	for _, key := range b.Records.keys() {
+		fmt.Fprintf(&sb, "%s ", key)
+	}
+	fmt.Fprintf(&sb, "\n")
+	return sb.String()
 }
 
 func newNode(t int) *BNode {
 	return &BNode{
+		ID:       uuid.New().String(),
 		children: []*BNode{},
-		records:  make([]*Record, 0, 2*t-1),
-		leaf:     false,
-		t:        t,
+		Records:  make([]*Record, 0, 2*t-1),
+		Leaf:     false,
+		T:        t,
 	}
 }
 
 func (b *BNode) isFull() bool {
-	return len(b.records) == 2*b.t-1
+	return len(b.Records) == 2*b.T-1
 }
 
 type nodeReference struct {
@@ -43,17 +83,17 @@ func (nr *nodeReference) load(ctx context.Context) error {
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
 func (b *BNode) keyIndex(k string) (index int, exists bool) {
-	for i, kv := range b.records {
-		if k == kv.key {
+	for i, kv := range b.Records {
+		if k == kv.Key {
 			return i, true
 		}
 
-		if strings.Compare(k, kv.key) < 0 {
+		if strings.Compare(k, kv.Key) < 0 {
 			return i, false
 		}
 	}
 
-	return len(b.records), false
+	return len(b.Records), false
 }
 
 // insertKey key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
@@ -65,23 +105,23 @@ func (b *BNode) insertKey(k string, value []byte) int {
 	kv := NewRecord(k, value)
 	out := []*Record{}
 
-	for i, key := range b.records {
-		if kv.key == key.key {
-			b.records[i] = kv
+	for i, key := range b.Records {
+		if kv.Key == key.Key {
+			b.Records[i] = kv
 			return i
 		}
 
 		if kv.isLessThan(key) {
 			out = append(out, kv)
-			b.records = append(out, b.records[i:]...)
+			b.Records = append(out, b.Records[i:]...)
 			return i
 		} else {
-			out = append(out, b.records[i])
+			out = append(out, b.Records[i])
 		}
 	}
 
-	b.records = append(out, kv)
-	return len(b.records) - 1
+	b.Records = append(out, kv)
+	return len(b.Records) - 1
 }
 
 // Panics if child is not full
@@ -91,32 +131,37 @@ func (b *BNode) splitChild(index int) {
 		panic("Cannot split non-full child")
 	}
 
-	newChild := newNode(b.t)
-	newChild.leaf = fullChild.leaf
+	newChild := b.newNode()
+	newChild.Leaf = fullChild.Leaf
 
-	medianKey, left, right := partitionMedian(fullChild.records)
-	b.insertKey(medianKey.key, medianKey.value)
+	medianKey, left, right := partitionMedian(fullChild.Records)
+	b.insertKey(medianKey.Key, medianKey.Value)
 
-	fullChild.records, newChild.records = left, right
+	fullChild.Records, newChild.Records = left, right
 
-	if !fullChild.leaf {
-		newChild.insertChildren(0, fullChild.children[b.t:]...)
-		fullChild.children = fullChild.children[:b.t]
+	if !fullChild.Leaf {
+		newChild.insertChildren(0, fullChild.children[b.T:]...)
+		fullChild.children = fullChild.children[:b.T]
 	}
 
 	b.insertChildren(index+1, newChild)
+
+	fmt.Println("Writing after split child", b.ID)
+	b.write()
+	newChild.write()
+	fullChild.write()
 }
 
 func (b *BNode) insertRecord(r *Record) int {
-	return b.insertKey(r.key, r.value)
+	return b.insertKey(r.Key, r.Value)
 }
 
 func (b *BNode) setRecord(index int, r *Record) {
-	b.records[index] = r
+	b.Records[index] = r
 }
 
 func (b *BNode) insertChildren(index int, children ...*BNode) {
-	if len(b.children) == 2*b.t {
+	if len(b.children) == 2*b.T {
 		panic("Cannot insert a child into a full node")
 	}
 
@@ -169,22 +214,21 @@ func (b *BNode) childSuccessor(index int) *BNode {
 
 func (b *BNode) deleteKey(k string) error {
 	index, exists := b.keyIndex(k)
-	if exists && b.leaf {
-		b.records = append(b.records[:index], b.records[index+1:]...)
+	if exists && b.Leaf {
+		b.Records = append(b.Records[:index], b.Records[index+1:]...)
 		return nil
 	} else if exists {
 		// INTERNAL NODES
-		// NOT LEAF
 		// Case 1: Predcessor has at least t keys
 		if p := b.predecessorKeyNode(k); p != nil && !p.isSparse() {
-			pred_k := p.records.last()
-			b.records[index] = pred_k
-			return p.deleteKey(pred_k.key)
+			pred_k := p.Records.last()
+			b.Records[index] = pred_k
+			return p.deleteKey(pred_k.Key)
 			// Case 2: Successor has at least t keys
 		} else if s := b.successorKeyNode(k); s != nil && !s.isSparse() {
-			succ_k := s.records[0]
-			b.records[index] = succ_k
-			return s.deleteKey(succ_k.key)
+			succ_k := s.Records[0]
+			b.Records[index] = succ_k
+			return s.deleteKey(succ_k.Key)
 			// Case 3: Neither p nor s has >= t keys
 		} else {
 			// Merge s and p with k as median key
@@ -192,7 +236,9 @@ func (b *BNode) deleteKey(k string) error {
 			b.children[index].deleteKey(k)
 		}
 
-		return nil
+		// TODO: Write nodes, p/s ?
+		_, err := b.write()
+		return err
 	} else {
 		return fmt.Errorf("KeyNotFoundError")
 	}
@@ -205,29 +251,117 @@ func (b *BNode) hasKey(k string) bool {
 }
 
 func (b *BNode) isSparse() bool {
-	return len(b.records) <= b.t-1
+	return len(b.Records) <= b.T-1
 }
 
 func (b *BNode) mergeChildren(index int) {
 	var (
-		pivotRecord = b.records[index]
+		pivotRecord = b.Records[index]
 		leftChild   = b.children[index]
 		rightChild  = b.children[index+1]
 	)
 
-	node := newNode(b.t)
-	node.leaf = leftChild.leaf
+	node := newNode(b.T)
+	node.Leaf = leftChild.Leaf
 
-	node.records = append(node.records, leftChild.records...)
-	node.records = append(node.records, pivotRecord)
-	node.records = append(node.records, rightChild.records...)
+	node.Records = append(node.Records, leftChild.Records...)
+	node.Records = append(node.Records, pivotRecord)
+	node.Records = append(node.Records, rightChild.Records...)
 
 	node.children = append(node.children, leftChild.children...)
 	node.children = append(node.children, rightChild.children...)
 
 	// Delete the key from the node
-	b.records = append(b.records[:index], b.records[index+1:]...)
+	b.Records = append(b.Records[:index], b.Records[index+1:]...)
 
 	b.children[index] = node
 	b.children = append(b.children[:index+1], b.children[index+2:]...)
+}
+
+func (b *BNode) GobEncode() ([]byte, error) {
+	refs := []*BNode{}
+	for _, c := range b.children {
+		cNode := new(BNode)
+		cNode.ID = c.ID
+		refs = append(refs, cNode)
+	}
+	w := new(bytes.Buffer)
+	encoder := gob.NewEncoder(w)
+
+	err := encoder.Encode(refs)
+	if err != nil {
+		return nil, err
+	}
+	encoder.Encode(b.ID)
+	encoder.Encode(b.T)
+	encoder.Encode(b.Leaf)
+	encoder.Encode(b.Records)
+
+	return w.Bytes(), nil
+}
+
+func (b *BNode) GobDecode(buf []byte) error {
+	r := bytes.NewBuffer(buf)
+	decoder := gob.NewDecoder(r)
+
+	if err := decoder.Decode(&b.children); err != nil {
+		return err
+	}
+	for _, child := range b.children {
+		child.storage = b.storage
+	}
+
+	if err := decoder.Decode(&b.ID); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&b.T); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&b.Leaf); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&b.Records); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *BNode) write() (int, error) {
+	if b.storage == nil {
+		return 0, fmt.Errorf("Could not write node. No storage instance")
+	}
+	buffer := new(bytes.Buffer)
+	buffer = bytes.NewBuffer(buffer.Bytes())
+	enc := gob.NewEncoder(buffer)
+	err := enc.Encode(b)
+	if err != nil {
+		return 0, err
+	}
+
+	if b.storage != nil {
+		return b.storage.Write(b.ID, buffer.Bytes())
+	}
+
+	return 0, nil
+}
+
+func (b *BNode) read() error {
+	if b.loaded {
+		return nil
+	}
+
+	if b.storage == nil {
+		return fmt.Errorf("Could not read node. No storage instance")
+	}
+
+	err := b.storage.Read(b.ID, b)
+	if err != nil {
+		return err
+	}
+
+	b.loaded = true
+	fmt.Println(b)
+
+	return nil
 }

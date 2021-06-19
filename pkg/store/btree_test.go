@@ -17,7 +17,7 @@ func TestSet(t *testing.T) {
 				makeTree(2, makeRecords("p", "q")),
 				makeTree(2, makeRecords("x", "y")),
 			)
-			tree = &BTree{root, nil}
+			tree = &BTree{2, root, nil, "/"}
 		)
 
 		tree.Set("d", []byte{99})
@@ -62,8 +62,8 @@ func TestSearch(t *testing.T) {
 		tree = &BTree{root: root}
 	)
 
-	root.children[0].records[1].value = []byte{99, 99, 99}
-	root.children[1].records[2].value = []byte{100, 100, 100}
+	root.children[0].Records[1].Value = []byte{99, 99, 99}
+	root.children[1].Records[2].Value = []byte{100, 100, 100}
 
 	tree.Set("4", []byte{99, 99, 99})
 	tree.Set("10", []byte("I'm not cool"))
@@ -90,6 +90,12 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+// TODO: Test splitDescend
+func TestSplitDescend(t *testing.T) {
+
+}
+
+
 func TestMergeDescend(t *testing.T) {
 
 	t.Run("Left sibling has t keys", func(t *testing.T) {
@@ -99,7 +105,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("d")),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		tree.mergeDescend("d")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -128,7 +134,7 @@ func TestMergeDescend(t *testing.T) {
 			),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		tree.mergeDescend("d")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -153,7 +159,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("d", "e")),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		tree.mergeDescend("a")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -182,7 +188,7 @@ func TestMergeDescend(t *testing.T) {
 			),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		tree.mergeDescend("a")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -208,7 +214,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("e")),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		node := tree.mergeDescend("c")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -230,7 +236,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("e")),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		node := tree.mergeDescend("e")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -252,7 +258,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("e")),
 		)
 
-		tree := &BTree{root, nil}
+		tree := &BTree{2, root, nil, "/"}
 		node := tree.mergeDescend("a")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -288,7 +294,7 @@ func TestMergeDescend(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Run("Delete missing key", func(t *testing.T) {
-		tree := &BTree{makeTree(2, makeRecords("5")), nil}
+		tree := &BTree{2, makeTree(2, makeRecords("5")), nil, "/"}
 
 		err := tree.Delete("10")
 		if err == nil {
@@ -299,7 +305,8 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
 		tree := &BTree{
-			makeTree(2, makeRecords("5")), nil}
+			2,
+			makeTree(2, makeRecords("5")), nil, "/"}
 
 		tree.Delete("5")
 		u.hasNRecords("Root", 0, tree.root)
@@ -310,10 +317,11 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete from root with 1 key", func(t2 *testing.T) {
 		u := util{t2}
 		tree := &BTree{
+			2,
 			makeTree(2, makeRecords("5"),
 				makeTree(2, makeRecords("2")),
 				makeTree(2, makeRecords("8")),
-			), nil}
+			), nil, "/"}
 
 		tree.Delete("5")
 

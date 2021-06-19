@@ -19,7 +19,7 @@ func TestKeyIndex(t *testing.T) {
 		{"10", []string{"10", "5"}, 0, true},
 	} {
 		root := newNode(100)
-		root.records = makeNewKeys(test.keys)
+		root.Records = makeNewKeys(test.keys)
 		gotIndex, gotExists := root.keyIndex(test.k)
 
 		if gotIndex != test.wantIndex || gotExists != test.wantExists {
@@ -41,14 +41,14 @@ func TestInsertKey(t *testing.T) {
 		{"10", []string{"1", "3", "5"}, []string{"1", "10", "3", "5"}},
 	} {
 		r := newNode(3)
-		r.leaf = true
-		r.records = makeNewKeys(test.keys)
+		r.Leaf = true
+		r.Records = makeNewKeys(test.keys)
 		r.insertKey(test.k, nil)
 
 		want := makeNewKeys(test.wantKeys)
 
-		if !r.records.equals(want) {
-			t.Errorf("[TestLeafInsert] %d: Want=%v, Got=%v", i, test.wantKeys, r.records.keys())
+		if !r.Records.equals(want) {
+			t.Errorf("[TestLeafInsert] %d: Want=%v, Got=%v", i, test.wantKeys, r.Records.keys())
 		}
 	}
 }
@@ -67,7 +67,7 @@ func TestSplitChild(t *testing.T) {
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("10", "14")
-			nu.hasNChildren(3)
+			nu.hasNChildren(4)
 		})
 
 		u.with("Right child", root.children[1], func(nu namedUtil) {
@@ -232,15 +232,15 @@ func TestDeleteNode(t *testing.T) {
 			{"c", []string{"a", "b"}},
 		} {
 			node := newNodeWithKeys(2, []string{"a", "b", "c"})
-			node.leaf = true
+			node.Leaf = true
 			err := node.deleteKey(test.targetKey)
 
 			if err != nil {
 				t.Errorf("Should not return error")
 			}
 
-			if !node.records.contains(test.want) {
-				t.Errorf("[DeleteKey] %d: Got=%v, Want=%v", index, node.records.keys(), test.want)
+			if !node.Records.contains(test.want) {
+				t.Errorf("[DeleteKey] %d: Got=%v, Want=%v", index, node.Records.keys(), test.want)
 			}
 		}
 	})
@@ -381,7 +381,7 @@ func TestIsFull(t *testing.T) {
 		t.Errorf("New(2).IsFull() = %v; want false", got)
 	}
 
-	root.records = makeNewKeys([]string{"1", "2", "3"})
+	root.Records = makeNewKeys([]string{"1", "2", "3"})
 
 	if got := root.isFull(); !got {
 		t.Errorf("Want root.IsFull() = true, got %v", got)

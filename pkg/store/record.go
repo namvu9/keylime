@@ -5,8 +5,8 @@ import "strings"
 type RecordKey string
 
 type Record struct {
-	key   string
-	value []byte
+	Key   string
+	Value []byte
 }
 
 type Records []*Record
@@ -17,7 +17,7 @@ func (r Records) equals(other Records) bool {
 	}
 
 	for i, k := range r {
-		if k.key != other[i].key {
+		if k.Key != other[i].Key {
 			return false
 		}
 	}
@@ -31,7 +31,7 @@ func (r Records) contains(keys []string) bool {
 	}
 
 	for i, r := range r {
-		if r.key != keys[i] {
+		if r.Key != keys[i] {
 			return false
 		}
 	}
@@ -41,14 +41,14 @@ func (r Records) contains(keys []string) bool {
 
 func (r Records) keys() (out []string) {
 	for _, r := range r {
-		out = append(out, r.key)
+		out = append(out, r.Key)
 	}
 	return
 }
 
 func (r Records) values() (out [][]byte) {
 	for _, record := range r {
-		out = append(out, record.value)
+		out = append(out, record.Value)
 	}
 	return
 }
@@ -58,11 +58,11 @@ func (r Records) last() *Record {
 }
 
 func (r Record) isLessThan(other *Record) bool {
-	return strings.Compare(r.key, other.key) < 0
+	return strings.Compare(r.Key, other.Key) < 0
 }
 
 func (r Record) isEqualTo(other *Record) bool {
-	return r.key == other.key
+	return r.Key == other.Key
 }
 
 func NewRecord(key string, value []byte) *Record {

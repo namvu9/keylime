@@ -15,22 +15,22 @@ func makeNewKeys(keys []string) (out []*Record) {
 
 func newNodeWithKeys(t int, keys []string) *BNode {
 	return &BNode{
-		t:       t,
-		records: makeNewKeys(keys),
+		T:       t,
+		Records: makeNewKeys(keys),
 	}
 }
 
 func makeTree(t int, records []*Record, children ...*BNode) *BNode {
 	root := newNode(t)
-	root.records = records
+	root.Records = records
 	root.children = children
 
 	for _, child := range children {
-		child.t = t
+		child.T = t
 	}
 
 	if len(children) == 0 {
-		root.leaf = true
+		root.Leaf = true
 	}
 
 	return root
@@ -80,8 +80,8 @@ func (u util) with(name string, node *BNode, fn func(namedUtil)) {
 }
 
 func (u util) hasNRecords(name string, n int, node *BNode) {
-	if len(node.records) != n {
-		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.records), n)
+	if len(node.Records) != n {
+		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.Records), n)
 	}
 }
 
@@ -92,8 +92,8 @@ func (u util) hasNChildren(name string, n int, node *BNode) {
 }
 
 func (u util) hasKeys(name string, keys []string, node *BNode) {
-	if !node.records.contains(keys) {
-		u.t.Errorf("%s.records.keys, Got=%v; Want=%v", name, node.records.keys(), keys)
+	if !node.Records.contains(keys) {
+		u.t.Errorf("%s.records.keys, Got=%v; Want=%v", name, node.Records.keys(), keys)
 	}
 }
 

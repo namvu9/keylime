@@ -1,12 +1,21 @@
 package store
 
 import (
-	"io"
+	"fmt"
+	"os"
+	"path"
 )
 
 type BTree struct {
-	root    *BNode
-	storage io.ReadWriter
+	T        int
+	root     *BNode
+	storage  NodeReadWriter
+	basePath string
+}
+
+func (b *BTree) Unload() {
+	b.root = nil
+	loadTree(b)
 }
 
 func partitionMedian(nums Records) (*Record, Records, Records) {
@@ -18,7 +27,13 @@ func partitionMedian(nums Records) (*Record, Records, Records) {
 }
 
 func (bt *BTree) splitRoot() {
-	s := newNode(bt.root.t)
+	s := bt.newNode()
+
+	// TODO: HACK
+	bt.root.ID = s.ID
+	bt.root.write()
+	s.ID = "origin"
+
 	s.children = []*BNode{bt.root}
 	bt.root = s
 	s.splitChild(0)
@@ -51,14 +66,14 @@ func handleSparseNode(node, child *BNode, index int) {
 	if p != nil && !p.isSparse() {
 		var (
 			recordIndex   = index - 1
-			pivot         = node.records[recordIndex]
-			siblingRecord = p.records.last()
+			pivot         = node.Records[recordIndex]
+			siblingRecord = p.Records.last()
 		)
 
 		child.insertRecord(pivot)
 		node.setRecord(recordIndex, siblingRecord)
 
-		if !p.leaf {
+		if !p.Leaf {
 			// Move child from sibling to child
 			siblingLastChild := p.children[len(p.children)-1]
 			child.children = append([]*BNode{siblingLastChild}, child.children...)
@@ -66,16 +81,16 @@ func handleSparseNode(node, child *BNode, index int) {
 		}
 	} else if s != nil && !s.isSparse() {
 		var (
-			pivot         = node.records[index]
-			siblingRecord = s.records[0]
+			pivot         = node.Records[index]
+			siblingRecord = s.Records[0]
 		)
 
 		// Move key from parent to child
-		child.records = append(child.records, pivot)
+		child.Records = append(child.Records, pivot)
 		node.setRecord(index, siblingRecord)
 
 		// Move child from sibling to child
-		if !s.leaf {
+		if !s.Leaf {
 			siblingFirstChild := s.children[0]
 			child.children = append(child.children, siblingFirstChild)
 			s.children = s.children[1:]
@@ -85,6 +100,7 @@ func handleSparseNode(node, child *BNode, index int) {
 	} else {
 		node.mergeChildren(index)
 	}
+	// Write nodes
 }
 
 // Descend the tree until either the key is found or a leaf
@@ -113,13 +129,18 @@ func (bt *BTree) Set(k string, value []byte) error {
 	node := bt.splitDescend(k)
 	node.insertKey(k, value)
 
-	// Write node
+	fmt.Printf("Write after inserting key %s into %v\n", k, node.ID)
+	_, err := node.write()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (t *BTree) Get(key string) []byte {
 	if node, index := t.Search(key); node != nil {
-		return node.records[index].value
+		return node.Records[index].Value
 	}
 
 	return nil
@@ -141,12 +162,16 @@ func (bti *BTreeIterator) forEach(fn func(*BNode, *BNode, int)) *BTreeIterator {
 func (bti *BTreeIterator) run() (*BNode, bool, int) {
 	for {
 		index, exists := bti.node.keyIndex(bti.key)
-		if exists || bti.node.leaf {
+		if exists || bti.node.Leaf {
 			bti.done = true
 			return bti.node, exists, index
 		}
 
 		child := bti.node.children[index]
+		if err := child.read(); err != nil {
+			panic(err)
+		}
+
 		if bti.fn != nil {
 			bti.fn(bti.node, child, index)
 
@@ -182,7 +207,7 @@ func (t *BTree) Search(key string) (*BNode, int) {
 func (b *BTree) Delete(k string) error {
 	node := b.mergeDescend(k)
 	err := node.deleteKey(k)
-	if len(b.root.records) == 0 && len(b.root.children) == 1 {
+	if len(b.root.Records) == 0 && len(b.root.children) == 1 {
 		b.root = b.root.children[0]
 	}
 
@@ -191,16 +216,54 @@ func (b *BTree) Delete(k string) error {
 
 type Option func(*BTree)
 
+func WithStorage(s NodeReadWriter) Option {
+	return func(b *BTree) {
+		b.storage = s
+	}
+}
+
+func WithBasePath(path string) Option {
+	return func(b *BTree) {
+		b.basePath = path
+	}
+}
+
+func (b *BTree) newNode() *BNode {
+	node := newNode(b.T)
+	node.storage = b.storage
+	return node
+}
+
+func loadTree(tree *BTree) error {
+	root := tree.newNode()
+	root.ID = "origin"
+	tree.root = root
+	tree.root.storage = tree.storage
+
+	if _, err := os.Stat(path.Join(tree.basePath, "origin")); os.IsNotExist(err) {
+		tree.root.Leaf = true
+		tree.root.loaded = true
+		tree.root.write()
+	} else {
+		err := tree.root.read()
+		if err != nil {
+			return err
+		}
+		tree.T = tree.root.T
+	}
+	return nil
+}
+
 // TODO: TEST
 func New(t int, opts ...Option) *BTree {
-	tree := &BTree{}
+	tree := &BTree{T: t}
 	for _, fn := range opts {
 		fn(tree)
 	}
 
-	if tree.root == nil {
-		tree.root = newNode(t)
-		tree.root.leaf = true
+	err := loadTree(tree)
+	if err != nil {
+		fmt.Println(err)
 	}
 
 	return tree
