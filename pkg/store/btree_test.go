@@ -265,9 +265,37 @@ func TestMergeDescend(t *testing.T) {
 			nu.is(node)
 		})
 	})
+
+	t.Run("Target key is moved from child to parent", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("b"),
+			makeTree(2, makeRecords("a")),
+			makeTree(2, makeRecords("c")),
+		)
+		tree := &BTree{root: root}
+		node := tree.mergeDescend("c")
+
+		u.with("Root", tree.root, func(nu namedUtil) {
+			nu.hasNRecords(0)
+			nu.hasNChildren(1)
+		})
+		u.with("Merged node", node, func(nu namedUtil) {
+			nu.is(tree.root.children[0])
+			nu.hasKeys("a", "b", "c")
+		})
+	})
 }
 
 func TestDelete(t *testing.T) {
+	t.Run("Delete missing key", func(t *testing.T) {
+		tree := &BTree{makeTree(2, makeRecords("5")), nil}
+
+		err := tree.Delete("10")
+		if err == nil {
+			t.Errorf("Deleting a missing key should return an error. Got=<nil>")
+		}
+	})
+
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
 		tree := &BTree{
@@ -310,5 +338,55 @@ func TestDelete(t *testing.T) {
 			nu.hasKeys("1", "3")
 			nu.hasNChildren(0)
 		})
+	})
+}
+
+func TestBuildTree(t *testing.T) {
+	u := util{t}
+
+	tree := New(2)
+
+	tree.Set("a", nil)
+	tree.Set("b", nil)
+	tree.Set("c", nil)
+
+	u.with("Root after 3 insertions, t=2", tree.root, func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("a", "b", "c")
+	})
+
+	tree.Set("d", nil)
+	tree.Set("e", nil)
+
+	u.with("Root after 5 insertions", tree.root, func(nu namedUtil) {
+		nu.hasNChildren(2)
+		nu.hasKeys("b")
+	})
+
+	u.with("Left child after 5 insertions", tree.root.children[0], func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("a")
+	})
+
+	u.with("Right child after 5 insertions", tree.root.children[1], func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("c", "d", "e")
+	})
+
+	tree.Delete("e")
+	tree.Delete("d")
+	tree.Delete("c")
+
+	u.with("Root after deleting 3 times", tree.root, func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("a", "b")
+	})
+
+	tree.Delete("a")
+	tree.Delete("b")
+
+	u.with("Root should be empty", tree.root, func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasNRecords(0)
 	})
 }

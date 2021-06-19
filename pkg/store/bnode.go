@@ -56,10 +56,8 @@ func (b *BNode) keyIndex(k string) (index int, exists bool) {
 	return len(b.records), false
 }
 
-// insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-// TODO: TEST RETURN INDEX
-// TODO: TEST
-func (b *BNode) insert(k string, value []byte) int {
+// insertKey key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
+func (b *BNode) insertKey(k string, value []byte) int {
 	if b.isFull() {
 		panic("Cannot insert key into full node")
 	}
@@ -97,7 +95,7 @@ func (b *BNode) splitChild(index int) {
 	newChild.leaf = fullChild.leaf
 
 	medianKey, left, right := partitionMedian(fullChild.records)
-	b.insert(medianKey.key, medianKey.value)
+	b.insertKey(medianKey.key, medianKey.value)
 
 	fullChild.records, newChild.records = left, right
 
@@ -110,7 +108,7 @@ func (b *BNode) splitChild(index int) {
 }
 
 func (b *BNode) insertRecord(r *Record) int {
-	return b.insert(r.key, r.value)
+	return b.insertKey(r.key, r.value)
 }
 
 func (b *BNode) setRecord(index int, r *Record) {
@@ -137,7 +135,6 @@ func (b *BNode) insertChildren(index int, children ...*BNode) {
 	b.children = tmp
 }
 
-// TODO: TEST
 func (b *BNode) predecessorKeyNode(k string) *BNode {
 	index, exists := b.keyIndex(k)
 	if !exists {
@@ -147,7 +144,6 @@ func (b *BNode) predecessorKeyNode(k string) *BNode {
 	return b.children[index]
 }
 
-// TODO: TEST
 func (b *BNode) successorKeyNode(k string) *BNode {
 	index, exists := b.keyIndex(k)
 	if !exists {

@@ -90,12 +90,18 @@ func handleSparseNode(node, child *BNode, index int) {
 // Descend the tree until either the key is found or a leaf
 // node is found.
 func (bt *BTree) mergeDescend(k string) *BNode {
-	iter := bt.iter(k).forEach(func(b1, b2 *BNode, i int) {
-		if b2.isSparse() {
-			handleSparseNode(b1, b2, i)
+	iter := bt.iter(k)
+	node, _, _ := iter.forEach(func(parent, child *BNode, i int) {
+		if child.isSparse() {
+			handleSparseNode(parent, child, i)
+			index, ok := parent.keyIndex(k)
+			if ok {
+				iter.nextChild = parent
+			} else {
+				iter.nextChild = parent.children[index]
+			}
 		}
-	})
-	node, _, _ := iter.run()
+	}).run()
 	return node
 }
 
@@ -105,7 +111,7 @@ func (bt *BTree) Set(k string, value []byte) error {
 	}
 
 	node := bt.splitDescend(k)
-	node.insert(k, value)
+	node.insertKey(k, value)
 
 	// Write node
 	return nil

@@ -4,20 +4,6 @@ import (
 	"testing"
 )
 
-func TestIsFull(t *testing.T) {
-	root := newNode(2)
-
-	if got := root.isFull(); got {
-		t.Errorf("New(2).IsFull() = %v; want false", got)
-	}
-
-	root.records = makeNewKeys([]string{"1", "2", "3"})
-
-	if got := root.isFull(); !got {
-		t.Errorf("Want root.IsFull() = true, got %v", got)
-	}
-}
-
 func TestKeyIndex(t *testing.T) {
 	for i, test := range []struct {
 		k          string
@@ -30,6 +16,7 @@ func TestKeyIndex(t *testing.T) {
 		{"4", []string{"1", "2", "3"}, 3, false},
 		{"4", []string{"1", "2", "4"}, 2, true},
 		{"3", []string{"1", "2", "4"}, 2, false},
+		{"10", []string{"10", "5"}, 0, true},
 	} {
 		root := newNode(100)
 		root.records = makeNewKeys(test.keys)
@@ -41,7 +28,7 @@ func TestKeyIndex(t *testing.T) {
 	}
 }
 
-func TestLeafInsert(t *testing.T) {
+func TestInsertKey(t *testing.T) {
 	for i, test := range []struct {
 		k        string
 		keys     []string
@@ -51,11 +38,12 @@ func TestLeafInsert(t *testing.T) {
 		{"0", []string{"1", "3", "5"}, []string{"0", "1", "3", "5"}},
 		{"4", []string{"1", "3", "5"}, []string{"1", "3", "4", "5"}},
 		{"6", []string{"1", "3", "5"}, []string{"1", "3", "5", "6"}},
+		{"10", []string{"1", "3", "5"}, []string{"1", "10", "3", "5"}},
 	} {
 		r := newNode(3)
 		r.leaf = true
 		r.records = makeNewKeys(test.keys)
-		r.insert(test.k, nil)
+		r.insertKey(test.k, nil)
 
 		want := makeNewKeys(test.wantKeys)
 
@@ -367,4 +355,86 @@ func TestMergeChildren(t *testing.T) {
 		nu.hasKeys("16")
 		nu.hasNChildren(2)
 	})
+}
+
+func TestPredecessorSuccessorKeyNode(t *testing.T) {
+	target := makeTree(2, makeRecords("99"))
+	root := makeTree(2, makeRecords("a", "c"),
+		makeTree(2, makeRecords()),
+		target,
+		makeTree(2, makeRecords()),
+	)
+
+	if root.predecessorKeyNode("c") != target {
+		t.Errorf("%v", root)
+	}
+
+	if root.predecessorKeyNode("c") != root.successorKeyNode("a") {
+		t.Errorf("root.predecessorKeyNode(index) should be root.successorKeyNode(index-1)")
+	}
+}
+
+func TestIsFull(t *testing.T) {
+	root := newNode(2)
+
+	if got := root.isFull(); got {
+		t.Errorf("New(2).IsFull() = %v; want false", got)
+	}
+
+	root.records = makeNewKeys([]string{"1", "2", "3"})
+
+	if got := root.isFull(); !got {
+		t.Errorf("Want root.IsFull() = true, got %v", got)
+	}
+}
+
+func TestIsSparse(t *testing.T) {
+	for i, test := range []struct {
+		t          int
+		keys       []string
+		wantSparse bool
+	}{
+		{3, []string{"1"}, true},
+		{3, []string{"1", "2"}, true},
+		{3, []string{"1", "2", "3"}, false},
+	} {
+		node := newNodeWithKeys(test.t, test.keys)
+
+		if got := node.isSparse(); got != test.wantSparse {
+			t.Errorf("%d: Got=%v; Want=%v", i, got, test.wantSparse)
+		}
+
+	}
+}
+
+func TestChildPredecessorSuccessor(t *testing.T) {
+	child := makeTree(2, makeRecords())
+	sibling := makeTree(2, makeRecords())
+
+	root := makeTree(2, makeRecords("c", "e", "f"),
+		makeTree(2, makeRecords()),
+		child,
+		sibling,
+		makeTree(2, makeRecords()),
+	)
+
+	if root.childPredecessor(0) != nil {
+		t.Errorf("Left-most child has no left sibling")
+	}
+
+	if root.childSuccessor(3) != nil {
+		t.Errorf("Right-most child has no right sibling")
+	}
+
+	if root.childSuccessor(1) != sibling {
+		t.Errorf("We riot")
+	}
+
+	if root.childPredecessor(2) != child {
+		t.Errorf("We riot")
+	}
+
+	if root.childSuccessor(1) != root.childPredecessor(3) {
+		t.Errorf("We riot")
+	}
 }
