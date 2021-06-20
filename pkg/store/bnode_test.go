@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestKeyIndex(t *testing.T) {
 		{"10", []string{"10", "5"}, 0, true},
 	} {
 		root := newNode(100)
-		root.Records = makeNewKeys(test.keys)
+		root.records = makeNewKeys(test.keys)
 		gotIndex, gotExists := root.keyIndex(test.k)
 
 		if gotIndex != test.wantIndex || gotExists != test.wantExists {
@@ -29,6 +30,7 @@ func TestKeyIndex(t *testing.T) {
 }
 
 func TestInsertKey(t *testing.T) {
+	u := util{t}
 	for i, test := range []struct {
 		k        string
 		keys     []string
@@ -42,7 +44,7 @@ func TestInsertKey(t *testing.T) {
 	} {
 		r := newNode(3)
 		r.Leaf = true
-		r.Records = makeNewKeys(test.keys)
+		r.records = makeNewKeys(test.keys)
 		r.storage = &ChangeReporter{}
 
 		r.insertKey(test.k, nil)
@@ -55,11 +57,7 @@ func TestInsertKey(t *testing.T) {
 			t.Errorf("Expected 1 write")
 		}
 
-		want := makeNewKeys(test.wantKeys)
-
-		if !r.Records.equals(want) {
-			t.Errorf("[TestLeafInsert] %d: Want=%v, Got=%v", i, test.wantKeys, r.Records.keys())
-		}
+		u.hasKeys(fmt.Sprintf("TestLeafInsert %d", i), test.wantKeys, r)
 	}
 }
 
@@ -239,6 +237,7 @@ func TestDeleteNode(t *testing.T) {
 	})
 
 	t.Run("Delete existing key in leaf", func(t *testing.T) {
+		u := util{t}
 		for index, test := range []struct {
 			targetKey string
 			want      []string
@@ -255,9 +254,7 @@ func TestDeleteNode(t *testing.T) {
 				t.Errorf("Should not return error")
 			}
 
-			if !node.Records.contains(test.want) {
-				t.Errorf("[DeleteKey] %d: Got=%v, Want=%v", index, node.Records.keys(), test.want)
-			}
+			u.hasKeys(fmt.Sprintf("[DeleteKey]: %d", index), test.want, node)
 		}
 	})
 
@@ -397,7 +394,7 @@ func TestIsFull(t *testing.T) {
 		t.Errorf("New(2).IsFull() = %v; want false", got)
 	}
 
-	root.Records = makeNewKeys([]string{"1", "2", "3"})
+	root.records = makeNewKeys([]string{"1", "2", "3"})
 
 	if got := root.isFull(); !got {
 		t.Errorf("Want root.IsFull() = true, got %v", got)

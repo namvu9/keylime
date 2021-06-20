@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+
+	"github.com/namvu9/keylime/pkg/record"
 )
 
 func TestSet(t *testing.T) {
@@ -62,8 +64,8 @@ func TestSearch(t *testing.T) {
 		tree = &BTree{root: root}
 	)
 
-	root.children[0].Records[1].Value = []byte{99, 99, 99}
-	root.children[1].Records[2].Value = []byte{100, 100, 100}
+	root.children[0].records[1] = record.New(root.children[0].records[1].Key(), []byte{99, 99, 99})
+	root.children[1].records[2] = record.New(root.children[1].records[2].Key(), []byte{100, 100, 100})
 
 	tree.Set("4", []byte{99, 99, 99})
 	tree.Set("10", []byte("I'm not cool"))

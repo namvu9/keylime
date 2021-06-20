@@ -1,5 +1,7 @@
 package store
 
+import "github.com/namvu9/keylime/pkg/record"
+
 type BTree struct {
 	T        int
 	root     *BNode
@@ -13,7 +15,7 @@ func (b *BTree) Unload() {
 	//loadTree(b)
 }
 
-func partitionMedian(nums Records) (Record, Records, Records) {
+func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
 	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
 		panic("Cannot partition an even number of records")
 	}
@@ -61,8 +63,8 @@ func handleSparseNode(node, child *BNode, index int) {
 		p.registerWrite("Sparse node (predecessor)")
 		var (
 			recordIndex   = index - 1
-			pivot         = node.Records[recordIndex]
-			siblingRecord = p.Records.last()
+			pivot         = node.records[recordIndex]
+			siblingRecord = p.records[len(p.records)-1]
 		)
 
 		child.insertRecord(pivot)
@@ -77,12 +79,12 @@ func handleSparseNode(node, child *BNode, index int) {
 	} else if s != nil && !s.isSparse() {
 		s.registerWrite("Sparse node (successor)")
 		var (
-			pivot         = node.Records[index]
-			siblingRecord = s.Records[0]
+			pivot         = node.records[index]
+			siblingRecord = s.records[0]
 		)
 
 		// Move key from parent to child
-		child.Records = append(child.Records, pivot)
+		child.records = append(child.records, pivot)
 		node.setRecord(index, siblingRecord)
 
 		// Move child from sibling to child
@@ -137,7 +139,7 @@ func (bt *BTree) Set(k string, value []byte) error {
 
 func (t *BTree) Get(key string) []byte {
 	if node, index := t.Search(key); node != nil {
-		return node.Records[index].Value
+		return node.records[index].Value()
 	}
 
 	return nil
@@ -204,7 +206,7 @@ func (t *BTree) Search(key string) (*BNode, int) {
 func (b *BTree) Delete(k string) error {
 	node := b.mergeDescend(k)
 	err := node.deleteKey(k)
-	if len(b.root.Records) == 0 && len(b.root.children) == 1 {
+	if len(b.root.records) == 0 && len(b.root.children) == 1 {
 		b.root = b.root.children[0]
 	}
 

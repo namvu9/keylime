@@ -3,11 +3,13 @@ package store
 import (
 	"fmt"
 	"testing"
+
+	"github.com/namvu9/keylime/pkg/record"
 )
 
-func makeNewKeys(keys []string) (out []Record) {
+func makeNewKeys(keys []string) (out []record.Record) {
 	for _, k := range keys {
-		out = append(out, NewRecord(k, nil))
+		out = append(out, record.New(k, nil))
 	}
 
 	return
@@ -16,13 +18,13 @@ func makeNewKeys(keys []string) (out []Record) {
 func newNodeWithKeys(t int, keys []string) *BNode {
 	return &BNode{
 		T:       t,
-		Records: makeNewKeys(keys),
+		records: makeNewKeys(keys),
 	}
 }
 
-func makeTree(t int, records []Record, children ...*BNode) *BNode {
+func makeTree(t int, records []record.Record, children ...*BNode) *BNode {
 	root := newNode(t)
-	root.Records = records
+	root.records = records
 	root.children = children
 	root.storage = &ChangeReporter{}
 
@@ -38,10 +40,10 @@ func makeTree(t int, records []Record, children ...*BNode) *BNode {
 	return root
 }
 
-func makeRecords(keys ...string) []Record {
-	out := []Record{}
+func makeRecords(keys ...string) []record.Record {
+	out := []record.Record{}
 	for _, key := range keys {
-		out = append(out, Record{key, nil})
+		out = append(out, record.New(key, nil))
 	}
 
 	return out
@@ -82,8 +84,8 @@ func (u util) with(name string, node *BNode, fn func(namedUtil)) {
 }
 
 func (u util) hasNRecords(name string, n int, node *BNode) {
-	if len(node.Records) != n {
-		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.Records), n)
+	if len(node.records) != n {
+		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.records), n)
 	}
 }
 
@@ -94,8 +96,16 @@ func (u util) hasNChildren(name string, n int, node *BNode) {
 }
 
 func (u util) hasKeys(name string, keys []string, node *BNode) {
-	if !node.Records.contains(keys) {
-		u.t.Errorf("%s.records.keys, Got=%v; Want=%v", name, node.Records.keys(), keys)
+	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, node.records, keys)
+
+	if len(node.records) != len(keys) {
+		u.t.Errorf(errMsg)
+	}
+
+	for i, r := range node.records {
+		if r.Key() != keys[i] {
+			u.t.Errorf(errMsg)
+		}
 	}
 }
 

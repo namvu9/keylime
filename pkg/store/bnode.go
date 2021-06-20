@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/namvu9/keylime/pkg/record"
 )
 
 type NodeReadWriter interface {
@@ -19,7 +20,7 @@ type BNode struct {
 	loaded   bool
 	ID       string
 	children []*BNode
-	Records  Records
+	records  []record.Record
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
@@ -45,8 +46,8 @@ func (b *BNode) String() string {
 	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", b.Leaf)
 	fmt.Fprintf(&sb, "Children:\t%v\n", len(b.children))
 	fmt.Fprintf(&sb, "Keys:\t\t")
-	for _, key := range b.Records.keys() {
-		fmt.Fprintf(&sb, "%s ", key)
+	for _, key := range b.records {
+		fmt.Fprintf(&sb, "%v ", key)
 	}
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
@@ -56,14 +57,14 @@ func newNode(t int) *BNode {
 	return &BNode{
 		ID:       uuid.New().String(),
 		children: []*BNode{},
-		Records:  make([]Record, 0, 2*t-1),
+		records:  make([]record.Record, 0, 2*t-1),
 		Leaf:     false,
 		T:        t,
 	}
 }
 
 func (b *BNode) isFull() bool {
-	return len(b.Records) == 2*b.T-1
+	return len(b.records) == 2*b.T-1
 }
 
 type nodeReference struct {
@@ -83,17 +84,17 @@ func (nr *nodeReference) load(ctx context.Context) error {
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
 func (b *BNode) keyIndex(k string) (index int, exists bool) {
-	for i, kv := range b.Records {
-		if k == kv.Key {
+	for i, kv := range b.records {
+		if k == kv.Key() {
 			return i, true
 		}
 
-		if strings.Compare(k, kv.Key) < 0 {
+		if strings.Compare(k, kv.Key()) < 0 {
 			return i, false
 		}
 	}
 
-	return len(b.Records), false
+	return len(b.records), false
 }
 
 // insertKey key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
@@ -104,26 +105,26 @@ func (b *BNode) insertKey(k string, value []byte) int {
 
 	b.registerWrite("INSERT KEY")
 
-	kv := NewRecord(k, value)
-	out := []Record{}
+	kv := record.New(k, value)
+	out := []record.Record{}
 
-	for i, key := range b.Records {
-		if kv.Key == key.Key {
-			b.Records[i] = kv
+	for i, key := range b.records {
+		if kv.Key() == key.Key() {
+			b.records[i] = kv
 			return i
 		}
 
-		if kv.isLessThan(key) {
+		if kv.IsLessThan(key) {
 			out = append(out, kv)
-			b.Records = append(out, b.Records[i:]...)
+			b.records = append(out, b.records[i:]...)
 			return i
 		} else {
-			out = append(out, b.Records[i])
+			out = append(out, b.records[i])
 		}
 	}
 
-	b.Records = append(out, kv)
-	return len(b.Records) - 1
+	b.records = append(out, kv)
+	return len(b.records) - 1
 }
 
 // Panics if child is not full
@@ -136,10 +137,10 @@ func (b *BNode) splitChild(index int) {
 	newChild := b.newNode()
 	newChild.Leaf = fullChild.Leaf
 
-	medianKey, left, right := partitionMedian(fullChild.Records)
-	b.insertKey(medianKey.Key, medianKey.Value)
+	medianKey, left, right := partitionMedian(fullChild.records)
+	b.insertKey(medianKey.Key(), medianKey.Value())
 
-	fullChild.Records, newChild.Records = left, right
+	fullChild.records, newChild.records = left, right
 
 	if !fullChild.Leaf {
 		newChild.insertChildren(0, fullChild.children[b.T:]...)
@@ -154,12 +155,12 @@ func (b *BNode) splitChild(index int) {
 
 }
 
-func (b *BNode) insertRecord(r Record) int {
-	return b.insertKey(r.Key, r.Value)
+func (b *BNode) insertRecord(r record.Record) int {
+	return b.insertKey(r.Key(), r.Value())
 }
 
-func (b *BNode) setRecord(index int, r Record) {
-	b.Records[index] = r
+func (b *BNode) setRecord(index int, r record.Record) {
+	b.records[index] = r
 }
 
 func (b *BNode) insertChildren(index int, children ...*BNode) {
@@ -216,20 +217,20 @@ func (b *BNode) deleteKey(k string) error {
 	index, exists := b.keyIndex(k)
 	//b.registerWrite("delete key")
 	if exists && b.Leaf {
-		b.Records = append(b.Records[:index], b.Records[index+1:]...)
+		b.records = append(b.records[:index], b.records[index+1:]...)
 		return nil
 	} else if exists {
 		// INTERNAL NODES
 		// Case 1: Predcessor has at least t keys
 		if p := b.predecessorKeyNode(k); p != nil && !p.isSparse() {
-			pred_k := p.Records.last()
-			b.Records[index] = pred_k
-			return p.deleteKey(pred_k.Key)
+			pred_k := p.records[len(p.records)-1]
+			b.records[index] = pred_k
+			return p.deleteKey(pred_k.Key())
 			// Case 2: Successor has at least t keys
 		} else if s := b.successorKeyNode(k); s != nil && !s.isSparse() {
-			succ_k := s.Records[0]
-			b.Records[index] = succ_k
-			return s.deleteKey(succ_k.Key)
+			succ_k := s.records[0]
+			b.records[index] = succ_k
+			return s.deleteKey(succ_k.Key())
 			// Case 3: Neither p nor s has >= t keys
 		} else {
 			// Merge s and p with k as median key
@@ -249,13 +250,13 @@ func (b *BNode) hasKey(k string) bool {
 }
 
 func (b *BNode) isSparse() bool {
-	return len(b.Records) <= b.T-1
+	return len(b.records) <= b.T-1
 }
 
 // TODO: TEST
-func (b *BNode) mergeWith(median Record, other *BNode) {
-	b.Records = append(b.Records, median)
-	b.Records = append(b.Records, other.Records...)
+func (b *BNode) mergeWith(median record.Record, other *BNode) {
+	b.records = append(b.records, median)
+	b.records = append(b.records, other.records...)
 	b.children = append(b.children, other.children...)
 
 	b.registerWrite("Merge")
@@ -269,7 +270,7 @@ func (b *BNode) mergeWith(median Record, other *BNode) {
 // for deletion.
 func (b *BNode) mergeChildren(i int) {
 	var (
-		pivotRecord = b.Records[i]
+		pivotRecord = b.records[i]
 		leftChild   = b.children[i]
 		rightChild  = b.children[i+1]
 	)
@@ -277,7 +278,7 @@ func (b *BNode) mergeChildren(i int) {
 	leftChild.mergeWith(pivotRecord, rightChild)
 
 	// Delete the key from the node
-	b.Records = append(b.Records[:i], b.Records[i+1:]...)
+	b.records = append(b.records[:i], b.records[i+1:]...)
 	// Remove rightChild
 	b.children = append(b.children[:i+1], b.children[i+2:]...)
 
@@ -301,7 +302,7 @@ func (b *BNode) GobEncode() ([]byte, error) {
 	encoder.Encode(b.ID)
 	encoder.Encode(b.T)
 	encoder.Encode(b.Leaf)
-	encoder.Encode(b.Records)
+	encoder.Encode(b.records)
 
 	return w.Bytes(), nil
 }
@@ -326,7 +327,7 @@ func (b *BNode) GobDecode(buf []byte) error {
 	if err := decoder.Decode(&b.Leaf); err != nil {
 		return err
 	}
-	if err := decoder.Decode(&b.Records); err != nil {
+	if err := decoder.Decode(&b.records); err != nil {
 		return err
 	}
 
@@ -372,16 +373,16 @@ func (b *BNode) read() error {
 
 func (b *BNode) clone() *BNode {
 	c := make([]*BNode, len(b.children))
-	r := make([]Record, len(b.Records))
+	r := make([]record.Record, len(b.records))
 
 	copy(c, b.children)
-	copy(r, b.Records)
+	copy(r, b.records)
 
 	return &BNode{
 		loaded: true,
 		ID: b.ID,
 		children: c,
-		Records: r,
+		records: r,
 
 	}
 }
