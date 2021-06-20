@@ -1,9 +1,7 @@
 package store
 
 import (
-	"bytes"
-	"context"
-	"encoding/gob"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,26 +9,78 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
-type NodeReadWriter interface {
-	Write(string, []byte) (int, error)
-	Read(string, *BNode) error
-}
-
 type BNode struct {
+	ID string
+
 	loaded   bool
-	ID       string
 	children []*BNode
 	records  []record.Record
-	Leaf     bool
-	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
+	leaf     bool
+	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
 	storage *ChangeReporter
 }
 
-func (b *BNode) newNode() *BNode {
-	node := newNode(b.T)
-	node.storage = b.storage
-	return node
+func (b *BNode) Get(k string) ([]byte, error) {
+	index, ok := b.keyIndex(k)
+	if !ok {
+		return nil, errors.New("KeyNotFound")
+	}
+
+	return b.records[index].Value(), nil
+}
+
+func (b *BNode) Delete(k string) error {
+	index, exists := b.keyIndex(k)
+	if !exists {
+		return fmt.Errorf("KeyNotFoundError")
+	}
+
+	if b.leaf {
+		b.records = append(b.records[:index], b.records[index+1:]...)
+		return nil
+	}
+
+	// Case 1: Predcessor has at least t keys
+	if p := b.predecessorKeyNode(k); p != nil && !p.Sparse() {
+		pred_k := p.records[len(p.records)-1]
+		b.records[index] = pred_k
+		return p.Delete(pred_k.Key())
+	}
+
+	// Case 2: Successor has at least t keys
+	if s := b.successorKeyNode(k); s != nil && !s.Sparse() {
+		succ_k := s.records[0]
+		b.records[index] = succ_k
+		return s.Delete(succ_k.Key())
+	}
+
+	// Case 3: Neither p nor s has >= t keys
+	// Merge s and p with k as median key
+	b.mergeChildren(index)
+	return b.children[index].Delete(k)
+}
+
+// Full reports whether the number of records contained in a
+// node equals 2*`b.T`-1
+func (b *BNode) Full() bool {
+	return len(b.records) == 2*b.t-1
+}
+
+// Sparse reports whether the number of records contained in
+// the node is less than or equal to `b`.T-1
+func (b *BNode) Sparse() bool {
+	return len(b.records) <= b.t-1
+}
+
+// Empty reports whether the node is empty (i.e., has no
+// records).
+func (b *BNode) Empty() bool {
+	return len(b.records) == 0
+}
+
+func (b *BNode) Leaf() bool {
+	return b.leaf
 }
 
 func (b *BNode) String() string {
@@ -41,9 +91,9 @@ func (b *BNode) String() string {
 	} else {
 		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
 	}
-	fmt.Fprintf(&sb, "t:\t\t%d\n", b.T)
+	fmt.Fprintf(&sb, "t:\t\t%d\n", b.t)
 	fmt.Fprintf(&sb, "Loaded:\t\t%v\n", b.loaded)
-	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", b.Leaf)
+	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", b.leaf)
 	fmt.Fprintf(&sb, "Children:\t%v\n", len(b.children))
 	fmt.Fprintf(&sb, "Keys:\t\t")
 	for _, key := range b.records {
@@ -53,31 +103,20 @@ func (b *BNode) String() string {
 	return sb.String()
 }
 
+func (b *BNode) newNode() *BNode {
+	node := newNode(b.t)
+	node.storage = b.storage
+	return node
+}
+
 func newNode(t int) *BNode {
 	return &BNode{
 		ID:       uuid.New().String(),
 		children: []*BNode{},
 		records:  make([]record.Record, 0, 2*t-1),
-		Leaf:     false,
-		T:        t,
+		leaf:     false,
+		t:        t,
 	}
-}
-
-func (b *BNode) isFull() bool {
-	return len(b.records) == 2*b.T-1
-}
-
-type nodeReference struct {
-	*BNode
-	location string
-}
-
-func (nr *nodeReference) load(ctx context.Context) error {
-	// With cancel?
-	if loader := ctx.Value("Loader"); loader != nil {
-
-	}
-	return nil
 }
 
 // keyIndex returns the index of key k in node b if it
@@ -99,7 +138,7 @@ func (b *BNode) keyIndex(k string) (index int, exists bool) {
 
 // insertKey key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
 func (b *BNode) insertKey(k string, value []byte) int {
-	if b.isFull() {
+	if b.Full() {
 		panic("Cannot insert key into full node")
 	}
 
@@ -130,21 +169,21 @@ func (b *BNode) insertKey(k string, value []byte) int {
 // Panics if child is not full
 func (b *BNode) splitChild(index int) {
 	fullChild := b.children[index]
-	if !fullChild.isFull() {
+	if !fullChild.Full() {
 		panic("Cannot split non-full child")
 	}
 
 	newChild := b.newNode()
-	newChild.Leaf = fullChild.Leaf
+	newChild.leaf = fullChild.leaf
 
 	medianKey, left, right := partitionMedian(fullChild.records)
 	b.insertKey(medianKey.Key(), medianKey.Value())
 
 	fullChild.records, newChild.records = left, right
 
-	if !fullChild.Leaf {
-		newChild.insertChildren(0, fullChild.children[b.T:]...)
-		fullChild.children = fullChild.children[:b.T]
+	if !fullChild.leaf {
+		newChild.insertChildren(0, fullChild.children[b.t:]...)
+		fullChild.children = fullChild.children[:b.t]
 	}
 
 	b.insertChildren(index+1, newChild)
@@ -164,7 +203,7 @@ func (b *BNode) setRecord(index int, r record.Record) {
 }
 
 func (b *BNode) insertChildren(index int, children ...*BNode) {
-	if len(b.children) == 2*b.T {
+	if len(b.children) == 2*b.t {
 		panic("Cannot insert a child into a full node")
 	}
 
@@ -213,44 +252,10 @@ func (b *BNode) childSuccessor(index int) *BNode {
 	return b.children[index+1]
 }
 
-func (b *BNode) deleteKey(k string) error {
-	index, exists := b.keyIndex(k)
-	//b.registerWrite("delete key")
-	if exists && b.Leaf {
-		b.records = append(b.records[:index], b.records[index+1:]...)
-		return nil
-	} else if exists {
-		// INTERNAL NODES
-		// Case 1: Predcessor has at least t keys
-		if p := b.predecessorKeyNode(k); p != nil && !p.isSparse() {
-			pred_k := p.records[len(p.records)-1]
-			b.records[index] = pred_k
-			return p.deleteKey(pred_k.Key())
-			// Case 2: Successor has at least t keys
-		} else if s := b.successorKeyNode(k); s != nil && !s.isSparse() {
-			succ_k := s.records[0]
-			b.records[index] = succ_k
-			return s.deleteKey(succ_k.Key())
-			// Case 3: Neither p nor s has >= t keys
-		} else {
-			// Merge s and p with k as median key
-			b.mergeChildren(index)
-			b.children[index].deleteKey(k)
-		}
-		return nil
-	} else {
-		return fmt.Errorf("KeyNotFoundError")
-	}
-}
-
 // TODO: TEST
 func (b *BNode) hasKey(k string) bool {
 	_, exists := b.keyIndex(k)
 	return exists
-}
-
-func (b *BNode) isSparse() bool {
-	return len(b.records) <= b.T-1
 }
 
 // TODO: TEST
@@ -283,55 +288,6 @@ func (b *BNode) mergeChildren(i int) {
 	b.children = append(b.children[:i+1], b.children[i+2:]...)
 
 	b.registerWrite("Merged children")
-}
-
-func (b *BNode) GobEncode() ([]byte, error) {
-	refs := []*BNode{}
-	for _, c := range b.children {
-		cNode := new(BNode)
-		cNode.ID = c.ID
-		refs = append(refs, cNode)
-	}
-	w := new(bytes.Buffer)
-	encoder := gob.NewEncoder(w)
-
-	err := encoder.Encode(refs)
-	if err != nil {
-		return nil, err
-	}
-	encoder.Encode(b.ID)
-	encoder.Encode(b.T)
-	encoder.Encode(b.Leaf)
-	encoder.Encode(b.records)
-
-	return w.Bytes(), nil
-}
-
-func (b *BNode) GobDecode(buf []byte) error {
-	r := bytes.NewBuffer(buf)
-	decoder := gob.NewDecoder(r)
-
-	if err := decoder.Decode(&b.children); err != nil {
-		return err
-	}
-	for _, child := range b.children {
-		child.storage = b.storage
-	}
-
-	if err := decoder.Decode(&b.ID); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&b.T); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&b.Leaf); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&b.records); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (b *BNode) registerWrite(reason string) error {
@@ -369,20 +325,4 @@ func (b *BNode) read() error {
 	//fmt.Println(b)
 
 	//return nil
-}
-
-func (b *BNode) clone() *BNode {
-	c := make([]*BNode, len(b.children))
-	r := make([]record.Record, len(b.records))
-
-	copy(c, b.children)
-	copy(r, b.records)
-
-	return &BNode{
-		loaded: true,
-		ID: b.ID,
-		children: c,
-		records: r,
-
-	}
 }

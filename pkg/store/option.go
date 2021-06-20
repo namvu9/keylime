@@ -2,6 +2,10 @@ package store
 
 type Option func(*BTree)
 
+type NodeReadWriter interface {
+
+}
+
 func WithStorage(s NodeReadWriter) Option {
 	return func(b *BTree) {
 		b.storage = s

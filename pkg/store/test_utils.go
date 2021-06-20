@@ -7,78 +7,9 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
-func makeNewKeys(keys []string) (out []record.Record) {
-	for _, k := range keys {
-		out = append(out, record.New(k, nil))
-	}
-
-	return
-}
-
-func newNodeWithKeys(t int, keys []string) *BNode {
-	return &BNode{
-		T:       t,
-		records: makeNewKeys(keys),
-	}
-}
-
-func makeTree(t int, records []record.Record, children ...*BNode) *BNode {
-	root := newNode(t)
-	root.records = records
-	root.children = children
-	root.storage = &ChangeReporter{}
-
-	for _, child := range children {
-		child.T = t
-		child.storage = root.storage
-	}
-
-	if len(children) == 0 {
-		root.Leaf = true
-	}
-
-	return root
-}
-
-func makeRecords(keys ...string) []record.Record {
-	out := []record.Record{}
-	for _, key := range keys {
-		out = append(out, record.New(key, nil))
-	}
-
-	return out
-}
-
 type util struct {
 	t *testing.T
 }
-
-type namedUtil struct {
-	u    util
-	name string
-	node *BNode
-}
-
-func (nu namedUtil) is(other *BNode) bool {
-	return nu.node == other
-}
-
-func (nu namedUtil) hasNRecords(n int) {
-	nu.u.hasNRecords(nu.name, n, nu.node)
-}
-
-func (nu namedUtil) hasNChildren(n int) {
-	nu.u.hasNChildren(nu.name, n, nu.node)
-}
-
-func (nu namedUtil) hasKeys(keys ...string) {
-	nu.u.hasKeys(nu.name, keys, nu.node)
-}
-
-func (nu namedUtil) hasChildren(children ...*BNode) {
-	nu.u.hasChildren(nu.name, children, nu.node)
-}
-
 func (u util) with(name string, node *BNode, fn func(namedUtil)) {
 	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), node})
 }
@@ -132,3 +63,72 @@ func (u util) hasChildren(name string, children []*BNode, node *BNode) {
 		}
 	}
 }
+
+type namedUtil struct {
+	u    util
+	name string
+	node *BNode
+}
+
+func (nu namedUtil) is(other *BNode) bool {
+	return nu.node == other
+}
+
+func (nu namedUtil) hasNRecords(n int) {
+	nu.u.hasNRecords(nu.name, n, nu.node)
+}
+
+func (nu namedUtil) hasNChildren(n int) {
+	nu.u.hasNChildren(nu.name, n, nu.node)
+}
+
+func (nu namedUtil) hasKeys(keys ...string) {
+	nu.u.hasKeys(nu.name, keys, nu.node)
+}
+
+func (nu namedUtil) hasChildren(children ...*BNode) {
+	nu.u.hasChildren(nu.name, children, nu.node)
+}
+
+func makeNewRecords(keys []string) (out []record.Record) {
+	for _, k := range keys {
+		out = append(out, record.New(k, nil))
+	}
+
+	return
+}
+
+func newNodeWithKeys(t int, keys []string) *BNode {
+	return &BNode{
+		t:       t,
+		records: makeNewRecords(keys),
+	}
+}
+
+func makeTree(t int, records []record.Record, children ...*BNode) *BNode {
+	root := newNode(t)
+	root.records = records
+	root.children = children
+	root.storage = &ChangeReporter{}
+
+	for _, child := range children {
+		child.t = t
+		child.storage = root.storage
+	}
+
+	if len(children) == 0 {
+		root.leaf = true
+	}
+
+	return root
+}
+
+func makeRecords(keys ...string) []record.Record {
+	out := []record.Record{}
+	for _, key := range keys {
+		out = append(out, record.New(key, nil))
+	}
+
+	return out
+}
+

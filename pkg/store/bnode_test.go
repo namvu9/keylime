@@ -20,7 +20,7 @@ func TestKeyIndex(t *testing.T) {
 		{"10", []string{"10", "5"}, 0, true},
 	} {
 		root := newNode(100)
-		root.records = makeNewKeys(test.keys)
+		root.records = makeNewRecords(test.keys)
 		gotIndex, gotExists := root.keyIndex(test.k)
 
 		if gotIndex != test.wantIndex || gotExists != test.wantExists {
@@ -43,8 +43,8 @@ func TestInsertKey(t *testing.T) {
 		{"10", []string{"1", "3", "5"}, []string{"1", "10", "3", "5"}},
 	} {
 		r := newNode(3)
-		r.Leaf = true
-		r.records = makeNewKeys(test.keys)
+		r.leaf = true
+		r.records = makeNewRecords(test.keys)
 		r.storage = &ChangeReporter{}
 
 		r.insertKey(test.k, nil)
@@ -230,7 +230,7 @@ func TestInsertChild(t *testing.T) {
 func TestDeleteNode(t *testing.T) {
 	t.Run("Missing key", func(t *testing.T) {
 		node := newNodeWithKeys(2, []string{"a", "c"})
-		err := node.deleteKey("b")
+		err := node.Delete("b")
 		if err == nil {
 			t.Errorf("deleteKey should return error if key is not found")
 		}
@@ -247,8 +247,8 @@ func TestDeleteNode(t *testing.T) {
 			{"c", []string{"a", "b"}},
 		} {
 			node := newNodeWithKeys(2, []string{"a", "b", "c"})
-			node.Leaf = true
-			err := node.deleteKey(test.targetKey)
+			node.leaf = true
+			err := node.Delete(test.targetKey)
 
 			if err != nil {
 				t.Errorf("Should not return error")
@@ -265,7 +265,7 @@ func TestDeleteNode(t *testing.T) {
 			makeTree(2, makeRecords("6")),
 		)
 
-		root.deleteKey("5")
+		root.Delete("5")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("3")
@@ -290,7 +290,7 @@ func TestDeleteNode(t *testing.T) {
 			makeTree(2, makeRecords("6", "7")),
 		)
 
-		root.deleteKey("5")
+		root.Delete("5")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("6")
@@ -315,7 +315,7 @@ func TestDeleteNode(t *testing.T) {
 			makeTree(2, makeRecords("6")),
 		)
 
-		root.deleteKey("5")
+		root.Delete("5")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(0)
@@ -390,13 +390,13 @@ func TestPredecessorSuccessorKeyNode(t *testing.T) {
 func TestIsFull(t *testing.T) {
 	root := newNode(2)
 
-	if got := root.isFull(); got {
+	if got := root.Full(); got {
 		t.Errorf("New(2).IsFull() = %v; want false", got)
 	}
 
-	root.records = makeNewKeys([]string{"1", "2", "3"})
+	root.records = makeNewRecords([]string{"1", "2", "3"})
 
-	if got := root.isFull(); !got {
+	if got := root.Full(); !got {
 		t.Errorf("Want root.IsFull() = true, got %v", got)
 	}
 }
@@ -413,7 +413,7 @@ func TestIsSparse(t *testing.T) {
 	} {
 		node := newNodeWithKeys(test.t, test.keys)
 
-		if got := node.isSparse(); got != test.wantSparse {
+		if got := node.Sparse(); got != test.wantSparse {
 			t.Errorf("%d: Got=%v; Want=%v", i, got, test.wantSparse)
 		}
 

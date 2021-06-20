@@ -8,7 +8,7 @@ type BTreeIterator struct {
 func (bti *BTreeIterator) forEach(fn func(*BNode, *BNode, int) bool) (*BNode, bool, int) {
 	for {
 		index, exists := bti.node.keyIndex(bti.key)
-		if exists || bti.node.Leaf {
+		if exists || bti.node.leaf {
 			return bti.node, exists, index
 		}
 

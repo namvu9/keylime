@@ -1,17 +1,69 @@
 package store
 
 import (
-	"fmt"
-
 	"github.com/namvu9/keylime/pkg/record"
 )
 
 type BTree struct {
-	T        int
+	t        int
+	basePath string
 	root     *BNode
 	storage  NodeReadWriter
-	basePath string
 	cr       ChangeReporter
+}
+
+func (t *BTree) Get(key string) []byte {
+	if node, ok, index := t.iter(key).find(); ok {
+		return node.records[index].Value()
+	} else {
+		return nil
+	}
+}
+
+func (bt *BTree) Set(k string, value []byte) error {
+	if bt.root.Full() {
+		s := bt.newNode()
+		s.children = []*BNode{bt.root}
+		bt.root = s
+		s.splitChild(0)
+
+		s.registerWrite("Split root")
+	}
+
+	node := bt.splitDescend(k)
+	node.insertKey(k, value)
+
+	return nil
+}
+
+func (b *BTree) Delete(k string) error {
+	if err := b.mergeDescend(k).Delete(k); err != nil {
+		return err
+	}
+
+	if b.root.Empty() && !b.root.Leaf() {
+		b.root = b.root.children[0]
+	}
+
+	return nil
+}
+
+func New(t int, opts ...Option) *BTree {
+	tree := &BTree{
+		t:  t,
+		cr: ChangeReporter{},
+	}
+
+	for _, fn := range opts {
+		fn(tree)
+	}
+
+	if tree.root == nil {
+		tree.root = tree.newNode()
+		tree.root.leaf = true
+	}
+
+	return tree
 }
 
 func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
@@ -22,18 +74,9 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
 }
 
-func (bt *BTree) splitRoot() {
-	s := bt.newNode()
-	s.children = []*BNode{bt.root}
-	bt.root = s
-	s.splitChild(0)
-
-	s.registerWrite("Split root")
-}
-
 // TODO: TEST
 func handleSparseNode(node, child *BNode, index int) bool {
-	if !child.isSparse() {
+	if !child.Sparse() {
 		return false
 	}
 
@@ -46,7 +89,7 @@ func handleSparseNode(node, child *BNode, index int) bool {
 	node.registerWrite("Sparse node (parent)")
 
 	// Rotate predecessor key
-	if p != nil && !p.isSparse() {
+	if p != nil && !p.Sparse() {
 		p.registerWrite("Sparse node (predecessor)")
 		var (
 			recordIndex   = index - 1
@@ -57,13 +100,13 @@ func handleSparseNode(node, child *BNode, index int) bool {
 		child.insertRecord(pivot)
 		node.setRecord(recordIndex, siblingRecord)
 
-		if !p.Leaf {
+		if !p.leaf {
 			// Move child from sibling to child
 			siblingLastChild := p.children[len(p.children)-1]
 			child.children = append([]*BNode{siblingLastChild}, child.children...)
 			p.children = p.children[:len(p.children)-1]
 		}
-	} else if s != nil && !s.isSparse() {
+	} else if s != nil && !s.Sparse() {
 		s.registerWrite("Sparse node (successor)")
 		var (
 			pivot         = node.records[index]
@@ -75,7 +118,7 @@ func handleSparseNode(node, child *BNode, index int) bool {
 		node.setRecord(index, siblingRecord)
 
 		// Move child from sibling to child
-		if !s.Leaf {
+		if !s.leaf {
 			siblingFirstChild := s.children[0]
 			child.children = append(child.children, siblingFirstChild)
 			s.children = s.children[1:]
@@ -91,7 +134,7 @@ func handleSparseNode(node, child *BNode, index int) bool {
 }
 
 func handleFullNode(node, child *BNode, index int) bool {
-	if !child.isFull() {
+	if !child.Full() {
 		return false
 	}
 
@@ -120,61 +163,7 @@ func (t *BTree) iter(key string) *BTreeIterator {
 }
 
 func (b *BTree) newNode() *BNode {
-	node := newNode(b.T)
+	node := newNode(b.t)
 	node.storage = &b.cr
 	return node
-}
-
-func (b *BTree) Delete(k string) error {
-	node := b.mergeDescend(k)
-	err := node.deleteKey(k)
-	if len(b.root.records) == 0 && len(b.root.children) == 1 {
-		b.root = b.root.children[0]
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (bt *BTree) Set(k string, value []byte) error {
-	if bt.root.isFull() {
-		bt.splitRoot()
-	}
-
-	node := bt.splitDescend(k)
-	fmt.Println(node)
-	node.insertKey(k, value)
-
-	// Commit writes
-	return nil
-}
-
-func (t *BTree) Get(key string) []byte {
-	if node, ok, index := t.iter(key).find(); ok {
-		return node.records[index].Value()
-	} else {
-		return nil
-	}
-}
-
-// TODO: TEST
-func New(t int, opts ...Option) *BTree {
-	tree := &BTree{
-		T:  t,
-		cr: ChangeReporter{},
-	}
-
-	for _, fn := range opts {
-		fn(tree)
-	}
-
-	if tree.root == nil {
-		tree.root = tree.newNode()
-		tree.root.Leaf = true
-	}
-
-	return tree
 }
