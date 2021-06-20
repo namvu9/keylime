@@ -1,24 +1,19 @@
 package store
 
-import (
-	"fmt"
-	"os"
-	"path"
-)
-
 type BTree struct {
 	T        int
 	root     *BNode
 	storage  NodeReadWriter
 	basePath string
+	cr       ChangeReporter
 }
 
 func (b *BTree) Unload() {
 	b.root = nil
-	loadTree(b)
+	//loadTree(b)
 }
 
-func partitionMedian(nums Records) (*Record, Records, Records) {
+func partitionMedian(nums Records) (Record, Records, Records) {
 	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
 		panic("Cannot partition an even number of records")
 	}
@@ -28,15 +23,11 @@ func partitionMedian(nums Records) (*Record, Records, Records) {
 
 func (bt *BTree) splitRoot() {
 	s := bt.newNode()
-
-	// TODO: HACK
-	//bt.root.ID = s.ID
-	//bt.root.write()
-	//s.ID = "origin"
-
 	s.children = []*BNode{bt.root}
 	bt.root = s
 	s.splitChild(0)
+
+	s.registerWrite("Split root")
 }
 
 func (bt *BTree) splitDescend(k string) *BNode {
@@ -62,8 +53,12 @@ func handleSparseNode(node, child *BNode, index int) {
 		s = node.childSuccessor(index)
 	)
 
+	child.registerWrite("Sparse node")
+	node.registerWrite("Sparse node (parent)")
+
 	// Rotate predecessor key
 	if p != nil && !p.isSparse() {
+		p.registerWrite("Sparse node (predecessor)")
 		var (
 			recordIndex   = index - 1
 			pivot         = node.Records[recordIndex]
@@ -80,6 +75,7 @@ func handleSparseNode(node, child *BNode, index int) {
 			p.children = p.children[:len(p.children)-1]
 		}
 	} else if s != nil && !s.isSparse() {
+		s.registerWrite("Sparse node (successor)")
 		var (
 			pivot         = node.Records[index]
 			siblingRecord = s.Records[0]
@@ -122,6 +118,12 @@ func (bt *BTree) mergeDescend(k string) *BNode {
 }
 
 func (bt *BTree) Set(k string, value []byte) error {
+	defer func() {
+		if r := recover(); r != nil {
+			// Roll back
+		}
+	}()
+
 	if bt.root.isFull() {
 		bt.splitRoot()
 	}
@@ -129,12 +131,7 @@ func (bt *BTree) Set(k string, value []byte) error {
 	node := bt.splitDescend(k)
 	node.insertKey(k, value)
 
-	//fmt.Printf("Write after inserting key %s into %v\n", k, node.ID)
-	//_, err := node.write()
-	//if err != nil {
-		//return err
-	//}
-
+	// Commit writes
 	return nil
 }
 
@@ -211,7 +208,13 @@ func (b *BTree) Delete(k string) error {
 		b.root = b.root.children[0]
 	}
 
-	return err
+	if err != nil {
+		// Roll back
+		// Wrap err
+		return err
+	}
+
+	return nil
 }
 
 type Option func(*BTree)
@@ -228,42 +231,55 @@ func WithBasePath(path string) Option {
 	}
 }
 
-func (b *BTree) newNode() *BNode {
-	node := newNode(b.T)
-	node.storage = b.storage
-	return node
+func WithRoot(root *BNode) Option {
+	return func(b *BTree) {
+		b.root = root
+	}
 }
 
-func loadTree(tree *BTree) error {
-	root := tree.newNode()
-	root.ID = "origin"
-	tree.root = root
-	tree.root.storage = tree.storage
+type ChangeReporter struct {
+	writes  []*BNode
+	deletes []*BNode
+}
 
-	if _, err := os.Stat(path.Join(tree.basePath, "origin")); os.IsNotExist(err) {
-		tree.root.Leaf = true
-		tree.root.loaded = true
-		tree.root.write()
-	} else {
-		err := tree.root.read()
-		if err != nil {
-			return err
+func (cr *ChangeReporter) Write(b *BNode, reason string) {
+	for _, write := range cr.writes {
+		if write.ID == b.ID {
+			return
 		}
-		tree.T = tree.root.T
 	}
-	return nil
+	cr.writes = append(cr.writes, b)
+}
+
+func (cr *ChangeReporter) Delete(b *BNode, reason string) {
+	for _, del := range cr.writes {
+		if del.ID == b.ID {
+			return
+		}
+	}
+	cr.deletes = append(cr.deletes, b)
+}
+
+func (b *BTree) newNode() *BNode {
+	node := newNode(b.T)
+	node.storage = &b.cr
+	return node
 }
 
 // TODO: TEST
 func New(t int, opts ...Option) *BTree {
-	tree := &BTree{T: t}
+	tree := &BTree{
+		T:  t,
+		cr: ChangeReporter{},
+	}
+
 	for _, fn := range opts {
 		fn(tree)
 	}
 
-	err := loadTree(tree)
-	if err != nil {
-		fmt.Println(err)
+	if tree.root == nil {
+		tree.root = tree.newNode()
+		tree.root.Leaf = true
 	}
 
 	return tree

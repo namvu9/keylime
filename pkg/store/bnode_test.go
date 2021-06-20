@@ -43,7 +43,17 @@ func TestInsertKey(t *testing.T) {
 		r := newNode(3)
 		r.Leaf = true
 		r.Records = makeNewKeys(test.keys)
+		r.storage = &ChangeReporter{}
+
 		r.insertKey(test.k, nil)
+
+		if len(r.storage.writes) != 1 {
+			t.Errorf("Expected 1 write")
+		}
+
+		if r.storage.writes[0] != r {
+			t.Errorf("Expected 1 write")
+		}
 
 		want := makeNewKeys(test.wantKeys)
 
@@ -64,6 +74,10 @@ func TestSplitChild(t *testing.T) {
 		)
 
 		root.splitChild(1)
+
+		if got := len(root.storage.writes); got != 3 {
+			t.Errorf("Incorrect number of writes. Want=%d, Got=%d", 3, got)
+		}
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("10", "14")
@@ -177,6 +191,7 @@ func TestInsertChild(t *testing.T) {
 	})
 
 	t.Run("Multiple into empty", func(t *testing.T) {
+		u := util{t}
 		var (
 			root   = newNodeWithKeys(2, []string{"5"})
 			childA = newNodeWithKeys(2, []string{"2"})
@@ -191,6 +206,7 @@ func TestInsertChild(t *testing.T) {
 	})
 
 	t.Run("Insert multiple", func(t *testing.T) {
+		u := util{t}
 		var (
 			childA = newNodeWithKeys(2, []string{"2"})
 			childB = newNodeWithKeys(2, []string{"2"})

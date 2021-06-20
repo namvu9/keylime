@@ -17,7 +17,7 @@ func TestSet(t *testing.T) {
 				makeTree(2, makeRecords("p", "q")),
 				makeTree(2, makeRecords("x", "y")),
 			)
-			tree = &BTree{2, root, nil, "/"}
+			tree = New(2, WithRoot(root))
 		)
 
 		tree.Set("d", []byte{99})
@@ -95,7 +95,6 @@ func TestSplitDescend(t *testing.T) {
 
 }
 
-
 func TestMergeDescend(t *testing.T) {
 
 	t.Run("Left sibling has t keys", func(t *testing.T) {
@@ -105,7 +104,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("d")),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		tree.mergeDescend("d")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -134,7 +133,7 @@ func TestMergeDescend(t *testing.T) {
 			),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		tree.mergeDescend("d")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -159,7 +158,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("d", "e")),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		tree.mergeDescend("a")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -188,7 +187,7 @@ func TestMergeDescend(t *testing.T) {
 			),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		tree.mergeDescend("a")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -214,7 +213,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("e")),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		node := tree.mergeDescend("c")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -236,7 +235,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("e")),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		node := tree.mergeDescend("e")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -258,7 +257,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("e")),
 		)
 
-		tree := &BTree{2, root, nil, "/"}
+		tree := New(2, WithRoot(root))
 		node := tree.mergeDescend("a")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -294,7 +293,7 @@ func TestMergeDescend(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Run("Delete missing key", func(t *testing.T) {
-		tree := &BTree{2, makeTree(2, makeRecords("5")), nil, "/"}
+		tree := New(2, WithRoot(makeTree(2, makeRecords("5"))))
 
 		err := tree.Delete("10")
 		if err == nil {
@@ -304,9 +303,9 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
-		tree := &BTree{
-			2,
-			makeTree(2, makeRecords("5")), nil, "/"}
+		tree := New(2, WithRoot(
+			makeTree(2, makeRecords("5")),
+		))
 
 		tree.Delete("5")
 		u.hasNRecords("Root", 0, tree.root)
@@ -316,12 +315,10 @@ func TestDelete(t *testing.T) {
 	// Case 0: Delete from root with 1 key
 	t.Run("Delete from root with 1 key", func(t2 *testing.T) {
 		u := util{t2}
-		tree := &BTree{
-			2,
-			makeTree(2, makeRecords("5"),
-				makeTree(2, makeRecords("2")),
-				makeTree(2, makeRecords("8")),
-			), nil, "/"}
+		tree := New(2, WithRoot(makeTree(2, makeRecords("5"),
+			makeTree(2, makeRecords("2")),
+			makeTree(2, makeRecords("8")),
+		)))
 
 		tree.Delete("5")
 

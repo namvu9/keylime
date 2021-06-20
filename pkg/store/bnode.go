@@ -56,7 +56,7 @@ func newNode(t int) *BNode {
 	return &BNode{
 		ID:       uuid.New().String(),
 		children: []*BNode{},
-		Records:  make([]*Record, 0, 2*t-1),
+		Records:  make([]Record, 0, 2*t-1),
 		Leaf:     false,
 		T:        t,
 	}
@@ -105,7 +105,7 @@ func (b *BNode) insertKey(k string, value []byte) int {
 	b.registerWrite("INSERT KEY")
 
 	kv := NewRecord(k, value)
-	out := []*Record{}
+	out := []Record{}
 
 	for i, key := range b.Records {
 		if kv.Key == key.Key {
@@ -154,11 +154,11 @@ func (b *BNode) splitChild(index int) {
 
 }
 
-func (b *BNode) insertRecord(r *Record) int {
+func (b *BNode) insertRecord(r Record) int {
 	return b.insertKey(r.Key, r.Value)
 }
 
-func (b *BNode) setRecord(index int, r *Record) {
+func (b *BNode) setRecord(index int, r Record) {
 	b.Records[index] = r
 }
 
@@ -167,10 +167,8 @@ func (b *BNode) insertChildren(index int, children ...*BNode) {
 		panic("Cannot insert a child into a full node")
 	}
 
-	if index > len(b.children) {
-		panic("Index can be at most len(b.children)")
-	}
-
+	// Check whether index + len(children) leads to node
+	// overflow
 	nExistingChildren := len(b.children)
 	nChildren := len(children)
 
@@ -255,17 +253,20 @@ func (b *BNode) isSparse() bool {
 }
 
 // TODO: TEST
-func (b *BNode) mergeWith(median *Record, other *BNode) {
+func (b *BNode) mergeWith(median Record, other *BNode) {
 	b.Records = append(b.Records, median)
 	b.Records = append(b.Records, other.Records...)
 	b.children = append(b.children, other.children...)
+
+	b.registerWrite("Merge")
+	other.registerDelete("Merge")
 }
 
 // mergeChildren merges the child at index `i` of `b` with
-// the child at index `i+1` of `b` to form a new node,
-// inserting the key at index `i` as the median key,
-// removing the key from `b` in the process. The original
-// child nodes are scheduled for deletion.
+// the child at index `i+1` of `b`, inserting the key at
+// index `i` as the median key and removing the key from `b` in
+// the process. The original sibling node (i+1) is scheduled
+// for deletion.
 func (b *BNode) mergeChildren(i int) {
 	var (
 		pivotRecord = b.Records[i]
@@ -280,9 +281,7 @@ func (b *BNode) mergeChildren(i int) {
 	// Remove rightChild
 	b.children = append(b.children[:i+1], b.children[i+2:]...)
 
-	b.registerWrite("Merge")
-	leftChild.registerWrite("Create")
-	rightChild.registerDelete("Merge")
+	b.registerWrite("Merged children")
 }
 
 func (b *BNode) GobEncode() ([]byte, error) {
@@ -369,4 +368,20 @@ func (b *BNode) read() error {
 	//fmt.Println(b)
 
 	//return nil
+}
+
+func (b *BNode) clone() *BNode {
+	c := make([]*BNode, len(b.children))
+	r := make([]Record, len(b.Records))
+
+	copy(c, b.children)
+	copy(r, b.Records)
+
+	return &BNode{
+		loaded: true,
+		ID: b.ID,
+		children: c,
+		Records: r,
+
+	}
 }

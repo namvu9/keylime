@@ -9,7 +9,7 @@ type Record struct {
 	Value []byte
 }
 
-type Records []*Record
+type Records []Record
 
 func (r Records) equals(other Records) bool {
 	if len(r) != len(other) {
@@ -53,11 +53,11 @@ func (r Records) values() (out [][]byte) {
 	return
 }
 
-func (r Records) last() *Record {
+func (r Records) last() Record {
 	return r[len(r)-1]
 }
 
-func (r Record) isLessThan(other *Record) bool {
+func (r Record) isLessThan(other Record) bool {
 	return strings.Compare(r.Key, other.Key) < 0
 }
 
@@ -65,6 +65,6 @@ func (r Record) isEqualTo(other *Record) bool {
 	return r.Key == other.Key
 }
 
-func NewRecord(key string, value []byte) *Record {
-	return &Record{key, value}
+func NewRecord(key string, value []byte) Record {
+	return Record{key, value}
 }

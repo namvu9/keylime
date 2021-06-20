@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func makeNewKeys(keys []string) (out []*Record) {
+func makeNewKeys(keys []string) (out []Record) {
 	for _, k := range keys {
 		out = append(out, NewRecord(k, nil))
 	}
@@ -20,13 +20,15 @@ func newNodeWithKeys(t int, keys []string) *BNode {
 	}
 }
 
-func makeTree(t int, records []*Record, children ...*BNode) *BNode {
+func makeTree(t int, records []Record, children ...*BNode) *BNode {
 	root := newNode(t)
 	root.Records = records
 	root.children = children
+	root.storage = &ChangeReporter{}
 
 	for _, child := range children {
 		child.T = t
+		child.storage = root.storage
 	}
 
 	if len(children) == 0 {
@@ -36,10 +38,10 @@ func makeTree(t int, records []*Record, children ...*BNode) *BNode {
 	return root
 }
 
-func makeRecords(keys ...string) []*Record {
-	out := []*Record{}
+func makeRecords(keys ...string) []Record {
+	out := []Record{}
 	for _, key := range keys {
-		out = append(out, &Record{key, nil})
+		out = append(out, Record{key, nil})
 	}
 
 	return out
@@ -98,7 +100,17 @@ func (u util) hasKeys(name string, keys []string, node *BNode) {
 }
 
 func (u util) hasChildren(name string, children []*BNode, node *BNode) {
-	errorMsg := fmt.Sprintf("%s.children, Got=%v; Want=%v", name, node.children, children)
+	wantIDs := []string{}
+	for _, child := range children {
+		wantIDs = append(wantIDs, fmt.Sprintf("%p", child))
+	}
+
+	gotIDs := []string{}
+	for _, child := range node.children {
+		gotIDs = append(gotIDs, fmt.Sprintf("%p", child))
+	}
+
+	errorMsg := fmt.Sprintf("%s.children, Got=%v; Want=%v", name, gotIDs, wantIDs)
 	if len(node.children) != len(children) {
 		u.t.Errorf(errorMsg)
 	} else {
