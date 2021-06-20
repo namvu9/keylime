@@ -1,6 +1,10 @@
 package store
 
-import "github.com/namvu9/keylime/pkg/record"
+import (
+	"fmt"
+
+	"github.com/namvu9/keylime/pkg/record"
+)
 
 type BTree struct {
 	T        int
@@ -8,11 +12,6 @@ type BTree struct {
 	storage  NodeReadWriter
 	basePath string
 	cr       ChangeReporter
-}
-
-func (b *BTree) Unload() {
-	b.root = nil
-	//loadTree(b)
 }
 
 func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
@@ -32,24 +31,12 @@ func (bt *BTree) splitRoot() {
 	s.registerWrite("Split root")
 }
 
-func (bt *BTree) splitDescend(k string) *BNode {
-	iter := bt.iter(k)
-	node, _, _ := iter.forEach(func(parent, child *BNode, i int) {
-		if child.isFull() {
-			parent.splitChild(i)
-			index, ok := parent.keyIndex(k)
-			if ok {
-				iter.nextChild = parent
-			} else {
-				iter.nextChild = parent.children[index]
-			}
-		}
-	}).run()
-	return node
-}
-
 // TODO: TEST
-func handleSparseNode(node, child *BNode, index int) {
+func handleSparseNode(node, child *BNode, index int) bool {
+	if !child.isSparse() {
+		return false
+	}
+
 	var (
 		p = node.childPredecessor(index)
 		s = node.childSuccessor(index)
@@ -99,91 +86,30 @@ func handleSparseNode(node, child *BNode, index int) {
 		node.mergeChildren(index)
 	}
 	// Write nodes
+
+	return true
 }
 
-// Descend the tree until either the key is found or a leaf
-// node is found.
+func handleFullNode(node, child *BNode, index int) bool {
+	if !child.isFull() {
+		return false
+	}
+
+	node.splitChild(index)
+
+	return true
+}
+
 func (bt *BTree) mergeDescend(k string) *BNode {
 	iter := bt.iter(k)
-	node, _, _ := iter.forEach(func(parent, child *BNode, i int) {
-		if child.isSparse() {
-			handleSparseNode(parent, child, i)
-			index, ok := parent.keyIndex(k)
-			if ok {
-				iter.nextChild = parent
-			} else {
-				iter.nextChild = parent.children[index]
-			}
-		}
-	}).run()
+	node, _, _ := iter.forEach(handleSparseNode)
 	return node
 }
 
-func (bt *BTree) Set(k string, value []byte) error {
-	defer func() {
-		if r := recover(); r != nil {
-			// Roll back
-		}
-	}()
-
-	if bt.root.isFull() {
-		bt.splitRoot()
-	}
-
-	node := bt.splitDescend(k)
-	node.insertKey(k, value)
-
-	// Commit writes
-	return nil
-}
-
-func (t *BTree) Get(key string) []byte {
-	if node, index := t.Search(key); node != nil {
-		return node.records[index].Value()
-	}
-
-	return nil
-}
-
-type BTreeIterator struct {
-	done      bool
-	key       string
-	node      *BNode
-	fn        func(parent, child *BNode, childIndex int)
-	nextChild *BNode
-}
-
-func (bti *BTreeIterator) forEach(fn func(*BNode, *BNode, int)) *BTreeIterator {
-	bti.fn = fn
-	return bti
-}
-
-func (bti *BTreeIterator) run() (*BNode, bool, int) {
-	for {
-		index, exists := bti.node.keyIndex(bti.key)
-		if exists || bti.node.Leaf {
-			bti.done = true
-			return bti.node, exists, index
-		}
-
-		child := bti.node.children[index]
-		if err := child.read(); err != nil {
-			panic(err)
-		}
-
-		if bti.fn != nil {
-			bti.fn(bti.node, child, index)
-
-		}
-
-		if bti.nextChild != nil {
-			bti.node = bti.nextChild
-			bti.nextChild = nil
-		} else {
-			bti.node = child
-		}
-
-	}
+func (bt *BTree) splitDescend(k string) *BNode {
+	iter := bt.iter(k)
+	node, _, _ := iter.forEach(handleFullNode)
+	return node
 }
 
 func (t *BTree) iter(key string) *BTreeIterator {
@@ -193,14 +119,10 @@ func (t *BTree) iter(key string) *BTreeIterator {
 	}
 }
 
-func (t *BTree) Search(key string) (*BNode, int) {
-	node, ok, index := t.iter(key).run()
-
-	if !ok {
-		return nil, index
-	}
-
-	return node, index
+func (b *BTree) newNode() *BNode {
+	node := newNode(b.T)
+	node.storage = &b.cr
+	return node
 }
 
 func (b *BTree) Delete(k string) error {
@@ -211,61 +133,31 @@ func (b *BTree) Delete(k string) error {
 	}
 
 	if err != nil {
-		// Roll back
-		// Wrap err
 		return err
 	}
 
 	return nil
 }
 
-type Option func(*BTree)
-
-func WithStorage(s NodeReadWriter) Option {
-	return func(b *BTree) {
-		b.storage = s
+func (bt *BTree) Set(k string, value []byte) error {
+	if bt.root.isFull() {
+		bt.splitRoot()
 	}
+
+	node := bt.splitDescend(k)
+	fmt.Println(node)
+	node.insertKey(k, value)
+
+	// Commit writes
+	return nil
 }
 
-func WithBasePath(path string) Option {
-	return func(b *BTree) {
-		b.basePath = path
+func (t *BTree) Get(key string) []byte {
+	if node, ok, index := t.iter(key).find(); ok {
+		return node.records[index].Value()
+	} else {
+		return nil
 	}
-}
-
-func WithRoot(root *BNode) Option {
-	return func(b *BTree) {
-		b.root = root
-	}
-}
-
-type ChangeReporter struct {
-	writes  []*BNode
-	deletes []*BNode
-}
-
-func (cr *ChangeReporter) Write(b *BNode, reason string) {
-	for _, write := range cr.writes {
-		if write.ID == b.ID {
-			return
-		}
-	}
-	cr.writes = append(cr.writes, b)
-}
-
-func (cr *ChangeReporter) Delete(b *BNode, reason string) {
-	for _, del := range cr.writes {
-		if del.ID == b.ID {
-			return
-		}
-	}
-	cr.deletes = append(cr.deletes, b)
-}
-
-func (b *BTree) newNode() *BNode {
-	node := newNode(b.T)
-	node.storage = &b.cr
-	return node
 }
 
 // TODO: TEST

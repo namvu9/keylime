@@ -51,8 +51,6 @@ func main() {
 			}
 		case "exit":
 			os.Exit(0)
-		case "unload":
-			tree.Unload()
 		}
 	}
 }
