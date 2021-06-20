@@ -23,7 +23,7 @@ type BNode struct {
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
-	storage NodeReadWriter
+	storage *ChangeReporter
 }
 
 func (b *BNode) newNode() *BNode {
@@ -102,6 +102,8 @@ func (b *BNode) insertKey(k string, value []byte) int {
 		panic("Cannot insert key into full node")
 	}
 
+	b.registerWrite("INSERT KEY")
+
 	kv := NewRecord(k, value)
 	out := []*Record{}
 
@@ -146,10 +148,10 @@ func (b *BNode) splitChild(index int) {
 
 	b.insertChildren(index+1, newChild)
 
-	//fmt.Println("Writing after split child", b.ID)
-	//b.write()
-	//newChild.write()
-	//fullChild.write()
+	b.registerWrite("Split child")
+	newChild.registerWrite("Split child")
+	fullChild.registerWrite("Split child")
+
 }
 
 func (b *BNode) insertRecord(r *Record) int {
@@ -214,6 +216,7 @@ func (b *BNode) childSuccessor(index int) *BNode {
 
 func (b *BNode) deleteKey(k string) error {
 	index, exists := b.keyIndex(k)
+	//b.registerWrite("delete key")
 	if exists && b.Leaf {
 		b.Records = append(b.Records[:index], b.Records[index+1:]...)
 		return nil
@@ -235,9 +238,6 @@ func (b *BNode) deleteKey(k string) error {
 			b.mergeChildren(index)
 			b.children[index].deleteKey(k)
 		}
-
-		// TODO: Write nodes, p/s ?
-		//_, err := b.write()
 		return nil
 	} else {
 		return fmt.Errorf("KeyNotFoundError")
@@ -254,28 +254,35 @@ func (b *BNode) isSparse() bool {
 	return len(b.Records) <= b.T-1
 }
 
-func (b *BNode) mergeChildren(index int) {
+// TODO: TEST
+func (b *BNode) mergeWith(median *Record, other *BNode) {
+	b.Records = append(b.Records, median)
+	b.Records = append(b.Records, other.Records...)
+	b.children = append(b.children, other.children...)
+}
+
+// mergeChildren merges the child at index `i` of `b` with
+// the child at index `i+1` of `b` to form a new node,
+// inserting the key at index `i` as the median key,
+// removing the key from `b` in the process. The original
+// child nodes are scheduled for deletion.
+func (b *BNode) mergeChildren(i int) {
 	var (
-		pivotRecord = b.Records[index]
-		leftChild   = b.children[index]
-		rightChild  = b.children[index+1]
+		pivotRecord = b.Records[i]
+		leftChild   = b.children[i]
+		rightChild  = b.children[i+1]
 	)
 
-	node := newNode(b.T)
-	node.Leaf = leftChild.Leaf
-
-	node.Records = append(node.Records, leftChild.Records...)
-	node.Records = append(node.Records, pivotRecord)
-	node.Records = append(node.Records, rightChild.Records...)
-
-	node.children = append(node.children, leftChild.children...)
-	node.children = append(node.children, rightChild.children...)
+	leftChild.mergeWith(pivotRecord, rightChild)
 
 	// Delete the key from the node
-	b.Records = append(b.Records[:index], b.Records[index+1:]...)
+	b.Records = append(b.Records[:i], b.Records[i+1:]...)
+	// Remove rightChild
+	b.children = append(b.children[:i+1], b.children[i+2:]...)
 
-	b.children[index] = node
-	b.children = append(b.children[:index+1], b.children[index+2:]...)
+	b.registerWrite("Merge")
+	leftChild.registerWrite("Create")
+	rightChild.registerDelete("Merge")
 }
 
 func (b *BNode) GobEncode() ([]byte, error) {
@@ -327,39 +334,35 @@ func (b *BNode) GobDecode(buf []byte) error {
 	return nil
 }
 
-func (b *BNode) write() (int, error) {
-	return 0, nil
-	//if b.storage == nil {
-		//return 0, fmt.Errorf("Could not write node. No storage instance")
-	//}
-	//buffer := new(bytes.Buffer)
-	//buffer = bytes.NewBuffer(buffer.Bytes())
-	//enc := gob.NewEncoder(buffer)
-	//err := enc.Encode(b)
-	//if err != nil {
-		//return 0, err
-	//}
+func (b *BNode) registerWrite(reason string) error {
+	if b.storage == nil {
+		return fmt.Errorf("Cannot register write. No storage instance")
+	}
+	b.storage.Write(b, reason)
+	return nil
+}
 
-	//if b.storage != nil {
-		//return b.storage.Write(b.ID, buffer.Bytes())
-	//}
-
-	//return 0, nil
+func (b *BNode) registerDelete(reason string) error {
+	if b.storage == nil {
+		return fmt.Errorf("Cannot register write. No storage instance")
+	}
+	b.storage.Delete(b, reason)
+	return nil
 }
 
 func (b *BNode) read() error {
 	return nil
 	//if b.loaded {
-		//return nil
+	//return nil
 	//}
 
 	//if b.storage == nil {
-		//return fmt.Errorf("Could not read node. No storage instance")
+	//return fmt.Errorf("Could not read node. No storage instance")
 	//}
 
 	//err := b.storage.Read(b.ID, b)
 	//if err != nil {
-		//return err
+	//return err
 	//}
 
 	//b.loaded = true
