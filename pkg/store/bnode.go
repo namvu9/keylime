@@ -146,10 +146,10 @@ func (b *BNode) splitChild(index int) {
 
 	b.insertChildren(index+1, newChild)
 
-	fmt.Println("Writing after split child", b.ID)
-	b.write()
-	newChild.write()
-	fullChild.write()
+	//fmt.Println("Writing after split child", b.ID)
+	//b.write()
+	//newChild.write()
+	//fullChild.write()
 }
 
 func (b *BNode) insertRecord(r *Record) int {
@@ -237,8 +237,8 @@ func (b *BNode) deleteKey(k string) error {
 		}
 
 		// TODO: Write nodes, p/s ?
-		_, err := b.write()
-		return err
+		//_, err := b.write()
+		return nil
 	} else {
 		return fmt.Errorf("KeyNotFoundError")
 	}
@@ -328,40 +328,42 @@ func (b *BNode) GobDecode(buf []byte) error {
 }
 
 func (b *BNode) write() (int, error) {
-	if b.storage == nil {
-		return 0, fmt.Errorf("Could not write node. No storage instance")
-	}
-	buffer := new(bytes.Buffer)
-	buffer = bytes.NewBuffer(buffer.Bytes())
-	enc := gob.NewEncoder(buffer)
-	err := enc.Encode(b)
-	if err != nil {
-		return 0, err
-	}
-
-	if b.storage != nil {
-		return b.storage.Write(b.ID, buffer.Bytes())
-	}
-
 	return 0, nil
+	//if b.storage == nil {
+		//return 0, fmt.Errorf("Could not write node. No storage instance")
+	//}
+	//buffer := new(bytes.Buffer)
+	//buffer = bytes.NewBuffer(buffer.Bytes())
+	//enc := gob.NewEncoder(buffer)
+	//err := enc.Encode(b)
+	//if err != nil {
+		//return 0, err
+	//}
+
+	//if b.storage != nil {
+		//return b.storage.Write(b.ID, buffer.Bytes())
+	//}
+
+	//return 0, nil
 }
 
 func (b *BNode) read() error {
-	if b.loaded {
-		return nil
-	}
-
-	if b.storage == nil {
-		return fmt.Errorf("Could not read node. No storage instance")
-	}
-
-	err := b.storage.Read(b.ID, b)
-	if err != nil {
-		return err
-	}
-
-	b.loaded = true
-	fmt.Println(b)
-
 	return nil
+	//if b.loaded {
+		//return nil
+	//}
+
+	//if b.storage == nil {
+		//return fmt.Errorf("Could not read node. No storage instance")
+	//}
+
+	//err := b.storage.Read(b.ID, b)
+	//if err != nil {
+		//return err
+	//}
+
+	//b.loaded = true
+	//fmt.Println(b)
+
+	//return nil
 }

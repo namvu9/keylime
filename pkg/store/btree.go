@@ -30,9 +30,9 @@ func (bt *BTree) splitRoot() {
 	s := bt.newNode()
 
 	// TODO: HACK
-	bt.root.ID = s.ID
-	bt.root.write()
-	s.ID = "origin"
+	//bt.root.ID = s.ID
+	//bt.root.write()
+	//s.ID = "origin"
 
 	s.children = []*BNode{bt.root}
 	bt.root = s
@@ -129,11 +129,11 @@ func (bt *BTree) Set(k string, value []byte) error {
 	node := bt.splitDescend(k)
 	node.insertKey(k, value)
 
-	fmt.Printf("Write after inserting key %s into %v\n", k, node.ID)
-	_, err := node.write()
-	if err != nil {
-		return err
-	}
+	//fmt.Printf("Write after inserting key %s into %v\n", k, node.ID)
+	//_, err := node.write()
+	//if err != nil {
+		//return err
+	//}
 
 	return nil
 }

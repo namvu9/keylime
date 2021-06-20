@@ -67,7 +67,7 @@ func TestSplitChild(t *testing.T) {
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("10", "14")
-			nu.hasNChildren(4)
+			nu.hasNChildren(3)
 		})
 
 		u.with("Right child", root.children[1], func(nu namedUtil) {
