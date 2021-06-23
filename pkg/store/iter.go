@@ -1,14 +1,23 @@
 package store
 
 type IterFunc func(*Page) *Page
+type HandleFunc func(*Page, *Page) bool
 
 type CollectionIterator struct {
-	node *Page
-	next IterFunc
+	node     *Page
+	next     IterFunc
+	handlers []HandleFunc
 }
 
-func (ci *CollectionIterator) forEach(fn func(*Page, *Page) bool) *Page {
+func (ci *CollectionIterator) ForEach(fn func(*Page, *Page) bool) *CollectionIterator {
+	ci.handlers = append(ci.handlers, fn)
+	return ci
+}
+
+func (ci *CollectionIterator) Get() *Page {
 	for {
+		var modified bool
+
 		if ci.node.leaf {
 			return ci.node
 		}
@@ -18,42 +27,55 @@ func (ci *CollectionIterator) forEach(fn func(*Page, *Page) bool) *Page {
 			return ci.node
 		}
 
-		if modified := fn(ci.node, next); !modified {
+		for _, handle := range ci.handlers {
+			if res := handle(ci.node, next); res {
+				modified = true
+			}
+		}
+
+		if !modified {
 			ci.node = next
 		}
 	}
 }
 
-func (ci *CollectionIterator) Get() *Page {
-	return ci.forEach(func(b1, b2 *Page) bool { return false })
-}
-
-func (c *Page) IterBy(next IterFunc) *CollectionIterator {
+// Iter returns an iterator that traverses a `Collection`
+// of `Pages`, rooted at `p`. The traversal order is
+// determined by the `next` callback.
+func (p *Page) Iter(next IterFunc) *CollectionIterator {
 	return &CollectionIterator{
 		next: next,
-		node: c,
+		node: p,
 	}
 }
 
-func (c *Page) IterByKey(k string) *CollectionIterator {
-	return c.IterBy(func(p *Page) *Page {
+func ByKey(k string) IterFunc {
+	return func(p *Page) *Page {
 		index, exists := p.keyIndex(k)
 		if exists {
 			return p
 		}
 
 		return p.children[index]
-	})
+	}
 }
 
-func (c *Page) MaxPage() *CollectionIterator {
-	return c.IterBy(func(p *Page) *Page {
-		return p.children[len(p.children)-1]
-	})
+func ByMinPage(p *Page) *Page {
+	return p.children[0]
 }
 
-func (c *Page) MinPage() *CollectionIterator {
-	return c.IterBy(func(p *Page) *Page {
-		return p.children[0]
-	})
+func ByMaxPage(p *Page) *Page {
+	return p.children[len(p.children)-1]
+}
+
+// Max returns an iterator that terminates at the page
+// containing the largest key in the tree rooted at `p`.
+func (p *Page) Max() *CollectionIterator {
+	return p.Iter(ByMaxPage)
+}
+
+// Min returns an iterator that terminates at the page
+// containing the smallest key in the tree rooted at `p`
+func (p *Page) Min() *CollectionIterator {
+	return p.Iter(ByMinPage)
 }

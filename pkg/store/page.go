@@ -42,7 +42,7 @@ func (b *Page) Delete(k string) error {
 	// Case 1: Predcessor has at least t keys
 	if beforeChild := b.children[index]; !beforeChild.Sparse() {
 		var (
-			maxPredPage = beforeChild.MaxPage().forEach(handleSparsePage)
+			maxPredPage = beforeChild.Max().ForEach(handleSparsePage).Get()
 			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
 		)
 
@@ -53,12 +53,12 @@ func (b *Page) Delete(k string) error {
 	// Case 2: Successor has at least t keys
 	if afterChild := b.children[index+1]; !afterChild.Sparse() {
 		var (
-			minSuccPage = afterChild.MinPage().forEach(handleSparsePage)
-			succRec     = minSuccPage.records[0]
+			succ    = afterChild.Min().ForEach(handleSparsePage).Get()
+			succRec = succ.records[0]
 		)
 
 		b.records[index] = succRec
-		return minSuccPage.Delete(succRec.Key())
+		return succ.Delete(succRec.Key())
 	}
 
 	// Case 3: Neither p nor s has >= t keys
@@ -106,8 +106,8 @@ func newPage(t int) *Page {
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
-func (b *Page) keyIndex(k string) (index int, exists bool) {
-	for i, kv := range b.records {
+func (p *Page) keyIndex(k string) (index int, exists bool) {
+	for i, kv := range p.records {
 		if k == kv.Key() {
 			return i, true
 		}
@@ -117,11 +117,11 @@ func (b *Page) keyIndex(k string) (index int, exists bool) {
 		}
 	}
 
-	return len(b.records), false
+	return len(p.records), false
 }
 
-// insertKey key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (b *Page) insertKey(k string, value []byte) int {
+// insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
+func (b *Page) insert(k string, value []byte) int {
 	if b.Full() {
 		panic("Cannot insert key into full node")
 	}
@@ -159,7 +159,7 @@ func (b *Page) splitChild(index int) {
 	newChild.leaf = fullChild.leaf
 
 	medianKey, left, right := partitionMedian(fullChild.records)
-	b.insertKey(medianKey.Key(), medianKey.Value())
+	b.insert(medianKey.Key(), medianKey.Value())
 
 	fullChild.records, newChild.records = left, right
 
@@ -172,7 +172,7 @@ func (b *Page) splitChild(index int) {
 }
 
 func (b *Page) insertRecord(r record.Record) int {
-	return b.insertKey(r.Key(), r.Value())
+	return b.insert(r.Key(), r.Value())
 }
 
 func (b *Page) setRecord(index int, r record.Record) {
@@ -207,7 +207,7 @@ func (p *Page) predecessorNode(k string) *Page {
 		return nil
 	}
 
-	return p.children[index].MaxPage().Get()
+	return p.children[index].Max().Get()
 }
 
 func (p *Page) successorNode(k string) *Page {
@@ -220,7 +220,7 @@ func (p *Page) successorNode(k string) *Page {
 		return nil
 	}
 
-	return p.children[index+1].MinPage().Get()
+	return p.children[index+1].Min().Get()
 }
 
 func (p *Page) prevChildSibling(index int) *Page {

@@ -46,7 +46,7 @@ func TestInsertRecord(t *testing.T) {
 		r.leaf = true
 		r.records = makeNewRecords(test.keys)
 
-		r.insertKey(test.k, nil)
+		r.insert(test.k, nil)
 
 		u.hasKeys(fmt.Sprintf("TestLeafInsert %d", i), test.wantKeys, r)
 	}

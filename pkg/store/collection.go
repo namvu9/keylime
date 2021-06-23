@@ -7,7 +7,7 @@ type Collection struct {
 }
 
 func (c *Collection) Get(key string) []byte {
-	node := c.root.IterByKey(key).Get()
+	node := c.root.Iter(ByKey(key)).Get()
 	index, ok := node.keyIndex(key)
 	if !ok {
 		return nil
@@ -24,16 +24,16 @@ func (c *Collection) Set(k string, value []byte) error {
 		s.splitChild(0)
 	}
 
-	node := c.root.IterByKey(k).forEach(splitFullPage)
-	node.insertKey(k, value)
+	node := c.root.Iter(ByKey(k)).ForEach(splitFullPage).Get()
+	node.insert(k, value)
 
 	return nil
 }
 
 func (c *Collection) Delete(k string) error {
-	node := c.root.IterByKey(k).forEach(handleSparsePage)
+	page := c.root.Iter(ByKey(k)).ForEach(handleSparsePage).Get()
 
-	if err := node.Delete(k); err != nil {
+	if err := page.Delete(k); err != nil {
 		return err
 	}
 
