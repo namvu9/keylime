@@ -4,7 +4,7 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
-type BTree struct {
+type Collection struct {
 	t        int
 	basePath string
 	root     *Page
@@ -12,7 +12,7 @@ type BTree struct {
 	cr       ChangeReporter
 }
 
-func (t *BTree) Get(key string) []byte {
+func (t *Collection) Get(key string) []byte {
 	node := t.IterByKey(key).find()
 	index, ok := node.keyIndex(key)
 	if !ok {
@@ -22,7 +22,7 @@ func (t *BTree) Get(key string) []byte {
 	return node.records[index].Value()
 }
 
-func (bt *BTree) Set(k string, value []byte) error {
+func (bt *Collection) Set(k string, value []byte) error {
 	if bt.root.Full() {
 		s := bt.newNode()
 		s.children = []*Page{bt.root}
@@ -38,7 +38,7 @@ func (bt *BTree) Set(k string, value []byte) error {
 	return nil
 }
 
-func (b *BTree) Delete(k string) error {
+func (b *Collection) Delete(k string) error {
 	if err := b.mergeDescend(k).Delete(k); err != nil {
 		return err
 	}
@@ -50,8 +50,8 @@ func (b *BTree) Delete(k string) error {
 	return nil
 }
 
-func New(t int, opts ...Option) *BTree {
-	tree := &BTree{
+func New(t int, opts ...Option) *Collection {
+	tree := &Collection{
 		t:  t,
 		cr: ChangeReporter{},
 	}
@@ -155,18 +155,18 @@ func handleFullNode(node, child *Page) bool {
 	return true
 }
 
-func (bt *BTree) mergeDescend(k string) *Page {
+func (bt *Collection) mergeDescend(k string) *Page {
 	iter := bt.IterByKey(k)
 	return iter.forEach(handleSparseNode)
 }
 
-func (bt *BTree) splitDescend(k string) *Page {
+func (bt *Collection) splitDescend(k string) *Page {
 	iter := bt.IterByKey(k)
 	node := iter.forEach(handleFullNode)
 	return node
 }
 
-func (b *BTree) newNode() *Page {
+func (b *Collection) newNode() *Page {
 	node := newNode(b.t)
 	node.storage = &b.cr
 	return node

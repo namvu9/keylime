@@ -61,7 +61,7 @@ func TestSearch(t *testing.T) {
 			makeTree(2, makeRecords("1", "4", "8")),
 			makeTree(2, makeRecords("12", "16", "20")),
 		)
-		tree = &BTree{root: root}
+		tree = &Collection{root: root}
 	)
 
 	root.children[0].records[1] = record.New(root.children[0].records[1].Key(), []byte{99, 99, 99})
@@ -279,7 +279,7 @@ func TestMergeDescend(t *testing.T) {
 			makeTree(2, makeRecords("a")),
 			makeTree(2, makeRecords("c")),
 		)
-		tree := &BTree{root: root}
+		tree := &Collection{root: root}
 		node := tree.mergeDescend("c")
 
 		u.with("Root", tree.root, func(nu namedUtil) {
@@ -334,7 +334,7 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete from leaf", func(t *testing.T) {
 		var (
 			root = makeTree(2, makeRecords("1", "2", "3"))
-			tree = &BTree{root: root}
+			tree = &Collection{root: root}
 		)
 
 		tree.Delete("2")

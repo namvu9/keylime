@@ -29,14 +29,14 @@ func (ci *CollectionIterator) find() *Page {
 	return ci.forEach(func(b1, b2 *Page) bool { return false })
 }
 
-func (c *BTree) IterBy(next IterFunc) *CollectionIterator {
+func (c *Collection) IterBy(next IterFunc) *CollectionIterator {
 	return &CollectionIterator{
 		next: next,
 		node: c.root,
 	}
 }
 
-func (c *BTree) IterByKey(k string) *CollectionIterator {
+func (c *Collection) IterByKey(k string) *CollectionIterator {
 	return c.IterBy(func(p *Page) *Page {
 		index, exists := p.keyIndex(k)
 		if exists {
