@@ -438,3 +438,197 @@ func TestChildPredecessorSuccessor(t *testing.T) {
 		t.Errorf("We riot")
 	}
 }
+
+// TODO: Test splitDescend
+func TestSplitDescend(t *testing.T) {
+
+}
+
+func TestMergeDescend(t *testing.T) {
+
+	t.Run("Left sibling has t keys", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("c"),
+			makeTree(2, makeRecords("a", "b")),
+			makeTree(2, makeRecords("d")),
+		)
+
+		root.mergeDescend("d")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasKeys("b")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasKeys("c", "d")
+		})
+	})
+
+	t.Run("Left internal node sibling has t keys", func(t *testing.T) {
+		u := util{t}
+		movedChild := makeTree(2, makeRecords())
+		root := makeTree(2, makeRecords("c"),
+			makeTree(2, makeRecords("a", "b"),
+				makeTree(2, makeRecords()),
+				makeTree(2, makeRecords()),
+				movedChild,
+			),
+			makeTree(2, makeRecords("d"),
+				makeTree(2, makeRecords()),
+				makeTree(2, makeRecords()),
+			),
+		)
+
+		root.mergeDescend("d")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasKeys("b")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(3)
+			nu.hasKeys("c", "d")
+			if nu.node.children[0] != movedChild {
+				t.Errorf("Right child expected movedChild as its first child")
+			}
+		})
+	})
+
+	t.Run("Right sibling has t keys", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("c"),
+			makeTree(2, makeRecords("a")),
+			makeTree(2, makeRecords("d", "e")),
+		)
+
+		root.mergeDescend("a")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasKeys("d")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasKeys("a", "c")
+		})
+	})
+
+	t.Run("Right internal node sibling has t keys", func(t *testing.T) {
+		u := util{t}
+		movedChild := makeTree(2, makeRecords())
+		root := makeTree(2, makeRecords("c"),
+			makeTree(2, makeRecords("a"),
+				makeTree(2, makeRecords()),
+				makeTree(2, makeRecords()),
+			),
+			makeTree(2, makeRecords("d", "e"),
+				movedChild,
+				makeTree(2, makeRecords()),
+				makeTree(2, makeRecords()),
+			),
+		)
+
+		root.mergeDescend("a")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasKeys("d")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasKeys("a", "c")
+			nu.hasNChildren(3)
+			if nu.node.children[2] != movedChild {
+				t.Errorf("LeftChild, expected movedChild as last child")
+			}
+		})
+	})
+
+	t.Run("Both siblings are sparse", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("b", "d"),
+			makeTree(2, makeRecords("a")),
+			makeTree(2, makeRecords("c")),
+			makeTree(2, makeRecords("e")),
+		)
+
+		node := root.mergeDescend("c")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasNChildren(2)
+		})
+
+		u.with("Merged node", root.children[0], func(nu namedUtil) {
+			nu.hasKeys("a", "b", "c")
+			nu.is(node)
+		})
+	})
+
+	t.Run("Both siblings are sparse; no right sibling", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("b", "d"),
+			makeTree(2, makeRecords("a")),
+			makeTree(2, makeRecords("c")),
+			makeTree(2, makeRecords("e")),
+		)
+
+		node := root.mergeDescend("e")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasNChildren(2)
+		})
+
+		u.with("Merged node", root.children[1], func(nu namedUtil) {
+			nu.hasKeys("c", "d", "e")
+			nu.is(node)
+		})
+	})
+
+	t.Run("Both siblings are sparse; no left sibling", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("b", "d"),
+			makeTree(2, makeRecords("a")),
+			makeTree(2, makeRecords("c")),
+			makeTree(2, makeRecords("e")),
+		)
+
+		node := root.mergeDescend("a")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(1)
+			nu.hasNChildren(2)
+		})
+
+		u.with("Merged node", root.children[0], func(nu namedUtil) {
+			nu.hasKeys("a", "b", "c")
+			nu.is(node)
+		})
+	})
+
+	t.Run("Target key is moved from child to parent", func(t *testing.T) {
+		u := util{t}
+		root := makeTree(2, makeRecords("b"),
+			makeTree(2, makeRecords("a")),
+			makeTree(2, makeRecords("c")),
+		)
+		node := root.mergeDescend("c")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(0)
+			nu.hasNChildren(1)
+		})
+		u.with("Merged node", node, func(nu namedUtil) {
+			nu.is(root.children[0])
+			nu.hasKeys("a", "b", "c")
+		})
+	})
+}
+

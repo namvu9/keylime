@@ -11,7 +11,7 @@ import (
 
 func main() {
 	var (
-		tree   = store.New(2, store.WithBasePath("./testdata"))
+		tree   = store.New(2)
 		reader = bufio.NewReader(os.Stdin)
 	)
 

@@ -1,18 +1,13 @@
 package store
 
-import (
-	"github.com/namvu9/keylime/pkg/record"
-)
-
 type Collection struct {
 	t        int
 	basePath string
 	root     *Page
-	storage  NodeReadWriter
 }
 
-func (t *Collection) Get(key string) []byte {
-	node := t.root.IterByKey(key).get()
+func (c *Collection) Get(key string) []byte {
+	node := c.root.IterByKey(key).get()
 	index, ok := node.keyIndex(key)
 	if !ok {
 		return nil
@@ -21,27 +16,27 @@ func (t *Collection) Get(key string) []byte {
 	return node.records[index].Value()
 }
 
-func (bt *Collection) Set(k string, value []byte) error {
-	if bt.root.Full() {
-		s := bt.newNode()
-		s.children = []*Page{bt.root}
-		bt.root = s
+func (c *Collection) Set(k string, value []byte) error {
+	if c.root.Full() {
+		s := c.newPage()
+		s.children = []*Page{c.root}
+		c.root = s
 		s.splitChild(0)
 	}
 
-	node := bt.splitDescend(k)
+	node := c.root.splitDescend(k)
 	node.insertKey(k, value)
 
 	return nil
 }
 
-func (b *Collection) Delete(k string) error {
-	if err := b.mergeDescend(k).Delete(k); err != nil {
+func (c *Collection) Delete(k string) error {
+	if err := c.root.mergeDescend(k).Delete(k); err != nil {
 		return err
 	}
 
-	if b.root.Empty() && !b.root.Leaf() {
-		b.root = b.root.children[0]
+	if c.root.Empty() && !c.root.Leaf() {
+		c.root = c.root.children[0]
 	}
 
 	return nil
@@ -49,7 +44,7 @@ func (b *Collection) Delete(k string) error {
 
 func New(t int, opts ...Option) *Collection {
 	tree := &Collection{
-		t:  t,
+		t: t,
 	}
 
 	for _, fn := range opts {
@@ -57,107 +52,14 @@ func New(t int, opts ...Option) *Collection {
 	}
 
 	if tree.root == nil {
-		tree.root = tree.newNode()
+		tree.root = tree.newPage()
 		tree.root.leaf = true
 	}
 
 	return tree
 }
 
-func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
-	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
-		panic("Cannot partition an even number of records")
-	}
-	medianIndex := (len(nums) - 1) / 2
-	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
-}
-
-// TODO: TEST
-func handleSparseNode(node, child *Page) bool {
-	if !child.Sparse() {
-		return false
-	}
-
-	index, ok := node.childIndex(child)
-	if !ok {
-		panic("Tried to find childIndex of invalid child")
-	}
-
-	var (
-		p = node.childPredecessor(index)
-		s = node.childSuccessor(index)
-	)
-
-	// Rotate predecessor key
-	if p != nil && !p.Sparse() {
-		var (
-			recordIndex   = index - 1
-			pivot         = node.records[recordIndex]
-			siblingRecord = p.records[len(p.records)-1]
-		)
-
-		child.insertRecord(pivot)
-		node.setRecord(recordIndex, siblingRecord)
-
-		if !p.leaf {
-			// Move child from sibling to child
-			siblingLastChild := p.children[len(p.children)-1]
-			child.children = append([]*Page{siblingLastChild}, child.children...)
-			p.children = p.children[:len(p.children)-1]
-		}
-	} else if s != nil && !s.Sparse() {
-		var (
-			pivot         = node.records[index]
-			siblingRecord = s.records[0]
-		)
-
-		// Move key from parent to child
-		child.records = append(child.records, pivot)
-		node.setRecord(index, siblingRecord)
-
-		// Move child from sibling to child
-		if !s.leaf {
-			siblingFirstChild := s.children[0]
-			child.children = append(child.children, siblingFirstChild)
-			s.children = s.children[1:]
-		}
-	} else if p != nil {
-		node.mergeChildren(index - 1)
-	} else {
-		node.mergeChildren(index)
-	}
-	// Write nodes
-
-	return true
-}
-
-func handleFullNode(node, child *Page) bool {
-	if !child.Full() {
-		return false
-	}
-
-	index, ok := node.childIndex(child)
-	if !ok {
-		panic("Tried to find childIndex of invalid child")
-	}
-
-	node.splitChild(index)
-
-	return true
-}
-
-func (bt *Collection) mergeDescend(k string) *Page {
-	iter := bt.root.IterByKey(k)
-	return iter.forEach(handleSparseNode)
-}
-
-func (bt *Collection) splitDescend(k string) *Page {
-	iter := bt.root.IterByKey(k)
-	node := iter.forEach(handleFullNode)
-	return node
-}
-
-func (b *Collection) newNode() *Page {
+func (b *Collection) newPage() *Page {
 	node := newNode(b.t)
 	return node
 }

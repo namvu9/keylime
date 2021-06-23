@@ -313,3 +313,96 @@ func (b *Page) read() error {
 
 	//return nil
 }
+func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
+	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
+		panic("Cannot partition an even number of records")
+	}
+	medianIndex := (len(nums) - 1) / 2
+	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
+}
+
+
+func (p *Page) mergeDescend(k string) *Page {
+	iter := p.IterByKey(k)
+	return iter.forEach(handleSparseNode)
+}
+
+func (p *Page) splitDescend(k string) *Page {
+	iter := p.IterByKey(k)
+	node := iter.forEach(handleFullNode)
+	return node
+}
+
+// TODO: TEST
+func handleSparseNode(node, child *Page) bool {
+	if !child.Sparse() {
+		return false
+	}
+
+	index, ok := node.childIndex(child)
+	if !ok {
+		panic("Tried to find childIndex of invalid child")
+	}
+
+	var (
+		p = node.childPredecessor(index)
+		s = node.childSuccessor(index)
+	)
+
+	// Rotate predecessor key
+	if p != nil && !p.Sparse() {
+		var (
+			recordIndex   = index - 1
+			pivot         = node.records[recordIndex]
+			siblingRecord = p.records[len(p.records)-1]
+		)
+
+		child.insertRecord(pivot)
+		node.setRecord(recordIndex, siblingRecord)
+
+		if !p.leaf {
+			// Move child from sibling to child
+			siblingLastChild := p.children[len(p.children)-1]
+			child.children = append([]*Page{siblingLastChild}, child.children...)
+			p.children = p.children[:len(p.children)-1]
+		}
+	} else if s != nil && !s.Sparse() {
+		var (
+			pivot         = node.records[index]
+			siblingRecord = s.records[0]
+		)
+
+		// Move key from parent to child
+		child.records = append(child.records, pivot)
+		node.setRecord(index, siblingRecord)
+
+		// Move child from sibling to child
+		if !s.leaf {
+			siblingFirstChild := s.children[0]
+			child.children = append(child.children, siblingFirstChild)
+			s.children = s.children[1:]
+		}
+	} else if p != nil {
+		node.mergeChildren(index - 1)
+	} else {
+		node.mergeChildren(index)
+	}
+	// Write nodes
+
+	return true
+}
+
+func handleFullNode(node, child *Page) bool {
+	if !child.Full() {
+		return false
+	}
+
+	index, ok := node.childIndex(child)
+	if !ok {
+		panic("Tried to find childIndex of invalid child")
+	}
+
+	node.splitChild(index)
+
+	return true
+}
