@@ -34,9 +34,6 @@ func (b *Page) GobDecode(buf []byte) error {
 	if err := decoder.Decode(&b.children); err != nil {
 		return err
 	}
-	for _, child := range b.children {
-		child.storage = b.storage
-	}
 
 	if err := decoder.Decode(&b.ID); err != nil {
 		return err

@@ -17,8 +17,6 @@ type Page struct {
 	records  []record.Record
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
-
-	storage *ChangeReporter
 }
 
 func (p *Page) childIndex(c *Page) (int, bool) {
@@ -115,7 +113,6 @@ func (b *Page) String() string {
 
 func (b *Page) newNode() *Page {
 	node := newNode(b.t)
-	node.storage = b.storage
 	return node
 }
 
@@ -151,8 +148,6 @@ func (b *Page) insertKey(k string, value []byte) int {
 	if b.Full() {
 		panic("Cannot insert key into full node")
 	}
-
-	b.registerWrite("INSERT KEY")
 
 	kv := record.New(k, value)
 	out := []record.Record{}
@@ -197,11 +192,6 @@ func (b *Page) splitChild(index int) {
 	}
 
 	b.insertChildren(index+1, newChild)
-
-	b.registerWrite("Split child")
-	newChild.registerWrite("Split child")
-	fullChild.registerWrite("Split child")
-
 }
 
 func (b *Page) insertRecord(r record.Record) int {
@@ -281,9 +271,6 @@ func (b *Page) mergeWith(median record.Record, other *Page) {
 	b.records = append(b.records, median)
 	b.records = append(b.records, other.records...)
 	b.children = append(b.children, other.children...)
-
-	b.registerWrite("Merge")
-	other.registerDelete("Merge")
 }
 
 // mergeChildren merges the child at index `i` of `b` with
@@ -304,24 +291,6 @@ func (b *Page) mergeChildren(i int) {
 	b.records = append(b.records[:i], b.records[i+1:]...)
 	// Remove rightChild
 	b.children = append(b.children[:i+1], b.children[i+2:]...)
-
-	b.registerWrite("Merged children")
-}
-
-func (b *Page) registerWrite(reason string) error {
-	if b.storage == nil {
-		return fmt.Errorf("Cannot register write. No storage instance")
-	}
-	b.storage.Write(b, reason)
-	return nil
-}
-
-func (b *Page) registerDelete(reason string) error {
-	if b.storage == nil {
-		return fmt.Errorf("Cannot register write. No storage instance")
-	}
-	b.storage.Delete(b, reason)
-	return nil
 }
 
 func (b *Page) read() error {

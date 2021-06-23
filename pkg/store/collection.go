@@ -9,7 +9,6 @@ type Collection struct {
 	basePath string
 	root     *Page
 	storage  NodeReadWriter
-	cr       ChangeReporter
 }
 
 func (t *Collection) Get(key string) []byte {
@@ -28,8 +27,6 @@ func (bt *Collection) Set(k string, value []byte) error {
 		s.children = []*Page{bt.root}
 		bt.root = s
 		s.splitChild(0)
-
-		s.registerWrite("Split root")
 	}
 
 	node := bt.splitDescend(k)
@@ -53,7 +50,6 @@ func (b *Collection) Delete(k string) error {
 func New(t int, opts ...Option) *Collection {
 	tree := &Collection{
 		t:  t,
-		cr: ChangeReporter{},
 	}
 
 	for _, fn := range opts {
@@ -92,12 +88,8 @@ func handleSparseNode(node, child *Page) bool {
 		s = node.childSuccessor(index)
 	)
 
-	child.registerWrite("Sparse node")
-	node.registerWrite("Sparse node (parent)")
-
 	// Rotate predecessor key
 	if p != nil && !p.Sparse() {
-		p.registerWrite("Sparse node (predecessor)")
 		var (
 			recordIndex   = index - 1
 			pivot         = node.records[recordIndex]
@@ -114,7 +106,6 @@ func handleSparseNode(node, child *Page) bool {
 			p.children = p.children[:len(p.children)-1]
 		}
 	} else if s != nil && !s.Sparse() {
-		s.registerWrite("Sparse node (successor)")
 		var (
 			pivot         = node.records[index]
 			siblingRecord = s.records[0]
@@ -168,6 +159,5 @@ func (bt *Collection) splitDescend(k string) *Page {
 
 func (b *Collection) newNode() *Page {
 	node := newNode(b.t)
-	node.storage = &b.cr
 	return node
 }

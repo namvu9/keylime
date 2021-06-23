@@ -109,11 +109,9 @@ func makeTree(t int, records []record.Record, children ...*Page) *Page {
 	root := newNode(t)
 	root.records = records
 	root.children = children
-	root.storage = &ChangeReporter{}
 
 	for _, child := range children {
 		child.t = t
-		child.storage = root.storage
 	}
 
 	if len(children) == 0 {

@@ -45,17 +45,8 @@ func TestInsertKey(t *testing.T) {
 		r := newNode(3)
 		r.leaf = true
 		r.records = makeNewRecords(test.keys)
-		r.storage = &ChangeReporter{}
 
 		r.insertKey(test.k, nil)
-
-		if len(r.storage.writes) != 1 {
-			t.Errorf("Expected 1 write")
-		}
-
-		if r.storage.writes[0] != r {
-			t.Errorf("Expected 1 write")
-		}
 
 		u.hasKeys(fmt.Sprintf("TestLeafInsert %d", i), test.wantKeys, r)
 	}
@@ -72,10 +63,6 @@ func TestSplitChild(t *testing.T) {
 		)
 
 		root.splitChild(1)
-
-		if got := len(root.storage.writes); got != 3 {
-			t.Errorf("Incorrect number of writes. Want=%d, Got=%d", 3, got)
-		}
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("10", "14")
