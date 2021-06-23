@@ -106,7 +106,7 @@ func newNodeWithKeys(t int, keys []string) *Page {
 }
 
 func makeTree(t int, records []record.Record, children ...*Page) *Page {
-	root := newNode(t)
+	root := newPage(t)
 	root.records = records
 	root.children = children
 

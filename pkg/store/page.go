@@ -112,11 +112,11 @@ func (b *Page) String() string {
 }
 
 func (b *Page) newNode() *Page {
-	node := newNode(b.t)
+	node := newPage(b.t)
 	return node
 }
 
-func newNode(t int) *Page {
+func newPage(t int) *Page {
 	return &Page{
 		ID:       uuid.New().String(),
 		children: []*Page{},
@@ -319,18 +319,6 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 	}
 	medianIndex := (len(nums) - 1) / 2
 	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
-}
-
-
-func (p *Page) mergeDescend(k string) *Page {
-	iter := p.IterByKey(k)
-	return iter.forEach(handleSparseNode)
-}
-
-func (p *Page) splitDescend(k string) *Page {
-	iter := p.IterByKey(k)
-	node := iter.forEach(handleFullNode)
-	return node
 }
 
 // TODO: TEST

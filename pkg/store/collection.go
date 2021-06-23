@@ -24,14 +24,16 @@ func (c *Collection) Set(k string, value []byte) error {
 		s.splitChild(0)
 	}
 
-	node := c.root.splitDescend(k)
+	node := c.root.IterByKey(k).forEach(handleFullNode)
 	node.insertKey(k, value)
 
 	return nil
 }
 
 func (c *Collection) Delete(k string) error {
-	if err := c.root.mergeDescend(k).Delete(k); err != nil {
+	node := c.root.IterByKey(k).forEach(handleSparseNode)
+
+	if err := node.Delete(k); err != nil {
 		return err
 	}
 
@@ -60,6 +62,6 @@ func New(t int, opts ...Option) *Collection {
 }
 
 func (b *Collection) newPage() *Page {
-	node := newNode(b.t)
+	node := newPage(b.t)
 	return node
 }
