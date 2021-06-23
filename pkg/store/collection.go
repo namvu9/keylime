@@ -13,7 +13,7 @@ type Collection struct {
 }
 
 func (t *Collection) Get(key string) []byte {
-	node := t.IterByKey(key).find()
+	node := t.root.IterByKey(key).get()
 	index, ok := node.keyIndex(key)
 	if !ok {
 		return nil
@@ -156,12 +156,12 @@ func handleFullNode(node, child *Page) bool {
 }
 
 func (bt *Collection) mergeDescend(k string) *Page {
-	iter := bt.IterByKey(k)
+	iter := bt.root.IterByKey(k)
 	return iter.forEach(handleSparseNode)
 }
 
 func (bt *Collection) splitDescend(k string) *Page {
-	iter := bt.IterByKey(k)
+	iter := bt.root.IterByKey(k)
 	node := iter.forEach(handleFullNode)
 	return node
 }

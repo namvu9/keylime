@@ -25,18 +25,18 @@ func (ci *CollectionIterator) forEach(fn func(*Page, *Page) bool) *Page {
 	}
 }
 
-func (ci *CollectionIterator) find() *Page {
+func (ci *CollectionIterator) get() *Page {
 	return ci.forEach(func(b1, b2 *Page) bool { return false })
 }
 
-func (c *Collection) IterBy(next IterFunc) *CollectionIterator {
+func (c *Page) IterBy(next IterFunc) *CollectionIterator {
 	return &CollectionIterator{
 		next: next,
-		node: c.root,
+		node: c,
 	}
 }
 
-func (c *Collection) IterByKey(k string) *CollectionIterator {
+func (c *Page) IterByKey(k string) *CollectionIterator {
 	return c.IterBy(func(p *Page) *Page {
 		index, exists := p.keyIndex(k)
 		if exists {
@@ -45,4 +45,16 @@ func (c *Collection) IterByKey(k string) *CollectionIterator {
 
 		return p.children[index]
 	})
+}
+
+func (c *Page) MaxPage() *Page {
+	return c.IterBy(func(p *Page) *Page {
+		return p.children[len(p.children)-1]
+	}).get()
+}
+
+func (c *Page) MinPage() *Page {
+	return c.IterBy(func(p *Page) *Page {
+		return p.children[0]
+	}).get()
 }

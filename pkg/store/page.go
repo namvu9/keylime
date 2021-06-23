@@ -231,21 +231,29 @@ func (b *Page) insertChildren(index int, children ...*Page) {
 }
 
 func (b *Page) predecessorKeyNode(k string) *Page {
+	if b.leaf {
+		return nil
+	}
+
 	index, exists := b.keyIndex(k)
 	if !exists {
 		return nil
 	}
 
-	return b.children[index]
+	return b.children[index].MaxPage()
 }
 
 func (b *Page) successorKeyNode(k string) *Page {
+	if b.leaf {
+		return nil
+	}
+
 	index, exists := b.keyIndex(k)
 	if !exists {
 		return nil
 	}
 
-	return b.children[index+1]
+	return b.children[index+1].MinPage()
 }
 
 func (b *Page) childPredecessor(index int) *Page {
