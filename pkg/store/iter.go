@@ -46,15 +46,14 @@ func (c *Page) IterByKey(k string) *CollectionIterator {
 	})
 }
 
-func (c *Page) MaxPage() *Page {
+func (c *Page) MaxPage() *CollectionIterator {
 	return c.IterBy(func(p *Page) *Page {
 		return p.children[len(p.children)-1]
-	}).Get()
+	})
 }
 
-func (c *Page) MinPage() *Page {
+func (c *Page) MinPage() *CollectionIterator {
 	return c.IterBy(func(p *Page) *Page {
 		return p.children[0]
-	}).Get()
+	})
 }
-

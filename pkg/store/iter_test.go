@@ -21,7 +21,7 @@ func TestMaxPage(t *testing.T) {
 		{"from leaf", max},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			n := test.p.MaxPage()
+			n := test.p.MaxPage().Get()
 
 			if n != max {
 				t.Errorf("Got=%v, Want=%v", n.ID, max.ID)
@@ -49,7 +49,7 @@ func TestMinPage(t *testing.T) {
 		{"from leaf", min},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			n := test.p.MinPage()
+			n := test.p.MinPage().Get()
 
 			if n != min {
 				t.Errorf("Got=%v, Want=%v", n.ID, min.ID)

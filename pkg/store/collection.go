@@ -31,7 +31,7 @@ func (c *Collection) Set(k string, value []byte) error {
 }
 
 func (c *Collection) Delete(k string) error {
-	node := c.root.IterByKey(k).forEach(handleSparseNode)
+	node := c.root.IterByKey(k).forEach(handleSparsePage)
 
 	if err := node.Delete(k); err != nil {
 		return err

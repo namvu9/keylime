@@ -41,18 +41,24 @@ func (b *Page) Delete(k string) error {
 
 	// Case 1: Predcessor has at least t keys
 	if beforeChild := b.children[index]; !beforeChild.Sparse() {
-		mp := beforeChild.MaxPage()
-		predRecord:= mp.records[len(mp.records)-1]
-		b.records[index] = predRecord
-		return beforeChild.Delete(predRecord.Key())
+		var (
+			maxPredPage = beforeChild.MaxPage().forEach(handleSparsePage)
+			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
+		)
+
+		b.records[index] = predRec
+		return maxPredPage.Delete(predRec.Key())
 	}
 
 	// Case 2: Successor has at least t keys
 	if afterChild := b.children[index+1]; !afterChild.Sparse() {
-		mp := afterChild.MinPage()
-		succRecord := mp.records[0]
-		b.records[index] = succRecord
-		return afterChild.Delete(succRecord.Key())
+		var (
+			minSuccPage = afterChild.MinPage().forEach(handleSparsePage)
+			succRec     = minSuccPage.records[0]
+		)
+
+		b.records[index] = succRec
+		return minSuccPage.Delete(succRec.Key())
 	}
 
 	// Case 3: Neither p nor s has >= t keys
@@ -63,29 +69,28 @@ func (b *Page) Delete(k string) error {
 
 // Full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
-func (b *Page) Full() bool {
-	return len(b.records) == 2*b.t-1
+func (p *Page) Full() bool {
+	return len(p.records) == 2*p.t-1
 }
 
 // Sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
-func (b *Page) Sparse() bool {
-	return len(b.records) <= b.t-1
+func (p *Page) Sparse() bool {
+	return len(p.records) <= p.t-1
 }
 
 // Empty reports whether the node is empty (i.e., has no
 // records).
-func (b *Page) Empty() bool {
-	return len(b.records) == 0
+func (p *Page) Empty() bool {
+	return len(p.records) == 0
 }
 
-func (b *Page) Leaf() bool {
-	return b.leaf
+func (p *Page) Leaf() bool {
+	return p.leaf
 }
 
-func (b *Page) newPage() *Page {
-	node := newPage(b.t)
-	return node
+func (p *Page) newPage() *Page {
+	return newPage(p.t)
 }
 
 func newPage(t int) *Page {
@@ -202,7 +207,7 @@ func (p *Page) predecessorNode(k string) *Page {
 		return nil
 	}
 
-	return p.children[index].MaxPage()
+	return p.children[index].MaxPage().Get()
 }
 
 func (p *Page) successorNode(k string) *Page {
@@ -215,7 +220,7 @@ func (p *Page) successorNode(k string) *Page {
 		return nil
 	}
 
-	return p.children[index+1].MinPage()
+	return p.children[index+1].MinPage().Get()
 }
 
 func (p *Page) prevChildSibling(index int) *Page {
@@ -278,7 +283,7 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 }
 
 // TODO: TEST
-func handleSparseNode(node, child *Page) bool {
+func handleSparsePage(node, child *Page) bool {
 	if !child.Sparse() {
 		return false
 	}
