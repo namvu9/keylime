@@ -9,11 +9,11 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
-type BNode struct {
+type Page struct {
 	ID string
 
 	loaded   bool
-	children []*BNode
+	children []*Page
 	records  []record.Record
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -21,7 +21,17 @@ type BNode struct {
 	storage *ChangeReporter
 }
 
-func (b *BNode) Get(k string) ([]byte, error) {
+func (p *Page) childIndex(c *Page) (int, bool) {
+	for i, child := range p.children {
+		if child == c {
+			return i, true
+		}
+	}
+
+	return 0, false
+}
+
+func (b *Page) Get(k string) ([]byte, error) {
 	index, ok := b.keyIndex(k)
 	if !ok {
 		return nil, errors.New("KeyNotFound")
@@ -30,7 +40,7 @@ func (b *BNode) Get(k string) ([]byte, error) {
 	return b.records[index].Value(), nil
 }
 
-func (b *BNode) Delete(k string) error {
+func (b *Page) Delete(k string) error {
 	index, exists := b.keyIndex(k)
 	if !exists {
 		return fmt.Errorf("KeyNotFoundError")
@@ -63,27 +73,27 @@ func (b *BNode) Delete(k string) error {
 
 // Full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
-func (b *BNode) Full() bool {
+func (b *Page) Full() bool {
 	return len(b.records) == 2*b.t-1
 }
 
 // Sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
-func (b *BNode) Sparse() bool {
+func (b *Page) Sparse() bool {
 	return len(b.records) <= b.t-1
 }
 
 // Empty reports whether the node is empty (i.e., has no
 // records).
-func (b *BNode) Empty() bool {
+func (b *Page) Empty() bool {
 	return len(b.records) == 0
 }
 
-func (b *BNode) Leaf() bool {
+func (b *Page) Leaf() bool {
 	return b.leaf
 }
 
-func (b *BNode) String() string {
+func (b *Page) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "-----\nBNode\n-----\n")
 	if b.ID != "" {
@@ -103,16 +113,16 @@ func (b *BNode) String() string {
 	return sb.String()
 }
 
-func (b *BNode) newNode() *BNode {
+func (b *Page) newNode() *Page {
 	node := newNode(b.t)
 	node.storage = b.storage
 	return node
 }
 
-func newNode(t int) *BNode {
-	return &BNode{
+func newNode(t int) *Page {
+	return &Page{
 		ID:       uuid.New().String(),
-		children: []*BNode{},
+		children: []*Page{},
 		records:  make([]record.Record, 0, 2*t-1),
 		leaf:     false,
 		t:        t,
@@ -122,7 +132,7 @@ func newNode(t int) *BNode {
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
-func (b *BNode) keyIndex(k string) (index int, exists bool) {
+func (b *Page) keyIndex(k string) (index int, exists bool) {
 	for i, kv := range b.records {
 		if k == kv.Key() {
 			return i, true
@@ -137,7 +147,7 @@ func (b *BNode) keyIndex(k string) (index int, exists bool) {
 }
 
 // insertKey key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (b *BNode) insertKey(k string, value []byte) int {
+func (b *Page) insertKey(k string, value []byte) int {
 	if b.Full() {
 		panic("Cannot insert key into full node")
 	}
@@ -167,7 +177,7 @@ func (b *BNode) insertKey(k string, value []byte) int {
 }
 
 // Panics if child is not full
-func (b *BNode) splitChild(index int) {
+func (b *Page) splitChild(index int) {
 	fullChild := b.children[index]
 	if !fullChild.Full() {
 		panic("Cannot split non-full child")
@@ -194,15 +204,15 @@ func (b *BNode) splitChild(index int) {
 
 }
 
-func (b *BNode) insertRecord(r record.Record) int {
+func (b *Page) insertRecord(r record.Record) int {
 	return b.insertKey(r.Key(), r.Value())
 }
 
-func (b *BNode) setRecord(index int, r record.Record) {
+func (b *Page) setRecord(index int, r record.Record) {
 	b.records[index] = r
 }
 
-func (b *BNode) insertChildren(index int, children ...*BNode) {
+func (b *Page) insertChildren(index int, children ...*Page) {
 	if len(b.children) == 2*b.t {
 		panic("Cannot insert a child into a full node")
 	}
@@ -212,7 +222,7 @@ func (b *BNode) insertChildren(index int, children ...*BNode) {
 	nExistingChildren := len(b.children)
 	nChildren := len(children)
 
-	tmp := make([]*BNode, nExistingChildren+nChildren)
+	tmp := make([]*Page, nExistingChildren+nChildren)
 	copy(tmp[:index], b.children[:index])
 	copy(tmp[index:index+nChildren], children)
 	copy(tmp[nChildren+index:], b.children[index:])
@@ -220,7 +230,7 @@ func (b *BNode) insertChildren(index int, children ...*BNode) {
 	b.children = tmp
 }
 
-func (b *BNode) predecessorKeyNode(k string) *BNode {
+func (b *Page) predecessorKeyNode(k string) *Page {
 	index, exists := b.keyIndex(k)
 	if !exists {
 		return nil
@@ -229,7 +239,7 @@ func (b *BNode) predecessorKeyNode(k string) *BNode {
 	return b.children[index]
 }
 
-func (b *BNode) successorKeyNode(k string) *BNode {
+func (b *Page) successorKeyNode(k string) *Page {
 	index, exists := b.keyIndex(k)
 	if !exists {
 		return nil
@@ -238,14 +248,14 @@ func (b *BNode) successorKeyNode(k string) *BNode {
 	return b.children[index+1]
 }
 
-func (b *BNode) childPredecessor(index int) *BNode {
+func (b *Page) childPredecessor(index int) *Page {
 	if index <= 0 {
 		return nil
 	}
 	return b.children[index-1]
 }
 
-func (b *BNode) childSuccessor(index int) *BNode {
+func (b *Page) childSuccessor(index int) *Page {
 	if index >= len(b.children)-1 {
 		return nil
 	}
@@ -253,13 +263,13 @@ func (b *BNode) childSuccessor(index int) *BNode {
 }
 
 // TODO: TEST
-func (b *BNode) hasKey(k string) bool {
+func (b *Page) hasKey(k string) bool {
 	_, exists := b.keyIndex(k)
 	return exists
 }
 
 // TODO: TEST
-func (b *BNode) mergeWith(median record.Record, other *BNode) {
+func (b *Page) mergeWith(median record.Record, other *Page) {
 	b.records = append(b.records, median)
 	b.records = append(b.records, other.records...)
 	b.children = append(b.children, other.children...)
@@ -273,7 +283,7 @@ func (b *BNode) mergeWith(median record.Record, other *BNode) {
 // index `i` as the median key and removing the key from `b` in
 // the process. The original sibling node (i+1) is scheduled
 // for deletion.
-func (b *BNode) mergeChildren(i int) {
+func (b *Page) mergeChildren(i int) {
 	var (
 		pivotRecord = b.records[i]
 		leftChild   = b.children[i]
@@ -290,7 +300,7 @@ func (b *BNode) mergeChildren(i int) {
 	b.registerWrite("Merged children")
 }
 
-func (b *BNode) registerWrite(reason string) error {
+func (b *Page) registerWrite(reason string) error {
 	if b.storage == nil {
 		return fmt.Errorf("Cannot register write. No storage instance")
 	}
@@ -298,7 +308,7 @@ func (b *BNode) registerWrite(reason string) error {
 	return nil
 }
 
-func (b *BNode) registerDelete(reason string) error {
+func (b *Page) registerDelete(reason string) error {
 	if b.storage == nil {
 		return fmt.Errorf("Cannot register write. No storage instance")
 	}
@@ -306,7 +316,7 @@ func (b *BNode) registerDelete(reason string) error {
 	return nil
 }
 
-func (b *BNode) read() error {
+func (b *Page) read() error {
 	return nil
 	//if b.loaded {
 	//return nil

@@ -18,7 +18,7 @@ func WithBasePath(path string) Option {
 	}
 }
 
-func WithRoot(root *BNode) Option {
+func WithRoot(root *Page) Option {
 	return func(b *BTree) {
 		b.root = root
 	}

@@ -5,10 +5,10 @@ import (
 	"encoding/gob"
 )
 
-func (b *BNode) GobEncode() ([]byte, error) {
-	refs := []*BNode{}
+func (b *Page) GobEncode() ([]byte, error) {
+	refs := []*Page{}
 	for _, c := range b.children {
-		cNode := new(BNode)
+		cNode := new(Page)
 		cNode.ID = c.ID
 		refs = append(refs, cNode)
 	}
@@ -27,7 +27,7 @@ func (b *BNode) GobEncode() ([]byte, error) {
 	return w.Bytes(), nil
 }
 
-func (b *BNode) GobDecode(buf []byte) error {
+func (b *Page) GobDecode(buf []byte) error {
 	r := bytes.NewBuffer(buf)
 	decoder := gob.NewDecoder(r)
 

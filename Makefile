@@ -1,6 +1,7 @@
 all: one two three
 
 cli:
+	KEYLIME_HOME=/home/nam/go/src/github.com/namvu9/keylime/testdata \
 	go run ./cmd/cli/main.go
 lint:
 	go vet ./...

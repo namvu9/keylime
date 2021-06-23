@@ -7,23 +7,25 @@ import (
 type BTree struct {
 	t        int
 	basePath string
-	root     *BNode
+	root     *Page
 	storage  NodeReadWriter
 	cr       ChangeReporter
 }
 
 func (t *BTree) Get(key string) []byte {
-	if node, ok, index := t.iter(key).find(); ok {
-		return node.records[index].Value()
-	} else {
+	node := t.IterByKey(key).find()
+	index, ok := node.keyIndex(key)
+	if !ok {
 		return nil
 	}
+
+	return node.records[index].Value()
 }
 
 func (bt *BTree) Set(k string, value []byte) error {
 	if bt.root.Full() {
 		s := bt.newNode()
-		s.children = []*BNode{bt.root}
+		s.children = []*Page{bt.root}
 		bt.root = s
 		s.splitChild(0)
 
@@ -75,9 +77,14 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 }
 
 // TODO: TEST
-func handleSparseNode(node, child *BNode, index int) bool {
+func handleSparseNode(node, child *Page) bool {
 	if !child.Sparse() {
 		return false
+	}
+
+	index, ok := node.childIndex(child)
+	if !ok {
+		panic("Tried to find childIndex of invalid child")
 	}
 
 	var (
@@ -103,7 +110,7 @@ func handleSparseNode(node, child *BNode, index int) bool {
 		if !p.leaf {
 			// Move child from sibling to child
 			siblingLastChild := p.children[len(p.children)-1]
-			child.children = append([]*BNode{siblingLastChild}, child.children...)
+			child.children = append([]*Page{siblingLastChild}, child.children...)
 			p.children = p.children[:len(p.children)-1]
 		}
 	} else if s != nil && !s.Sparse() {
@@ -133,9 +140,14 @@ func handleSparseNode(node, child *BNode, index int) bool {
 	return true
 }
 
-func handleFullNode(node, child *BNode, index int) bool {
+func handleFullNode(node, child *Page) bool {
 	if !child.Full() {
 		return false
+	}
+
+	index, ok := node.childIndex(child)
+	if !ok {
+		panic("Tried to find childIndex of invalid child")
 	}
 
 	node.splitChild(index)
@@ -143,26 +155,18 @@ func handleFullNode(node, child *BNode, index int) bool {
 	return true
 }
 
-func (bt *BTree) mergeDescend(k string) *BNode {
-	iter := bt.iter(k)
-	node, _, _ := iter.forEach(handleSparseNode)
+func (bt *BTree) mergeDescend(k string) *Page {
+	iter := bt.IterByKey(k)
+	return iter.forEach(handleSparseNode)
+}
+
+func (bt *BTree) splitDescend(k string) *Page {
+	iter := bt.IterByKey(k)
+	node := iter.forEach(handleFullNode)
 	return node
 }
 
-func (bt *BTree) splitDescend(k string) *BNode {
-	iter := bt.iter(k)
-	node, _, _ := iter.forEach(handleFullNode)
-	return node
-}
-
-func (t *BTree) iter(key string) *BTreeIterator {
-	return &BTreeIterator{
-		key:  key,
-		node: t.root,
-	}
-}
-
-func (b *BTree) newNode() *BNode {
+func (b *BTree) newNode() *Page {
 	node := newNode(b.t)
 	node.storage = &b.cr
 	return node
