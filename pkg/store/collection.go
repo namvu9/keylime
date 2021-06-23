@@ -7,7 +7,7 @@ type Collection struct {
 }
 
 func (c *Collection) Get(key string) []byte {
-	node := c.root.IterByKey(key).get()
+	node := c.root.IterByKey(key).Get()
 	index, ok := node.keyIndex(key)
 	if !ok {
 		return nil
@@ -24,7 +24,7 @@ func (c *Collection) Set(k string, value []byte) error {
 		s.splitChild(0)
 	}
 
-	node := c.root.IterByKey(k).forEach(handleFullNode)
+	node := c.root.IterByKey(k).forEach(splitFullPage)
 	node.insertKey(k, value)
 
 	return nil
@@ -44,6 +44,11 @@ func (c *Collection) Delete(k string) error {
 	return nil
 }
 
+func (b *Collection) newPage() *Page {
+	node := newPage(b.t)
+	return node
+}
+
 func New(t int, opts ...Option) *Collection {
 	tree := &Collection{
 		t: t,
@@ -61,7 +66,3 @@ func New(t int, opts ...Option) *Collection {
 	return tree
 }
 
-func (b *Collection) newPage() *Page {
-	node := newPage(b.t)
-	return node
-}

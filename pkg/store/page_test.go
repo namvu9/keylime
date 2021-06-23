@@ -29,7 +29,7 @@ func TestPageIndex(t *testing.T) {
 	}
 }
 
-func TestInsertKey(t *testing.T) {
+func TestInsertRecord(t *testing.T) {
 	u := util{t}
 	for i, test := range []struct {
 		k        string
@@ -56,9 +56,9 @@ func TestSplitChild(t *testing.T) {
 	u := util{t}
 	t.Run("Full leaf child", func(t *testing.T) {
 		var (
-			root = makeTree(2, makeRecords("10"),
-				makeTree(2, makeRecords("1", "4", "8")),
-				makeTree(2, makeRecords("12", "14", "20")),
+			root = makePage(2, makeRecords("10"),
+				makePage(2, makeRecords("1", "4", "8")),
+				makePage(2, makeRecords("12", "14", "20")),
 			)
 		)
 
@@ -79,18 +79,18 @@ func TestSplitChild(t *testing.T) {
 	})
 
 	t.Run("Full internal node", func(t *testing.T) {
-		l2a_child := makeTree(2, makeRecords("6", "7"))
-		l2b_child := makeTree(2, makeRecords("9", "10"))
-		l2c_child := makeTree(2, makeRecords("16", "17"))
-		l2d_child := makeTree(2, makeRecords("19", "20"))
-		root := makeTree(2, makeRecords("21"),
-			makeTree(2, makeRecords("8", "15", "18"),
+		l2a_child := makePage(2, makeRecords("6", "7"))
+		l2b_child := makePage(2, makeRecords("9", "10"))
+		l2c_child := makePage(2, makeRecords("16", "17"))
+		l2d_child := makePage(2, makeRecords("19", "20"))
+		root := makePage(2, makeRecords("21"),
+			makePage(2, makeRecords("8", "15", "18"),
 				l2a_child,
 				l2b_child,
 				l2c_child,
 				l2d_child,
 			),
-			makeTree(2, makeRecords()),
+			makePage(2, makeRecords()),
 		)
 
 		root.splitChild(0)
@@ -120,7 +120,7 @@ func TestInsertChild(t *testing.T) {
 			childA   = newNodeWithKeys(2, []string{"2"})
 			childC   = newNodeWithKeys(2, []string{"8"})
 			newChild = newNodeWithKeys(2, []string{"10"})
-			root     = makeTree(2, makeRecords("5"),
+			root     = makePage(2, makeRecords("5"),
 				childA,
 				childC,
 			)
@@ -200,7 +200,7 @@ func TestInsertChild(t *testing.T) {
 			newChildA = newNodeWithKeys(2, []string{"8"})
 			newChildB = newNodeWithKeys(2, []string{"8"})
 
-			root = makeTree(2, makeRecords("5"),
+			root = makePage(2, makeRecords("5"),
 				childA,
 				childB,
 				childC,
@@ -214,6 +214,7 @@ func TestInsertChild(t *testing.T) {
 	})
 }
 
+// TODO: Merge nodes deep tree?
 func TestDeleteNode(t *testing.T) {
 	t.Run("Missing key", func(t *testing.T) {
 		node := newNodeWithKeys(2, []string{"a", "c"})
@@ -247,9 +248,9 @@ func TestDeleteNode(t *testing.T) {
 
 	t.Run("Internal node, predecessor has t keys", func(t *testing.T) {
 		u := &util{t}
-		root := makeTree(2, makeRecords("5"),
-			makeTree(2, makeRecords("2", "3")),
-			makeTree(2, makeRecords("6")),
+		root := makePage(2, makeRecords("5"),
+			makePage(2, makeRecords("2", "3")),
+			makePage(2, makeRecords("6")),
 		)
 
 		root.Delete("5")
@@ -272,9 +273,9 @@ func TestDeleteNode(t *testing.T) {
 
 	t.Run("Internal node, successor has t keys", func(t *testing.T) {
 		u := &util{t}
-		root := makeTree(2, makeRecords("5"),
-			makeTree(2, makeRecords("2")),
-			makeTree(2, makeRecords("6", "7")),
+		root := makePage(2, makeRecords("5"),
+			makePage(2, makeRecords("2")),
+			makePage(2, makeRecords("6", "7")),
 		)
 
 		root.Delete("5")
@@ -297,9 +298,9 @@ func TestDeleteNode(t *testing.T) {
 
 	t.Run("Internal node, predecessor and successor have t-1 keys", func(t *testing.T) {
 		u := &util{t}
-		root := makeTree(2, makeRecords("5"),
-			makeTree(2, makeRecords("2")),
-			makeTree(2, makeRecords("6")),
+		root := makePage(2, makeRecords("5"),
+			makePage(2, makeRecords("2")),
+			makePage(2, makeRecords("6")),
 		)
 
 		root.Delete("5")
@@ -314,23 +315,23 @@ func TestDeleteNode(t *testing.T) {
 
 func TestMergeChildren(t *testing.T) {
 	u := util{t}
-	root := makeTree(2, makeRecords("5", "10", "15"),
-		makeTree(2, makeRecords("2"),
-			makeTree(2, makeRecords()),
-			makeTree(2, makeRecords()),
+	root := makePage(2, makeRecords("5", "10", "15"),
+		makePage(2, makeRecords("2"),
+			makePage(2, makeRecords()),
+			makePage(2, makeRecords()),
 		),
-		makeTree(2, makeRecords("7", "8"),
-			makeTree(2, makeRecords()),
-			makeTree(2, makeRecords()),
-			makeTree(2, makeRecords()),
+		makePage(2, makeRecords("7", "8"),
+			makePage(2, makeRecords()),
+			makePage(2, makeRecords()),
+			makePage(2, makeRecords()),
 		),
-		makeTree(2, makeRecords("11"),
-			makeTree(2, makeRecords()),
-			makeTree(2, makeRecords()),
+		makePage(2, makeRecords("11"),
+			makePage(2, makeRecords()),
+			makePage(2, makeRecords()),
 		),
-		makeTree(2, makeRecords("16"),
-			makeTree(2, makeRecords()),
-			makeTree(2, makeRecords()),
+		makePage(2, makeRecords("16"),
+			makePage(2, makeRecords()),
+			makePage(2, makeRecords()),
 		),
 	)
 
@@ -358,18 +359,18 @@ func TestMergeChildren(t *testing.T) {
 }
 
 func TestPredecessorSuccessorKeyNode(t *testing.T) {
-	target := makeTree(2, makeRecords("99"))
-	root := makeTree(2, makeRecords("a", "c"),
-		makeTree(2, makeRecords()),
+	target := makePage(2, makeRecords("99"))
+	root := makePage(2, makeRecords("a", "c"),
+		makePage(2, makeRecords()),
 		target,
-		makeTree(2, makeRecords()),
+		makePage(2, makeRecords()),
 	)
 
-	if root.predecessorKeyNode("c") != target {
+	if root.predecessorNode("c") != target {
 		t.Errorf("%v", root)
 	}
 
-	if root.predecessorKeyNode("c") != root.successorKeyNode("a") {
+	if root.predecessorNode("c") != root.successorNode("a") {
 		t.Errorf("root.predecessorKeyNode(index) should be root.successorKeyNode(index-1)")
 	}
 }
@@ -407,34 +408,34 @@ func TestIsSparse(t *testing.T) {
 	}
 }
 
-func TestChildPredecessorSuccessor(t *testing.T) {
-	child := makeTree(2, makeRecords())
-	sibling := makeTree(2, makeRecords())
+func TestChildSibling(t *testing.T) {
+	child := makePage(2, makeRecords())
+	sibling := makePage(2, makeRecords())
 
-	root := makeTree(2, makeRecords("c", "e", "f"),
-		makeTree(2, makeRecords()),
+	root := makePage(2, makeRecords("c", "e", "f"),
+		makePage(2, makeRecords()),
 		child,
 		sibling,
-		makeTree(2, makeRecords()),
+		makePage(2, makeRecords()),
 	)
 
-	if root.childPredecessor(0) != nil {
+	if root.prevChildSibling(0) != nil {
 		t.Errorf("Left-most child has no left sibling")
 	}
 
-	if root.childSuccessor(3) != nil {
+	if root.nextChildSibling(3) != nil {
 		t.Errorf("Right-most child has no right sibling")
 	}
 
-	if root.childSuccessor(1) != sibling {
+	if root.nextChildSibling(1) != sibling {
 		t.Errorf("We riot")
 	}
 
-	if root.childPredecessor(2) != child {
+	if root.prevChildSibling(2) != child {
 		t.Errorf("We riot")
 	}
 
-	if root.childSuccessor(1) != root.childPredecessor(3) {
+	if root.nextChildSibling(1) != root.prevChildSibling(3) {
 		t.Errorf("We riot")
 	}
 }

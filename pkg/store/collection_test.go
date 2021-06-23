@@ -13,11 +13,11 @@ func TestSet(t *testing.T) {
 
 	t.Run("Insertion into tree with full root and full target leaf", func(t *testing.T) {
 		var (
-			root = makeTree(2, makeRecords("k", "o", "s"),
-				makeTree(2, makeRecords("a", "b", "c")),
-				makeTree(2, makeRecords("l", "m")),
-				makeTree(2, makeRecords("p", "q")),
-				makeTree(2, makeRecords("x", "y")),
+			root = makePage(2, makeRecords("k", "o", "s"),
+				makePage(2, makeRecords("a", "b", "c")),
+				makePage(2, makeRecords("l", "m")),
+				makePage(2, makeRecords("p", "q")),
+				makePage(2, makeRecords("x", "y")),
 			)
 			tree = New(2, WithRoot(root))
 		)
@@ -57,9 +57,9 @@ func TestSet(t *testing.T) {
 
 func TestSearch(t *testing.T) {
 	var (
-		root = makeTree(2, makeRecords("10"),
-			makeTree(2, makeRecords("1", "4", "8")),
-			makeTree(2, makeRecords("12", "16", "20")),
+		root = makePage(2, makeRecords("10"),
+			makePage(2, makeRecords("1", "4", "8")),
+			makePage(2, makeRecords("12", "16", "20")),
 		)
 		tree = &Collection{root: root}
 	)
@@ -94,7 +94,7 @@ func TestSearch(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Run("Delete missing key", func(t *testing.T) {
-		tree := New(2, WithRoot(makeTree(2, makeRecords("5"))))
+		tree := New(2, WithRoot(makePage(2, makeRecords("5"))))
 
 		err := tree.Delete("10")
 		if err == nil {
@@ -105,7 +105,7 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
 		tree := New(2, WithRoot(
-			makeTree(2, makeRecords("5")),
+			makePage(2, makeRecords("5")),
 		))
 
 		tree.Delete("5")
@@ -116,9 +116,9 @@ func TestDelete(t *testing.T) {
 	// Case 0: Delete from root with 1 key
 	t.Run("Delete from root with 1 key", func(t2 *testing.T) {
 		u := util{t2}
-		tree := New(2, WithRoot(makeTree(2, makeRecords("5"),
-			makeTree(2, makeRecords("2")),
-			makeTree(2, makeRecords("8")),
+		tree := New(2, WithRoot(makePage(2, makeRecords("5"),
+			makePage(2, makeRecords("2")),
+			makePage(2, makeRecords("8")),
 		)))
 
 		tree.Delete("5")
@@ -132,7 +132,7 @@ func TestDelete(t *testing.T) {
 	// Case 1: Delete From Leaf
 	t.Run("Delete from leaf", func(t *testing.T) {
 		var (
-			root = makeTree(2, makeRecords("1", "2", "3"))
+			root = makePage(2, makeRecords("1", "2", "3"))
 			tree = &Collection{root: root}
 		)
 
@@ -147,51 +147,51 @@ func TestDelete(t *testing.T) {
 	})
 }
 
-func TestBuildTree(t *testing.T) {
+func TestBuildCollection(t *testing.T) {
 	u := util{t}
 
-	tree := New(2)
+	collection := New(2)
 
-	tree.Set("a", nil)
-	tree.Set("b", nil)
-	tree.Set("c", nil)
+	collection.Set("a", nil)
+	collection.Set("b", nil)
+	collection.Set("c", nil)
 
-	u.with("Root after 3 insertions, t=2", tree.root, func(nu namedUtil) {
+	u.with("Root after 3 insertions, t=2", collection.root, func(nu namedUtil) {
 		nu.hasNChildren(0)
 		nu.hasKeys("a", "b", "c")
 	})
 
-	tree.Set("d", nil)
-	tree.Set("e", nil)
+	collection.Set("d", nil)
+	collection.Set("e", nil)
 
-	u.with("Root after 5 insertions", tree.root, func(nu namedUtil) {
+	u.with("Root after 5 insertions", collection.root, func(nu namedUtil) {
 		nu.hasNChildren(2)
 		nu.hasKeys("b")
 	})
 
-	u.with("Left child after 5 insertions", tree.root.children[0], func(nu namedUtil) {
+	u.with("Left child after 5 insertions", collection.root.children[0], func(nu namedUtil) {
 		nu.hasNChildren(0)
 		nu.hasKeys("a")
 	})
 
-	u.with("Right child after 5 insertions", tree.root.children[1], func(nu namedUtil) {
+	u.with("Right child after 5 insertions", collection.root.children[1], func(nu namedUtil) {
 		nu.hasNChildren(0)
 		nu.hasKeys("c", "d", "e")
 	})
 
-	tree.Delete("e")
-	tree.Delete("d")
-	tree.Delete("c")
+	collection.Delete("e")
+	collection.Delete("d")
+	collection.Delete("c")
 
-	u.with("Root after deleting 3 times", tree.root, func(nu namedUtil) {
+	u.with("Root after deleting 3 times", collection.root, func(nu namedUtil) {
 		nu.hasNChildren(0)
 		nu.hasKeys("a", "b")
 	})
 
-	tree.Delete("a")
-	tree.Delete("b")
+	collection.Delete("a")
+	collection.Delete("b")
 
-	u.with("Root should be empty", tree.root, func(nu namedUtil) {
+	u.with("Root should be empty", collection.root, func(nu namedUtil) {
 		nu.hasNChildren(0)
 		nu.hasNRecords(0)
 	})

@@ -3,7 +3,6 @@ package store
 type IterFunc func(*Page) *Page
 
 type CollectionIterator struct {
-	key  string
 	node *Page
 	next IterFunc
 }
@@ -25,7 +24,7 @@ func (ci *CollectionIterator) forEach(fn func(*Page, *Page) bool) *Page {
 	}
 }
 
-func (ci *CollectionIterator) get() *Page {
+func (ci *CollectionIterator) Get() *Page {
 	return ci.forEach(func(b1, b2 *Page) bool { return false })
 }
 
@@ -50,11 +49,12 @@ func (c *Page) IterByKey(k string) *CollectionIterator {
 func (c *Page) MaxPage() *Page {
 	return c.IterBy(func(p *Page) *Page {
 		return p.children[len(p.children)-1]
-	}).get()
+	}).Get()
 }
 
 func (c *Page) MinPage() *Page {
 	return c.IterBy(func(p *Page) *Page {
 		return p.children[0]
-	}).get()
+	}).Get()
 }
+

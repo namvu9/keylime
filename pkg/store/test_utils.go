@@ -105,7 +105,7 @@ func newNodeWithKeys(t int, keys []string) *Page {
 	}
 }
 
-func makeTree(t int, records []record.Record, children ...*Page) *Page {
+func makePage(t int, records []record.Record, children ...*Page) *Page {
 	root := newPage(t)
 	root.records = records
 	root.children = children

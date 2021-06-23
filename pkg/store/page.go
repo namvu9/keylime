@@ -19,16 +19,6 @@ type Page struct {
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 }
 
-func (p *Page) childIndex(c *Page) (int, bool) {
-	for i, child := range p.children {
-		if child == c {
-			return i, true
-		}
-	}
-
-	return 0, false
-}
-
 func (b *Page) Get(k string) ([]byte, error) {
 	index, ok := b.keyIndex(k)
 	if !ok {
@@ -50,17 +40,19 @@ func (b *Page) Delete(k string) error {
 	}
 
 	// Case 1: Predcessor has at least t keys
-	if p := b.predecessorKeyNode(k); p != nil && !p.Sparse() {
-		pred_k := p.records[len(p.records)-1]
-		b.records[index] = pred_k
-		return p.Delete(pred_k.Key())
+	if beforeChild := b.children[index]; !beforeChild.Sparse() {
+		mp := beforeChild.MaxPage()
+		predRecord:= mp.records[len(mp.records)-1]
+		b.records[index] = predRecord
+		return beforeChild.Delete(predRecord.Key())
 	}
 
 	// Case 2: Successor has at least t keys
-	if s := b.successorKeyNode(k); s != nil && !s.Sparse() {
-		succ_k := s.records[0]
-		b.records[index] = succ_k
-		return s.Delete(succ_k.Key())
+	if afterChild := b.children[index+1]; !afterChild.Sparse() {
+		mp := afterChild.MinPage()
+		succRecord := mp.records[0]
+		b.records[index] = succRecord
+		return afterChild.Delete(succRecord.Key())
 	}
 
 	// Case 3: Neither p nor s has >= t keys
@@ -91,27 +83,7 @@ func (b *Page) Leaf() bool {
 	return b.leaf
 }
 
-func (b *Page) String() string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "-----\nBNode\n-----\n")
-	if b.ID != "" {
-		fmt.Fprintf(&sb, "ID:\t\t%s\n", b.ID)
-	} else {
-		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
-	}
-	fmt.Fprintf(&sb, "t:\t\t%d\n", b.t)
-	fmt.Fprintf(&sb, "Loaded:\t\t%v\n", b.loaded)
-	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", b.leaf)
-	fmt.Fprintf(&sb, "Children:\t%v\n", len(b.children))
-	fmt.Fprintf(&sb, "Keys:\t\t")
-	for _, key := range b.records {
-		fmt.Fprintf(&sb, "%v ", key)
-	}
-	fmt.Fprintf(&sb, "\n")
-	return sb.String()
-}
-
-func (b *Page) newNode() *Page {
+func (b *Page) newPage() *Page {
 	node := newPage(b.t)
 	return node
 }
@@ -178,7 +150,7 @@ func (b *Page) splitChild(index int) {
 		panic("Cannot split non-full child")
 	}
 
-	newChild := b.newNode()
+	newChild := b.newPage()
 	newChild.leaf = fullChild.leaf
 
 	medianKey, left, right := partitionMedian(fullChild.records)
@@ -220,44 +192,44 @@ func (b *Page) insertChildren(index int, children ...*Page) {
 	b.children = tmp
 }
 
-func (b *Page) predecessorKeyNode(k string) *Page {
-	if b.leaf {
+func (p *Page) predecessorNode(k string) *Page {
+	if p.leaf {
 		return nil
 	}
 
-	index, exists := b.keyIndex(k)
+	index, exists := p.keyIndex(k)
 	if !exists {
 		return nil
 	}
 
-	return b.children[index].MaxPage()
+	return p.children[index].MaxPage()
 }
 
-func (b *Page) successorKeyNode(k string) *Page {
-	if b.leaf {
+func (p *Page) successorNode(k string) *Page {
+	if p.leaf {
 		return nil
 	}
 
-	index, exists := b.keyIndex(k)
+	index, exists := p.keyIndex(k)
 	if !exists {
 		return nil
 	}
 
-	return b.children[index+1].MinPage()
+	return p.children[index+1].MinPage()
 }
 
-func (b *Page) childPredecessor(index int) *Page {
+func (p *Page) prevChildSibling(index int) *Page {
 	if index <= 0 {
 		return nil
 	}
-	return b.children[index-1]
+	return p.children[index-1]
 }
 
-func (b *Page) childSuccessor(index int) *Page {
-	if index >= len(b.children)-1 {
+func (p *Page) nextChildSibling(index int) *Page {
+	if index >= len(p.children)-1 {
 		return nil
 	}
-	return b.children[index+1]
+	return p.children[index+1]
 }
 
 // TODO: TEST
@@ -293,26 +265,10 @@ func (b *Page) mergeChildren(i int) {
 	b.children = append(b.children[:i+1], b.children[i+2:]...)
 }
 
-func (b *Page) read() error {
+func (p *Page) read() error {
 	return nil
-	//if b.loaded {
-	//return nil
-	//}
-
-	//if b.storage == nil {
-	//return fmt.Errorf("Could not read node. No storage instance")
-	//}
-
-	//err := b.storage.Read(b.ID, b)
-	//if err != nil {
-	//return err
-	//}
-
-	//b.loaded = true
-	//fmt.Println(b)
-
-	//return nil
 }
+
 func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
 	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
 		panic("Cannot partition an even number of records")
@@ -333,8 +289,8 @@ func handleSparseNode(node, child *Page) bool {
 	}
 
 	var (
-		p = node.childPredecessor(index)
-		s = node.childSuccessor(index)
+		p = node.prevChildSibling(index)
+		s = node.nextChildSibling(index)
 	)
 
 	// Rotate predecessor key
@@ -375,12 +331,11 @@ func handleSparseNode(node, child *Page) bool {
 	} else {
 		node.mergeChildren(index)
 	}
-	// Write nodes
 
 	return true
 }
 
-func handleFullNode(node, child *Page) bool {
+func splitFullPage(node, child *Page) bool {
 	if !child.Full() {
 		return false
 	}
@@ -393,4 +348,14 @@ func handleFullNode(node, child *Page) bool {
 	node.splitChild(index)
 
 	return true
+}
+
+func (p *Page) childIndex(c *Page) (int, bool) {
+	for i, child := range p.children {
+		if child == c {
+			return i, true
+		}
+	}
+
+	return 0, false
 }
