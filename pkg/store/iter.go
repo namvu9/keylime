@@ -74,8 +74,8 @@ func (p *Page) Max() *CollectionIterator {
 	return p.Iter(ByMaxPage)
 }
 
-// Min returns an iterator that terminates at the page
+// MinPage returns an iterator that terminates at the page
 // containing the smallest key in the tree rooted at `p`
-func (p *Page) Min() *CollectionIterator {
+func (p *Page) MinPage() *CollectionIterator {
 	return p.Iter(ByMinPage)
 }

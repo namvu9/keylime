@@ -49,7 +49,7 @@ func TestMinPage(t *testing.T) {
 		{"from leaf", min},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			n := test.p.Min().Get()
+			n := test.p.MinPage().Get()
 
 			if n != min {
 				t.Errorf("Got=%v, Want=%v", n.ID, min.ID)

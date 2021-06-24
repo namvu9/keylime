@@ -53,7 +53,7 @@ func (b *Page) Delete(k string) error {
 	// Case 2: Successor has at least t keys
 	if afterChild := b.children[index+1]; !afterChild.Sparse() {
 		var (
-			succ    = afterChild.Min().ForEach(handleSparsePage).Get()
+			succ    = afterChild.MinPage().ForEach(handleSparsePage).Get()
 			succRec = succ.records[0]
 		)
 
@@ -220,7 +220,7 @@ func (p *Page) successorNode(k string) *Page {
 		return nil
 	}
 
-	return p.children[index+1].Min().Get()
+	return p.children[index+1].MinPage().Get()
 }
 
 func (p *Page) prevChildSibling(index int) *Page {
