@@ -9,6 +9,7 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
+// A Page is an implementation of a node in a B-tree.
 type Page struct {
 	ID string
 
@@ -28,6 +29,8 @@ func (p *Page) Get(k string) ([]byte, error) {
 	return p.records[index].Value(), nil
 }
 
+// Delete record with key `k` from page `p` if it exists.
+// Returns an error otherwise.
 func (p *Page) Delete(k string) error {
 	index, exists := p.keyIndex(k)
 	if !exists {
@@ -85,6 +88,7 @@ func (p *Page) Empty() bool {
 	return len(p.records) == 0
 }
 
+// Leaf returns true if `p` is a leaf node
 func (p *Page) Leaf() bool {
 	return p.leaf
 }
@@ -238,12 +242,6 @@ func (p *Page) nextChildSibling(index int) *Page {
 }
 
 // TODO: TEST
-func (p *Page) hasKey(k string) bool {
-	_, exists := p.keyIndex(k)
-	return exists
-}
-
-// TODO: TEST
 func (p *Page) mergeWith(median record.Record, other *Page) {
 	p.records = append(p.records, median)
 	p.records = append(p.records, other.records...)
@@ -268,10 +266,6 @@ func (p *Page) mergeChildren(i int) {
 	p.records = append(p.records[:i], p.records[i+1:]...)
 	// Remove rightChild
 	p.children = append(p.children[:i+1], p.children[i+2:]...)
-}
-
-func (p *Page) read() error {
-	return nil
 }
 
 func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
