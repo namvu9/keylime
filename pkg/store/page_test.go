@@ -214,7 +214,6 @@ func TestInsertChild(t *testing.T) {
 	})
 }
 
-// TODO: Merge nodes deep tree?
 func TestDeleteNode(t *testing.T) {
 	t.Run("Missing key", func(t *testing.T) {
 		node := newNodeWithKeys(2, []string{"a", "c"})
@@ -223,8 +222,7 @@ func TestDeleteNode(t *testing.T) {
 			t.Errorf("deleteKey should return error if key is not found")
 		}
 	})
-
-	t.Run("Delete existing key in leaf", func(t *testing.T) {
+	t.Run("Delete key in leaf", func(t *testing.T) {
 		u := util{t}
 		for index, test := range []struct {
 			targetKey string
@@ -234,9 +232,10 @@ func TestDeleteNode(t *testing.T) {
 			{"b", []string{"a", "c"}},
 			{"c", []string{"a", "b"}},
 		} {
-			node := newNodeWithKeys(2, []string{"a", "b", "c"})
-			node.leaf = true
-			err := node.Delete(test.targetKey)
+			var (
+				node = makePage(2, makeRecords("a", "b", "c"))
+				err  = node.Delete(test.targetKey)
+			)
 
 			if err != nil {
 				t.Errorf("Should not return error")
@@ -271,6 +270,43 @@ func TestDeleteNode(t *testing.T) {
 		})
 	})
 
+	t.Run("Deep internal node, predecessor has t keys", func(t *testing.T) {
+		u := &util{t}
+		root := makePage(2, makeRecords("9"),
+			makePage(2, makeRecords("3", "5"),
+				makePage(2, makeRecords("2")),
+				makePage(2, makeRecords("4")),
+				makePage(2, makeRecords("6")),
+			),
+			makePage(2, makeRecords("10000")),
+		)
+
+		root.Delete("9")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("6")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(2)
+			nu.hasKeys("3")
+
+			nu.withChild(0, func(nu namedUtil) {
+				nu.hasKeys("2")
+			})
+			nu.withChild(1, func(nu namedUtil) {
+				nu.hasKeys("4", "5")
+			})
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("10000")
+		})
+	})
+
+
 	t.Run("Internal node, successor has t keys", func(t *testing.T) {
 		u := &util{t}
 		root := makePage(2, makeRecords("5"),
@@ -296,6 +332,43 @@ func TestDeleteNode(t *testing.T) {
 		})
 	})
 
+	t.Run("Deep internal node, successor has t keys", func(t *testing.T) {
+		u := &util{t}
+		root := makePage(2, makeRecords("3"),
+			makePage(2, makeRecords("10000")),
+			makePage(2, makeRecords("5", "8"),
+				makePage(2, makeRecords("4")),
+				makePage(2, makeRecords("7")),
+				makePage(2, makeRecords("9")),
+			),
+		)
+
+		root.Delete("3")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("4")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("10000")
+
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(2)
+			nu.hasKeys("8")
+
+			nu.withChild(0, func(nu namedUtil) {
+				nu.hasKeys("5", "7")
+			})
+			nu.withChild(1, func(nu namedUtil) {
+				nu.hasKeys("9")
+			})
+		})
+	})
+
 	t.Run("Internal node, predecessor and successor have t-1 keys", func(t *testing.T) {
 		u := &util{t}
 		root := makePage(2, makeRecords("5"),
@@ -308,6 +381,11 @@ func TestDeleteNode(t *testing.T) {
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(0)
 			nu.hasNChildren(1)
+
+			nu.withChild(0, func(nu namedUtil) {
+				nu.hasKeys("2", "6")
+				nu.hasNChildren(0)
+			})
 		})
 
 	})
@@ -375,7 +453,7 @@ func TestPredecessorSuccessorKeyNode(t *testing.T) {
 	}
 }
 
-func TestIsFull(t *testing.T) {
+func TestFull(t *testing.T) {
 	root := newPage(2)
 
 	if got := root.Full(); got {
@@ -409,14 +487,15 @@ func TestIsSparse(t *testing.T) {
 }
 
 func TestChildSibling(t *testing.T) {
-	child := makePage(2, makeRecords())
-	sibling := makePage(2, makeRecords())
-
-	root := makePage(2, makeRecords("c", "e", "f"),
-		makePage(2, makeRecords()),
-		child,
-		sibling,
-		makePage(2, makeRecords()),
+	var (
+		child   = makePage(2, makeRecords())
+		sibling = makePage(2, makeRecords())
+		root    = makePage(2, makeRecords("c", "e", "f"),
+			makePage(2, makeRecords()),
+			child,
+			sibling,
+			makePage(2, makeRecords()),
+		)
 	)
 
 	if root.prevChildSibling(0) != nil {

@@ -10,6 +10,7 @@ import (
 type util struct {
 	t *testing.T
 }
+
 func (u util) with(name string, node *Page, fn func(namedUtil)) {
 	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), node})
 }
@@ -27,7 +28,11 @@ func (u util) hasNChildren(name string, n int, node *Page) {
 }
 
 func (u util) hasKeys(name string, keys []string, node *Page) {
-	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, node.records, keys)
+	var nKeys []string
+	for _, k := range node.records {
+		nKeys = append(nKeys, k.Key())
+	}
+	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, nKeys, keys)
 
 	if len(node.records) != len(keys) {
 		u.t.Errorf(errMsg)
@@ -68,6 +73,12 @@ type namedUtil struct {
 	u    util
 	name string
 	node *Page
+}
+
+func (nu namedUtil) withChild(i int, fn func(namedUtil)) {
+	child := nu.node.children[i]
+	u := namedUtil{nu.u, fmt.Sprintf("[%s, child %d]", nu.name, i), child}
+	fn(u)
 }
 
 func (nu namedUtil) is(other *Page) bool {
@@ -129,4 +140,3 @@ func makeRecords(keys ...string) []record.Record {
 
 	return out
 }
-
