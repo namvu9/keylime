@@ -524,10 +524,7 @@ func TestSplitFullPage(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
 		root := makePage(2, makeRecords("3"), makePage(2, makeRecords("a")), makePage(2, makeRecords("5", "7", "9")))
 
-		modified := splitFullPage(root, root.children[1])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		splitFullPage(root, root.children[1])
 
 		u.with("1", root, func(nu namedUtil) {
 			nu.hasKeys("3", "7")
@@ -548,10 +545,7 @@ func TestSplitFullPage(t *testing.T) {
 	t.Run("2", func(t *testing.T) {
 		root := makePage(2, makeRecords("9"), makePage(2, makeRecords("3", "5", "8")), makePage(2, makeRecords("a")))
 
-		modified := splitFullPage(root, root.children[0])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		splitFullPage(root, root.children[0])
 
 		u.with("2", root, func(nu namedUtil) {
 			nu.hasKeys("5", "9")
@@ -572,10 +566,7 @@ func TestSplitFullPage(t *testing.T) {
 	t.Run("3", func(t *testing.T) {
 		root := makePage(2, makeRecords("9"), makePage(2, makeRecords("3", "8")), makePage(2, makeRecords("a")))
 
-		modified := splitFullPage(root, root.children[0])
-		if modified {
-			t.Errorf("Want=%v, Got=%v", false, modified)
-		}
+		splitFullPage(root, root.children[0])
 
 		u.with("3", root, func(nu namedUtil) {
 			nu.hasKeys("9")
@@ -599,10 +590,7 @@ func TestHandleSparsePage(t *testing.T) {
 			makePage(2, makeRecords("d")),
 		)
 
-		modified := handleSparsePage(root, root.children[1])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("b")
@@ -629,10 +617,7 @@ func TestHandleSparsePage(t *testing.T) {
 			),
 		)
 
-		modified := handleSparsePage(root, root.children[1])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(1)
@@ -656,10 +641,7 @@ func TestHandleSparsePage(t *testing.T) {
 			makePage(2, makeRecords("d", "e")),
 		)
 
-		modified := handleSparsePage(root, root.children[0])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[0])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(1)
@@ -687,10 +669,7 @@ func TestHandleSparsePage(t *testing.T) {
 			),
 		)
 
-		modified := handleSparsePage(root, root.children[0])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[0])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(1)
@@ -715,10 +694,7 @@ func TestHandleSparsePage(t *testing.T) {
 			makePage(2, makeRecords("e")),
 		)
 
-		modified := handleSparsePage(root, root.children[1])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(1)
@@ -738,10 +714,7 @@ func TestHandleSparsePage(t *testing.T) {
 			makePage(2, makeRecords("e")),
 		)
 
-		modified := handleSparsePage(root, root.children[2])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[2])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(1)
@@ -761,10 +734,7 @@ func TestHandleSparsePage(t *testing.T) {
 			makePage(2, makeRecords("e")),
 		)
 
-		modified := handleSparsePage(root, root.children[0])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[0])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(1)
@@ -783,10 +753,7 @@ func TestHandleSparsePage(t *testing.T) {
 			makePage(2, makeRecords("c")),
 		)
 
-		modified := handleSparsePage(root, root.children[1])
-		if !modified {
-			t.Errorf("Want=%v, Got=%v", true, modified)
-		}
+		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(0)

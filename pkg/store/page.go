@@ -143,9 +143,9 @@ func (p *Page) insert(k string, value []byte) int {
 			out = append(out, kv)
 			p.records = append(out, p.records[i:]...)
 			return i
-		} else {
-			out = append(out, p.records[i])
 		}
+
+		out = append(out, p.records[i])
 	}
 
 	p.records = append(out, kv)
@@ -276,10 +276,9 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
 }
 
-// TODO: TEST
-func handleSparsePage(node, child *Page) bool {
+func handleSparsePage(node, child *Page) {
 	if !child.Sparse() {
-		return false
+		return
 	}
 
 	index, ok := node.childIndex(child)
@@ -330,13 +329,11 @@ func handleSparsePage(node, child *Page) bool {
 	} else {
 		node.mergeChildren(index)
 	}
-
-	return true
 }
 
-func splitFullPage(node, child *Page) bool {
+func splitFullPage(node, child *Page){
 	if !child.Full() {
-		return false
+		return 
 	}
 
 	index, ok := node.childIndex(child)
@@ -345,8 +342,6 @@ func splitFullPage(node, child *Page) bool {
 	}
 
 	node.splitChild(index)
-
-	return true
 }
 
 func (p *Page) childIndex(c *Page) (int, bool) {

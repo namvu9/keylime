@@ -10,7 +10,7 @@ type Collection struct {
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
 func (c *Collection) Get(k string) []byte {
-	node := c.root.iter(ByKey(k)).Get()
+	node := c.root.iter(byKey(k)).Get()
 	index, ok := node.keyIndex(k)
 	if !ok {
 		return nil
@@ -30,7 +30,7 @@ func (c *Collection) Set(k string, value []byte) error {
 		s.splitChild(0)
 	}
 
-	node := c.root.iter(ByKey(k)).forEach(splitFullPage).Get()
+	node := c.root.iter(byKey(k)).forEach(splitFullPage).Get()
 	node.insert(k, value)
 
 	return nil
@@ -46,7 +46,7 @@ func (c *Collection) Update(k string, value []byte) error {
 // Delete record with key `k`. An error is returned of no
 // such record exists
 func (c *Collection) Delete(k string) error {
-	page := c.root.iter(ByKey(k)).forEach(handleSparsePage).Get()
+	page := c.root.iter(byKey(k)).forEach(handleSparsePage).Get()
 
 	if err := page.Delete(k); err != nil {
 		return err

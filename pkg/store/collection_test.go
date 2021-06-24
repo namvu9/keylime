@@ -8,6 +8,43 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
+func TestGet(t *testing.T) {
+	var (
+		root = makePage(2, makeRecords("10"),
+			makePage(2, makeRecords("1", "4", "8")),
+			makePage(2, makeRecords("12", "16", "20")),
+		)
+		tree = &Collection{root: root}
+	)
+
+	root.children[0].records[1] = record.New(root.children[0].records[1].Key(), []byte{99, 99, 99})
+	root.children[1].records[2] = record.New(root.children[1].records[2].Key(), []byte{100, 100, 100})
+
+	tree.Set("4", []byte{99, 99, 99})
+	tree.Set("10", []byte("I'm not cool"))
+	tree.Set("100", []byte(fmt.Sprint(4)))
+
+	for i, test := range []struct {
+		k    string
+		want []byte
+	}{
+		{"0", nil},
+		{"5", nil},
+		{"1000", nil},
+		{"4", []byte{99, 99, 99}},
+		{"20", []byte{100, 100, 100}},
+		{"10", []byte("I'm not cool")},
+		{"100", []byte(fmt.Sprint(4))},
+	} {
+
+		got := tree.Get(test.k)
+
+		if bytes.Compare(got, test.want) != 0 {
+			t.Errorf("[TestSearch] %d, key %v: Got %s; want %s ", i, test.k, got, test.want)
+		}
+	}
+}
+
 func TestSet(t *testing.T) {
 	u := util{t}
 
@@ -53,43 +90,6 @@ func TestSet(t *testing.T) {
 		u.hasKeys("Old root, child 1", []string{"c", "d"}, root.children[1])
 		u.hasKeys("Old root, child 2", []string{"l", "m"}, root.children[2])
 	})
-}
-
-func TestSearch(t *testing.T) {
-	var (
-		root = makePage(2, makeRecords("10"),
-			makePage(2, makeRecords("1", "4", "8")),
-			makePage(2, makeRecords("12", "16", "20")),
-		)
-		tree = &Collection{root: root}
-	)
-
-	root.children[0].records[1] = record.New(root.children[0].records[1].Key(), []byte{99, 99, 99})
-	root.children[1].records[2] = record.New(root.children[1].records[2].Key(), []byte{100, 100, 100})
-
-	tree.Set("4", []byte{99, 99, 99})
-	tree.Set("10", []byte("I'm not cool"))
-	tree.Set("100", []byte(fmt.Sprint(4)))
-
-	for i, test := range []struct {
-		k    string
-		want []byte
-	}{
-		{"0", nil},
-		{"5", nil},
-		{"1000", nil},
-		{"4", []byte{99, 99, 99}},
-		{"20", []byte{100, 100, 100}},
-		{"10", []byte("I'm not cool")},
-		{"100", []byte(fmt.Sprint(4))},
-	} {
-
-		got := tree.Get(test.k)
-
-		if bytes.Compare(got, test.want) != 0 {
-			t.Errorf("[TestSearch] %d, key %v: Got %s; want %s ", i, test.k, got, test.want)
-		}
-	}
 }
 
 func TestDelete(t *testing.T) {
