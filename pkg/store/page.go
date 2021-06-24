@@ -19,52 +19,52 @@ type Page struct {
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 }
 
-func (b *Page) Get(k string) ([]byte, error) {
-	index, ok := b.keyIndex(k)
+func (p *Page) Get(k string) ([]byte, error) {
+	index, ok := p.keyIndex(k)
 	if !ok {
 		return nil, errors.New("KeyNotFound")
 	}
 
-	return b.records[index].Value(), nil
+	return p.records[index].Value(), nil
 }
 
-func (b *Page) Delete(k string) error {
-	index, exists := b.keyIndex(k)
+func (p *Page) Delete(k string) error {
+	index, exists := p.keyIndex(k)
 	if !exists {
 		return fmt.Errorf("KeyNotFoundError")
 	}
 
-	if b.leaf {
-		b.records = append(b.records[:index], b.records[index+1:]...)
+	if p.leaf {
+		p.records = append(p.records[:index], p.records[index+1:]...)
 		return nil
 	}
 
 	// Case 1: Predcessor has at least t keys
-	if beforeChild := b.children[index]; !beforeChild.Sparse() {
+	if beforeChild := p.children[index]; !beforeChild.Sparse() {
 		var (
-			maxPredPage = beforeChild.Max().ForEach(handleSparsePage).Get()
+			maxPredPage = beforeChild.Max().forEach(handleSparsePage).Get()
 			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
 		)
 
-		b.records[index] = predRec
+		p.records[index] = predRec
 		return maxPredPage.Delete(predRec.Key())
 	}
 
 	// Case 2: Successor has at least t keys
-	if afterChild := b.children[index+1]; !afterChild.Sparse() {
+	if afterChild := p.children[index+1]; !afterChild.Sparse() {
 		var (
-			succ    = afterChild.MinPage().ForEach(handleSparsePage).Get()
+			succ    = afterChild.MinPage().forEach(handleSparsePage).Get()
 			succRec = succ.records[0]
 		)
 
-		b.records[index] = succRec
+		p.records[index] = succRec
 		return succ.Delete(succRec.Key())
 	}
 
 	// Case 3: Neither p nor s has >= t keys
 	// Merge s and p with k as median key
-	b.mergeChildren(index)
-	return b.children[index].Delete(k)
+	p.mergeChildren(index)
+	return p.children[index].Delete(k)
 }
 
 // Full reports whether the number of records contained in a
@@ -121,80 +121,80 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (b *Page) insert(k string, value []byte) int {
-	if b.Full() {
+func (p *Page) insert(k string, value []byte) int {
+	if p.Full() {
 		panic("Cannot insert key into full node")
 	}
 
 	kv := record.New(k, value)
 	out := []record.Record{}
 
-	for i, key := range b.records {
+	for i, key := range p.records {
 		if kv.Key() == key.Key() {
-			b.records[i] = kv
+			p.records[i] = kv
 			return i
 		}
 
 		if kv.IsLessThan(key) {
 			out = append(out, kv)
-			b.records = append(out, b.records[i:]...)
+			p.records = append(out, p.records[i:]...)
 			return i
 		} else {
-			out = append(out, b.records[i])
+			out = append(out, p.records[i])
 		}
 	}
 
-	b.records = append(out, kv)
-	return len(b.records) - 1
+	p.records = append(out, kv)
+	return len(p.records) - 1
 }
 
 // Panics if child is not full
-func (b *Page) splitChild(index int) {
-	fullChild := b.children[index]
+func (p *Page) splitChild(index int) {
+	fullChild := p.children[index]
 	if !fullChild.Full() {
 		panic("Cannot split non-full child")
 	}
 
-	newChild := b.newPage()
+	newChild := p.newPage()
 	newChild.leaf = fullChild.leaf
 
 	medianKey, left, right := partitionMedian(fullChild.records)
-	b.insert(medianKey.Key(), medianKey.Value())
+	p.insert(medianKey.Key(), medianKey.Value())
 
 	fullChild.records, newChild.records = left, right
 
 	if !fullChild.leaf {
-		newChild.insertChildren(0, fullChild.children[b.t:]...)
-		fullChild.children = fullChild.children[:b.t]
+		newChild.insertChildren(0, fullChild.children[p.t:]...)
+		fullChild.children = fullChild.children[:p.t]
 	}
 
-	b.insertChildren(index+1, newChild)
+	p.insertChildren(index+1, newChild)
 }
 
-func (b *Page) insertRecord(r record.Record) int {
-	return b.insert(r.Key(), r.Value())
+func (p *Page) insertRecord(r record.Record) int {
+	return p.insert(r.Key(), r.Value())
 }
 
-func (b *Page) setRecord(index int, r record.Record) {
-	b.records[index] = r
+func (p *Page) setRecord(index int, r record.Record) {
+	p.records[index] = r
 }
 
-func (b *Page) insertChildren(index int, children ...*Page) {
-	if len(b.children) == 2*b.t {
+func (p *Page) insertChildren(index int, children ...*Page) {
+	if len(p.children) == 2*p.t {
 		panic("Cannot insert a child into a full node")
 	}
 
 	// Check whether index + len(children) leads to node
 	// overflow
-	nExistingChildren := len(b.children)
+	nExistingChildren := len(p.children)
 	nChildren := len(children)
 
 	tmp := make([]*Page, nExistingChildren+nChildren)
-	copy(tmp[:index], b.children[:index])
+	copy(tmp[:index], p.children[:index])
 	copy(tmp[index:index+nChildren], children)
-	copy(tmp[nChildren+index:], b.children[index:])
+	copy(tmp[nChildren+index:], p.children[index:])
 
-	b.children = tmp
+	p.children = tmp
 }
 
 func (p *Page) predecessorNode(k string) *Page {
@@ -238,16 +238,16 @@ func (p *Page) nextChildSibling(index int) *Page {
 }
 
 // TODO: TEST
-func (b *Page) hasKey(k string) bool {
-	_, exists := b.keyIndex(k)
+func (p *Page) hasKey(k string) bool {
+	_, exists := p.keyIndex(k)
 	return exists
 }
 
 // TODO: TEST
-func (b *Page) mergeWith(median record.Record, other *Page) {
-	b.records = append(b.records, median)
-	b.records = append(b.records, other.records...)
-	b.children = append(b.children, other.children...)
+func (p *Page) mergeWith(median record.Record, other *Page) {
+	p.records = append(p.records, median)
+	p.records = append(p.records, other.records...)
+	p.children = append(p.children, other.children...)
 }
 
 // mergeChildren merges the child at index `i` of `b` with
@@ -255,19 +255,19 @@ func (b *Page) mergeWith(median record.Record, other *Page) {
 // index `i` as the median key and removing the key from `b` in
 // the process. The original sibling node (i+1) is scheduled
 // for deletion.
-func (b *Page) mergeChildren(i int) {
+func (p *Page) mergeChildren(i int) {
 	var (
-		pivotRecord = b.records[i]
-		leftChild   = b.children[i]
-		rightChild  = b.children[i+1]
+		pivotRecord = p.records[i]
+		leftChild   = p.children[i]
+		rightChild  = p.children[i+1]
 	)
 
 	leftChild.mergeWith(pivotRecord, rightChild)
 
 	// Delete the key from the node
-	b.records = append(b.records[:i], b.records[i+1:]...)
+	p.records = append(p.records[:i], p.records[i+1:]...)
 	// Remove rightChild
-	b.children = append(b.children[:i+1], b.children[i+2:]...)
+	p.children = append(p.children[:i+1], p.children[i+2:]...)
 }
 
 func (p *Page) read() error {

@@ -9,15 +9,13 @@ type CollectionIterator struct {
 	handlers []HandleFunc
 }
 
-func (ci *CollectionIterator) ForEach(fn func(*Page, *Page) bool) *CollectionIterator {
+func (ci *CollectionIterator) forEach(fn func(*Page, *Page) bool) *CollectionIterator {
 	ci.handlers = append(ci.handlers, fn)
 	return ci
 }
 
 func (ci *CollectionIterator) Get() *Page {
 	for {
-		var modified bool
-
 		if ci.node.leaf {
 			return ci.node
 		}
@@ -28,21 +26,22 @@ func (ci *CollectionIterator) Get() *Page {
 		}
 
 		for _, handle := range ci.handlers {
-			if res := handle(ci.node, next); res {
-				modified = true
-			}
+			handle(ci.node, next)
 		}
 
-		if !modified {
-			ci.node = next
+		next = ci.next(ci.node)
+		if next == ci.node {
+			return ci.node
 		}
+
+		ci.node = next
 	}
 }
 
-// Iter returns an iterator that traverses a `Collection`
+// iter returns an iterator that traverses a `Collection`
 // of `Pages`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
-func (p *Page) Iter(next IterFunc) *CollectionIterator {
+func (p *Page) iter(next IterFunc) *CollectionIterator {
 	return &CollectionIterator{
 		next: next,
 		node: p,
@@ -71,11 +70,11 @@ func ByMaxPage(p *Page) *Page {
 // Max returns an iterator that terminates at the page
 // containing the largest key in the tree rooted at `p`.
 func (p *Page) Max() *CollectionIterator {
-	return p.Iter(ByMaxPage)
+	return p.iter(ByMaxPage)
 }
 
 // MinPage returns an iterator that terminates at the page
 // containing the smallest key in the tree rooted at `p`
 func (p *Page) MinPage() *CollectionIterator {
-	return p.Iter(ByMinPage)
+	return p.iter(ByMinPage)
 }
