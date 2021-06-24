@@ -435,7 +435,7 @@ func TestMergeChildren(t *testing.T) {
 	})
 }
 
-func TestPredecessorSuccessorKeyNode(t *testing.T) {
+func TestPredecessorSuccessorNode(t *testing.T) {
 	target := makePage(2, makeRecords("99"))
 	root := makePage(2, makeRecords("a", "c"),
 		makePage(2, makeRecords()),
@@ -443,11 +443,11 @@ func TestPredecessorSuccessorKeyNode(t *testing.T) {
 		makePage(2, makeRecords()),
 	)
 
-	if root.predecessorNode("c") != target {
+	if root.predecessorPage("c") != target {
 		t.Errorf("%v", root)
 	}
 
-	if root.predecessorNode("c") != root.successorNode("a") {
+	if root.predecessorPage("c") != root.successorPage("a") {
 		t.Errorf("root.predecessorKeyNode(index) should be root.successorKeyNode(index-1)")
 	}
 }

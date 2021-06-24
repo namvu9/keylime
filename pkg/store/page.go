@@ -201,7 +201,7 @@ func (p *Page) insertChildren(index int, children ...*Page) {
 	p.children = tmp
 }
 
-func (p *Page) predecessorNode(k string) *Page {
+func (p *Page) predecessorPage(k string) *Page {
 	if p.leaf {
 		return nil
 	}
@@ -214,7 +214,7 @@ func (p *Page) predecessorNode(k string) *Page {
 	return p.children[index].Max().Get()
 }
 
-func (p *Page) successorNode(k string) *Page {
+func (p *Page) successorPage(k string) *Page {
 	if p.leaf {
 		return nil
 	}
