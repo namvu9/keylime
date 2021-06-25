@@ -17,8 +17,8 @@ func TestGet(t *testing.T) {
 		tree = &Collection{root: root}
 	)
 
-	root.children[0].records[1] = record.New(root.children[0].records[1].Key(), []byte{99, 99, 99})
-	root.children[1].records[2] = record.New(root.children[1].records[2].Key(), []byte{100, 100, 100})
+	root.children[0].records[1] = record.New(root.children[0].records[1].Key, []byte{99, 99, 99})
+	root.children[1].records[2] = record.New(root.children[1].records[2].Key, []byte{100, 100, 100})
 
 	tree.Set("4", []byte{99, 99, 99})
 	tree.Set("10", []byte("I'm not cool"))
@@ -56,7 +56,7 @@ func TestSet(t *testing.T) {
 				makePage(2, makeRecords("p", "q")),
 				makePage(2, makeRecords("x", "y")),
 			)
-			tree = New(2, WithRoot(root))
+			tree = NewCollection(2, WithRoot(root))
 		)
 
 		tree.Set("d", []byte{99})
@@ -94,7 +94,7 @@ func TestSet(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Run("Delete missing key", func(t *testing.T) {
-		tree := New(2, WithRoot(makePage(2, makeRecords("5"))))
+		tree := NewCollection(2, WithRoot(makePage(2, makeRecords("5"))))
 
 		err := tree.Delete("10")
 		if err == nil {
@@ -104,7 +104,7 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
-		tree := New(2, WithRoot(
+		tree := NewCollection(2, WithRoot(
 			makePage(2, makeRecords("5")),
 		))
 
@@ -116,7 +116,7 @@ func TestDelete(t *testing.T) {
 	// Case 0: Delete from root with 1 key
 	t.Run("Delete from root with 1 key", func(t2 *testing.T) {
 		u := util{t2}
-		tree := New(2, WithRoot(makePage(2, makeRecords("5"),
+		tree := NewCollection(2, WithRoot(makePage(2, makeRecords("5"),
 			makePage(2, makeRecords("2")),
 			makePage(2, makeRecords("8")),
 		)))
@@ -150,7 +150,7 @@ func TestDelete(t *testing.T) {
 func TestBuildCollection(t *testing.T) {
 	u := util{t}
 
-	collection := New(2)
+	collection := NewCollection(2)
 
 	collection.Set("a", nil)
 	collection.Set("b", nil)

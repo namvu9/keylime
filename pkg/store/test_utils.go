@@ -30,7 +30,7 @@ func (u util) hasNChildren(name string, n int, node *Page) {
 func (u util) hasKeys(name string, keys []string, node *Page) {
 	var nKeys []string
 	for _, k := range node.records {
-		nKeys = append(nKeys, k.Key())
+		nKeys = append(nKeys, k.Key)
 	}
 	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, nKeys, keys)
 
@@ -39,7 +39,7 @@ func (u util) hasKeys(name string, keys []string, node *Page) {
 	}
 
 	for i, r := range node.records {
-		if r.Key() != keys[i] {
+		if r.Key != keys[i] {
 			u.t.Errorf(errMsg)
 		}
 	}

@@ -6,36 +6,28 @@ import (
 )
 
 type Record struct {
-	key   string
-	value []byte
-	ts    time.Time
-}
-
-func (r Record) Key() string {
-  return r.key
+	Key   string
+	Value []byte
+	TS    time.Time
 }
 
 func (r Record) CreatedAt() time.Time {
-  return r.ts
-}
-
-func (r Record) Value() []byte {
-  return r.value
+  return r.TS
 }
 
 func (r Record) IsLessThan(other Record) bool {
-	return strings.Compare(r.key, other.key) < 0
+	return strings.Compare(r.Key, other.Key) < 0
 }
 
 func (r Record) IsEqualTo(other *Record) bool {
-	return r.key == other.key
+	return r.Key == other.Key
 }
 
 
 func New(key string, value []byte) Record {
   return Record{
-    key: key,
-    value: value,
-    ts: time.Now(),
+    Key: key,
+    Value: value,
+    TS: time.Now(),
   }
 }

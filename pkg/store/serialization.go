@@ -10,6 +10,7 @@ func (b *Page) GobEncode() ([]byte, error) {
 	for _, c := range b.children {
 		cNode := new(Page)
 		cNode.ID = c.ID
+		cNode.leaf = c.leaf
 		refs = append(refs, cNode)
 	}
 	w := new(bytes.Buffer)

@@ -18,6 +18,8 @@ type Page struct {
 	records  []record.Record
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
+
+	c *Collection
 }
 
 func (p *Page) Get(k string) ([]byte, error) {
@@ -26,7 +28,7 @@ func (p *Page) Get(k string) ([]byte, error) {
 		return nil, errors.New("KeyNotFound")
 	}
 
-	return p.records[index].Value(), nil
+	return p.records[index].Value, nil
 }
 
 // Delete record with key `k` from page `p` if it exists.
@@ -39,34 +41,40 @@ func (p *Page) Delete(k string) error {
 
 	if p.leaf {
 		p.records = append(p.records[:index], p.records[index+1:]...)
-		return nil
+		p.save()
 	}
 
 	// Case 1: Predcessor has at least t keys
 	if beforeChild := p.children[index]; !beforeChild.Sparse() {
 		var (
-			maxPredPage = beforeChild.Max().forEach(handleSparsePage).Get()
+			maxPredPage = beforeChild.maxPage().forEach(handleSparsePage).Get()
 			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
 		)
 
 		p.records[index] = predRec
-		return maxPredPage.Delete(predRec.Key())
+		p.save()
+
+		return maxPredPage.Delete(predRec.Key)
 	}
 
 	// Case 2: Successor has at least t keys
 	if afterChild := p.children[index+1]; !afterChild.Sparse() {
 		var (
-			succ    = afterChild.MinPage().forEach(handleSparsePage).Get()
+			succ    = afterChild.minPage().forEach(handleSparsePage).Get()
 			succRec = succ.records[0]
 		)
 
 		p.records[index] = succRec
-		return succ.Delete(succRec.Key())
+		p.save()
+
+		return succ.Delete(succRec.Key)
 	}
 
 	// Case 3: Neither p nor s has >= t keys
 	// Merge s and p with k as median key
 	p.mergeChildren(index)
+	p.save()
+
 	return p.children[index].Delete(k)
 }
 
@@ -94,7 +102,9 @@ func (p *Page) Leaf() bool {
 }
 
 func (p *Page) newPage() *Page {
-	return newPage(p.t)
+	np := newPage(p.t)
+	np.c = p.c
+	return np
 }
 
 func newPage(t int) *Page {
@@ -112,11 +122,11 @@ func newPage(t int) *Page {
 // where the key could be possibly be found
 func (p *Page) keyIndex(k string) (index int, exists bool) {
 	for i, kv := range p.records {
-		if k == kv.Key() {
+		if k == kv.Key {
 			return i, true
 		}
 
-		if strings.Compare(k, kv.Key()) < 0 {
+		if strings.Compare(k, kv.Key) < 0 {
 			return i, false
 		}
 	}
@@ -134,14 +144,16 @@ func (p *Page) insert(k string, value []byte) int {
 	out := []record.Record{}
 
 	for i, key := range p.records {
-		if kv.Key() == key.Key() {
+		if kv.Key == key.Key {
 			p.records[i] = kv
+			p.save()
 			return i
 		}
 
 		if kv.IsLessThan(key) {
 			out = append(out, kv)
 			p.records = append(out, p.records[i:]...)
+			p.save()
 			return i
 		}
 
@@ -149,6 +161,8 @@ func (p *Page) insert(k string, value []byte) int {
 	}
 
 	p.records = append(out, kv)
+	p.save()
+
 	return len(p.records) - 1
 }
 
@@ -159,11 +173,12 @@ func (p *Page) splitChild(index int) {
 		panic("Cannot split non-full child")
 	}
 
+
 	newChild := p.newPage()
 	newChild.leaf = fullChild.leaf
 
 	medianKey, left, right := partitionMedian(fullChild.records)
-	p.insert(medianKey.Key(), medianKey.Value())
+	p.insert(medianKey.Key, medianKey.Value)
 
 	fullChild.records, newChild.records = left, right
 
@@ -173,10 +188,14 @@ func (p *Page) splitChild(index int) {
 	}
 
 	p.insertChildren(index+1, newChild)
+
+	newChild.save()
+	fullChild.save()
+	p.save()
 }
 
 func (p *Page) insertRecord(r record.Record) int {
-	return p.insert(r.Key(), r.Value())
+	return p.insert(r.Key, r.Value)
 }
 
 func (p *Page) setRecord(index int, r record.Record) {
@@ -211,7 +230,7 @@ func (p *Page) predecessorPage(k string) *Page {
 		return nil
 	}
 
-	return p.children[index].Max().Get()
+	return p.children[index].maxPage().Get()
 }
 
 func (p *Page) successorPage(k string) *Page {
@@ -224,7 +243,7 @@ func (p *Page) successorPage(k string) *Page {
 		return nil
 	}
 
-	return p.children[index+1].MinPage().Get()
+	return p.children[index+1].minPage().Get()
 }
 
 func (p *Page) prevChildSibling(index int) *Page {
@@ -308,6 +327,7 @@ func handleSparsePage(node, child *Page) {
 			child.children = append([]*Page{siblingLastChild}, child.children...)
 			p.children = p.children[:len(p.children)-1]
 		}
+		p.save()
 	} else if s != nil && !s.Sparse() {
 		var (
 			pivot         = node.records[index]
@@ -324,16 +344,20 @@ func handleSparsePage(node, child *Page) {
 			child.children = append(child.children, siblingFirstChild)
 			s.children = s.children[1:]
 		}
+		s.save()
 	} else if p != nil {
+		// TODO: Delete other node
 		node.mergeChildren(index - 1)
 	} else {
 		node.mergeChildren(index)
 	}
+
+	node.save()
 }
 
-func splitFullPage(node, child *Page){
+func splitFullPage(node, child *Page) {
 	if !child.Full() {
-		return 
+		return
 	}
 
 	index, ok := node.childIndex(child)
@@ -352,4 +376,12 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 	}
 
 	return 0, false
+}
+
+func (p *Page) save() {
+	p.c.writePage(p)
+}
+
+func (p *Page) load() error {
+	return p.c.loadPage(p)
 }

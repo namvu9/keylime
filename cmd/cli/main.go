@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -11,12 +12,26 @@ import (
 
 func main() {
 	var (
-		tree   = store.New(2)
+		cfg = &store.Config{
+			T:       2,
+			BaseDir: "./testdata",
+		}
+
+		s      = store.New(cfg)
 		reader = bufio.NewReader(os.Stdin)
 	)
 
-	// Read config
-	// Read origin table
+	err := s.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c, err := s.Collection("test")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(c)
 
 	for {
 		fmt.Print("KL> ")
@@ -29,23 +44,22 @@ func main() {
 
 		switch strings.ToLower(cmd) {
 		case "list":
-			fmt.Println("|--------|----------|-----------------------------|")
-			fmt.Println("|  Name  |   Root   |         Description         |")
-			fmt.Println("|--------|----------|-----------------------------|")
-			fmt.Println("| Origin | /origin  | This is the origin database |")
-			fmt.Println("|        |          |                             |")
-			fmt.Println("|--------|----------|-----------------------------|")
+			for _, collection := range s.Collections() {
+				fmt.Printf("\n-----------\nCollections\n-----------\n")
+				fmt.Println(collection.Name)
+				fmt.Printf("\n-----------\n")
+			}
 		case "set":
 			args := strings.SplitN(tokens[1], " ", 2)
-			err := tree.Set(args[0], []byte(args[1]))
+			err := c.Set(args[0], []byte(args[1]))
 			if err != nil {
 				fmt.Println(err)
 			}
 		case "get":
-			res := tree.Get(tokens[1])
+			res := c.Get(tokens[1])
 			fmt.Printf("%s\n", res)
 		case "delete":
-			err := tree.Delete(tokens[1])
+			err := c.Delete(tokens[1])
 			if err != nil {
 				fmt.Println(err)
 			}

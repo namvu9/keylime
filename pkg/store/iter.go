@@ -1,60 +1,68 @@
 package store
 
+import "fmt"
+
+// collection iterator.
 type iterFunc func(*Page) *Page
 type handleFunc func(*Page, *Page)
 
-type CollectionIterator struct {
-	node     *Page
-	next     iterFunc
-	handlers []handleFunc
+func (next iterFunc) done(p *Page) bool {
+	if p.leaf {
+		return true
+	}
+
+	return next(p) == p
 }
 
-func (ci *CollectionIterator) forEach(fn func(*Page, *Page)) *CollectionIterator {
-	ci.handlers = append(ci.handlers, fn)
+type collectionIterator struct {
+	node    *Page
+	next    iterFunc
+	handler handleFunc
+	err     error
+}
+
+func (ci *collectionIterator) forEach(fn func(*Page, *Page)) *collectionIterator {
+	ci.handler = fn
 	return ci
 }
 
-func (ci *CollectionIterator) Get() *Page {
-	for {
-		if ci.node.leaf {
-			return ci.node
+func (ci *collectionIterator) Get() *Page {
+	for !ci.next.done(ci.node) {
+		if ci.handler != nil {
+			ci.handler(ci.node, ci.next(ci.node))
 		}
 
-		next := ci.next(ci.node)
-		if next == ci.node {
-			return ci.node
-		}
+		ci.node = ci.next(ci.node)
 
-		for _, handle := range ci.handlers {
-			handle(ci.node, next)
+		if !ci.node.loaded {
+			// TODO: Return error
+			err := ci.node.load()
+			if err != nil {
+				fmt.Println("ERROR:", err)
+			}
 		}
-
-		next = ci.next(ci.node)
-		if next == ci.node {
-			return ci.node
-		}
-
-		ci.node = next
 	}
+
+	return ci.node
 }
 
-// Max returns an iterator that terminates at the page
+// maxPage returns an iterator that terminates at the page
 // containing the largest key in the tree rooted at `p`.
-func (p *Page) Max() *CollectionIterator {
+func (p *Page) maxPage() *collectionIterator {
 	return p.iter(byMaxPage)
 }
 
-// MinPage returns an iterator that terminates at the page
+// minPage returns an iterator that terminates at the page
 // containing the smallest key in the tree rooted at `p`
-func (p *Page) MinPage() *CollectionIterator {
+func (p *Page) minPage() *collectionIterator {
 	return p.iter(byMinPage)
 }
 
 // iter returns an iterator that traverses a `Collection`
 // of `Pages`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
-func (p *Page) iter(next iterFunc) *CollectionIterator {
-	return &CollectionIterator{
+func (p *Page) iter(next iterFunc) *collectionIterator {
+	return &collectionIterator{
 		next: next,
 		node: p,
 	}
