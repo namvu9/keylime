@@ -14,6 +14,7 @@ type Collection struct {
 	RootPage string
 	Name     string
 	T        int
+	Height   int
 	root     *Page
 	baseDir  string
 	s        *Store
@@ -47,6 +48,7 @@ func (c *Collection) Set(k string, value []byte) error {
 		s.children = []*Page{c.root}
 		s.splitChild(0)
 		c.setRoot(s)
+		c.Height++
 
 		s.save()
 		c.save()
@@ -85,6 +87,7 @@ func (c *Collection) Delete(k string) error {
 	if c.root.Empty() && !c.root.Leaf() {
 		c.root = c.root.children[0]
 		c.RootPage = c.root.ID
+		c.Height--
 		return c.save()
 	}
 
@@ -110,10 +113,6 @@ func (c *Collection) loadPage(p *Page) error {
 		return fmt.Errorf("Page %s has no reference to parent collection", p.ID)
 	}
 
-	if p.loaded {
-		return nil
-	}
-
 	data, err := ioutil.ReadFile(path.Join(c.baseDir, p.ID))
 	if err != nil {
 		return err
@@ -126,7 +125,7 @@ func (c *Collection) loadPage(p *Page) error {
 	}
 
 	p.loaded = true
-	
+
 	if !p.leaf {
 		for _, child := range p.children {
 			child.c = p.c

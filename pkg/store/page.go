@@ -114,6 +114,7 @@ func newPage(t int) *Page {
 		records:  make([]record.Record, 0, 2*t-1),
 		leaf:     false,
 		t:        t,
+		loaded:   true,
 	}
 }
 
@@ -172,7 +173,6 @@ func (p *Page) splitChild(index int) {
 	if !fullChild.Full() {
 		panic("Cannot split non-full child")
 	}
-
 
 	newChild := p.newPage()
 	newChild.leaf = fullChild.leaf

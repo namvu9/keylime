@@ -31,8 +31,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(c)
-
 	for {
 		fmt.Print("KL> ")
 

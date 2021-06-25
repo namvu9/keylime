@@ -137,6 +137,7 @@ func (s Store) writeCollection(c *Collection) error {
 	}
 
 	fmt.Println("Wrote collection", c.Name)
+	fmt.Println(c)
 
 	return nil
 }
