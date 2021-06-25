@@ -1,12 +1,12 @@
 package store
 
-type IterFunc func(*Page) *Page
-type HandleFunc func(*Page, *Page)
+type iterFunc func(*Page) *Page
+type handleFunc func(*Page, *Page)
 
 type CollectionIterator struct {
 	node     *Page
-	next     IterFunc
-	handlers []HandleFunc
+	next     iterFunc
+	handlers []handleFunc
 }
 
 func (ci *CollectionIterator) forEach(fn func(*Page, *Page)) *CollectionIterator {
@@ -53,14 +53,14 @@ func (p *Page) MinPage() *CollectionIterator {
 // iter returns an iterator that traverses a `Collection`
 // of `Pages`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
-func (p *Page) iter(next IterFunc) *CollectionIterator {
+func (p *Page) iter(next iterFunc) *CollectionIterator {
 	return &CollectionIterator{
 		next: next,
 		node: p,
 	}
 }
 
-func byKey(k string) IterFunc {
+func byKey(k string) iterFunc {
 	return func(p *Page) *Page {
 		index, exists := p.keyIndex(k)
 		if exists {

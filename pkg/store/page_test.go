@@ -1,9 +1,36 @@
 package store
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
+
+	"github.com/namvu9/keylime/pkg/record"
 )
+
+func TestPageGet(t *testing.T) {
+	t.Run("Missing Key", func(t *testing.T) {
+		root := makePage(2, makeRecords())
+		_, err := root.Get("N")
+		if err == nil {
+			t.Errorf("Expected error but got nil")
+		}
+	})
+
+	t.Run("should work", func(t *testing.T) {
+		root := makePage(2, makeRecords("a"))
+		root.records[0] = record.New("a", []byte{99})
+
+		v, err := root.Get("a")
+		if err != nil {
+			t.Errorf("Expected nil, but got error")
+		}
+
+		if bytes.Compare([]byte{99}, v) != 0 {
+			t.Errorf("Want=%v, Got=%v", []byte{99}, v)
+		}
+	})
+}
 
 func TestPageIndex(t *testing.T) {
 	for i, test := range []struct {
