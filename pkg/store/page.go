@@ -34,6 +34,13 @@ func (p *Page) Get(k string) ([]byte, error) {
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
 func (p *Page) Delete(k string) error {
+	if !p.loaded {
+		err := p.load()
+		if err != nil {
+			return err
+		}
+	}
+
 	index, exists := p.keyIndex(k)
 	if !exists {
 		return fmt.Errorf("KeyNotFoundError")
@@ -42,10 +49,12 @@ func (p *Page) Delete(k string) error {
 	if p.leaf {
 		p.records = append(p.records[:index], p.records[index+1:]...)
 		p.save()
+		return nil
 	}
 
 	// Case 1: Predcessor has at least t keys
 	if beforeChild := p.children[index]; !beforeChild.Sparse() {
+		beforeChild.load()
 		var (
 			maxPredPage = beforeChild.maxPage().forEach(handleSparsePage).Get()
 			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
@@ -59,6 +68,7 @@ func (p *Page) Delete(k string) error {
 
 	// Case 2: Successor has at least t keys
 	if afterChild := p.children[index+1]; !afterChild.Sparse() {
+		afterChild.load()
 		var (
 			succ    = afterChild.minPage().forEach(handleSparsePage).Get()
 			succRec = succ.records[0]
@@ -278,6 +288,13 @@ func (p *Page) mergeChildren(i int) {
 		leftChild   = p.children[i]
 		rightChild  = p.children[i+1]
 	)
+
+	if !leftChild.loaded {
+		leftChild.load()
+	}
+	if !rightChild.loaded {
+		rightChild.load()
+	}
 
 	leftChild.mergeWith(pivotRecord, rightChild)
 
