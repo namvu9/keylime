@@ -144,9 +144,9 @@ func TestInsertChild(t *testing.T) {
 	u := util{t}
 	t.Run("Prepend", func(t *testing.T) {
 		var (
-			childA   = newNodeWithKeys(2, []string{"2"})
-			childC   = newNodeWithKeys(2, []string{"8"})
-			newChild = newNodeWithKeys(2, []string{"10"})
+			childA   = newPageWithKeys(2, []string{"2"})
+			childC   = newPageWithKeys(2, []string{"8"})
+			newChild = newPageWithKeys(2, []string{"10"})
 			root     = makePage(2, makeRecords("5"),
 				childA,
 				childC,
@@ -162,10 +162,10 @@ func TestInsertChild(t *testing.T) {
 
 	t.Run("Insert (middle)", func(t *testing.T) {
 		var (
-			root     = newNodeWithKeys(2, []string{"5"})
-			childA   = newNodeWithKeys(2, []string{"2"})
-			childC   = newNodeWithKeys(2, []string{"8"})
-			newChild = newNodeWithKeys(2, []string{"10"})
+			root     = newPageWithKeys(2, []string{"5"})
+			childA   = newPageWithKeys(2, []string{"2"})
+			childC   = newPageWithKeys(2, []string{"8"})
+			newChild = newPageWithKeys(2, []string{"10"})
 		)
 
 		root.children = []*Page{childA, childC}
@@ -177,10 +177,10 @@ func TestInsertChild(t *testing.T) {
 
 	t.Run("Append", func(t *testing.T) {
 		var (
-			root     = newNodeWithKeys(2, []string{"5"})
-			childA   = newNodeWithKeys(2, []string{"2"})
-			childC   = newNodeWithKeys(2, []string{"8"})
-			newChild = newNodeWithKeys(2, []string{"10"})
+			root     = newPageWithKeys(2, []string{"5"})
+			childA   = newPageWithKeys(2, []string{"2"})
+			childC   = newPageWithKeys(2, []string{"8"})
+			newChild = newPageWithKeys(2, []string{"10"})
 		)
 
 		root.children = []*Page{childA, childC}
@@ -192,8 +192,8 @@ func TestInsertChild(t *testing.T) {
 
 	t.Run("Empty", func(t *testing.T) {
 		var (
-			root     = newNodeWithKeys(2, []string{"5"})
-			newChild = newNodeWithKeys(2, []string{"10"})
+			root     = newPageWithKeys(2, []string{"5"})
+			newChild = newPageWithKeys(2, []string{"10"})
 		)
 
 		root.insertChildren(0, newChild)
@@ -205,10 +205,10 @@ func TestInsertChild(t *testing.T) {
 	t.Run("Multiple into empty", func(t *testing.T) {
 		u := util{t}
 		var (
-			root   = newNodeWithKeys(2, []string{"5"})
-			childA = newNodeWithKeys(2, []string{"2"})
-			childB = newNodeWithKeys(2, []string{"2"})
-			childC = newNodeWithKeys(2, []string{"8"})
+			root   = newPageWithKeys(2, []string{"5"})
+			childA = newPageWithKeys(2, []string{"2"})
+			childB = newPageWithKeys(2, []string{"2"})
+			childC = newPageWithKeys(2, []string{"8"})
 		)
 
 		root.insertChildren(0, childA, childB, childC)
@@ -220,12 +220,12 @@ func TestInsertChild(t *testing.T) {
 	t.Run("Insert multiple", func(t *testing.T) {
 		u := util{t}
 		var (
-			childA = newNodeWithKeys(2, []string{"2"})
-			childB = newNodeWithKeys(2, []string{"2"})
-			childC = newNodeWithKeys(2, []string{"8"})
+			childA = newPageWithKeys(2, []string{"2"})
+			childB = newPageWithKeys(2, []string{"2"})
+			childC = newPageWithKeys(2, []string{"8"})
 
-			newChildA = newNodeWithKeys(2, []string{"8"})
-			newChildB = newNodeWithKeys(2, []string{"8"})
+			newChildA = newPageWithKeys(2, []string{"8"})
+			newChildB = newPageWithKeys(2, []string{"8"})
 
 			root = makePage(2, makeRecords("5"),
 				childA,
@@ -241,14 +241,15 @@ func TestInsertChild(t *testing.T) {
 	})
 }
 
-func TestDeleteNode(t *testing.T) {
+func TestDeletePage(t *testing.T) {
 	t.Run("Missing key", func(t *testing.T) {
-		node := newNodeWithKeys(2, []string{"a", "c"})
-		err := node.Delete("b")
+		page := newPageWithKeys(2, []string{"a", "c"})
+		err := page.Delete("b")
 		if err == nil {
 			t.Errorf("deleteKey should return error if key is not found")
 		}
 	})
+
 	t.Run("Delete key in leaf", func(t *testing.T) {
 		u := util{t}
 		for index, test := range []struct {
@@ -503,7 +504,7 @@ func TestIsSparse(t *testing.T) {
 		{3, []string{"1", "2"}, true},
 		{3, []string{"1", "2", "3"}, false},
 	} {
-		node := newNodeWithKeys(test.t, test.keys)
+		node := newPageWithKeys(test.t, test.keys)
 
 		if got := node.Sparse(); got != test.wantSparse {
 			t.Errorf("%d: Got=%v; Want=%v", i, got, test.wantSparse)

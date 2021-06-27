@@ -1,25 +1,11 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path"
 
 	"github.com/namvu9/keylime/pkg/record"
 )
-
-//type Index interface {
-//Insert(context.Context, record.Record) error
-//Delete(context.Context, string) error
-//Update(context.Context, record.Record) error
-//Get(context.Context, string) error
-
-//Save() error
-//}
 
 // KeyIndex represents a B-tree that indexes records by key
 type KeyIndex struct {
@@ -28,24 +14,29 @@ type KeyIndex struct {
 	T        int
 	baseDir  string
 
-	s        *Store
 	writeBuf map[*Page]bool
 	c        *Collection
 	root     *Page
+
+	storage PageReadWriter
+}
+
+type PageReadWriter interface {
+	Write(*Page) error
+	Read(*Page) error
 }
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	if ki.root.Full() {
-		s := ki.newPage()
-		s.children = []*Page{ki.root}
-		s.splitChild(0)
+		newRoot := ki.newPage()
+		newRoot.children = []*Page{ki.root}
+		newRoot.splitChild(0)
 
-		ki.RootPage = s.ID
-		ki.root = s
+		ki.RootPage = newRoot.ID
+		ki.root = newRoot
 		ki.Height++
 
-
-		s.save()
+		newRoot.save()
 		ki.c.save()
 	}
 
@@ -56,20 +47,21 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 }
 
 func (ki *KeyIndex) loadPage(p *Page) error {
-	if ki == nil {
-		return fmt.Errorf("Page %s has no reference to parent collection", p.ID)
+	if ki.storage == nil {
+		return fmt.Errorf("Reading from nil PageReadWriter")
 	}
 
-	data, err := ioutil.ReadFile(path.Join(ki.baseDir, p.ID))
-	if err != nil {
-		return err
-	}
+	//data, err := ioutil.ReadFile(path.Join(ki.baseDir, p.ID))
+	//if err != nil {
+		//return err
+	//}
 
-	dec := gob.NewDecoder(bytes.NewBuffer(data))
-	err = dec.Decode(p)
-	if err != nil {
-		return err
-	}
+	//dec := gob.NewDecoder(bytes.NewBuffer(data))
+	//err = dec.Decode(p)
+	//if err != nil {
+		//return err
+	//}
+	ki.storage.Read(p)
 
 	p.loaded = true
 
@@ -82,7 +74,7 @@ func (ki *KeyIndex) loadPage(p *Page) error {
 	return nil
 }
 
-func (ki *KeyIndex) FlushWriteBuffer() error {
+func (ki *KeyIndex) flushWriteBuffer() error {
 	defer func() {
 		for p := range ki.writeBuf {
 			delete(ki.writeBuf, p)
@@ -90,14 +82,19 @@ func (ki *KeyIndex) FlushWriteBuffer() error {
 	}()
 
 	for p := range ki.writeBuf {
-		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(p)
-		if err != nil {
-			return err
+		if ki.storage == nil {
+			return fmt.Errorf("Writing to nil PageReadWriter")
 		}
 
-		err = os.WriteFile(path.Join(ki.baseDir, p.ID), buf.Bytes(), 0755)
+		//var buf bytes.Buffer
+		//enc := gob.NewEncoder(&buf)
+		//err := enc.Encode(p)
+		//if err != nil {
+			//return err
+		//}
+
+		//err = os.WriteFile(path.Join(ki.baseDir, p.ID), buf.Bytes(), 0755)
+		err := ki.storage.Write(p)
 		if err != nil {
 			return err
 		}
@@ -114,6 +111,7 @@ func (ki *KeyIndex) writePage(p *Page) {
 	ki.writeBuf[p] = true
 }
 
+// TODO: IMPLEMENT
 func (ki *KeyIndex) Save() error {
 	return nil
 }
@@ -131,7 +129,7 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 		return err
 	}
 
-	if err := ki.FlushWriteBuffer(); err != nil {
+	if err := ki.flushWriteBuffer(); err != nil {
 		return err
 	}
 

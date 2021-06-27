@@ -399,10 +399,18 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 	return 0, false
 }
 
-func (p *Page) save() {
-	p.ki.writePage(p)
+func (p *Page) save() error{
+	if p.ki == nil {
+		return fmt.Errorf("Page has no reference to parent KeyIndex")
+	}
+
+ p.ki.writePage(p)
+ return nil
 }
 
 func (p *Page) load() error {
+	if p.ki == nil {
+		return fmt.Errorf("Page has no reference to parent KeyIndex")
+	}
 	return p.ki.loadPage(p)
 }

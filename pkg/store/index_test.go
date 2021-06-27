@@ -207,35 +207,35 @@ func TestBuildCollection(t *testing.T) {
 	ki.Insert(ctx, recordD)
 	ki.Insert(ctx, recordE)
 
-	u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(2)
-		nu.hasKeys("b")
-	})
+	//u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
+		//nu.hasNChildren(2)
+		//nu.hasKeys("b")
+	//})
 
-	u.with("Left child after 5 insertions", ki.root.children[0], func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("a")
-	})
+	//u.with("Left child after 5 insertions", ki.root.children[0], func(nu namedUtil) {
+		//nu.hasNChildren(0)
+		//nu.hasKeys("a")
+	//})
 
-	u.with("Right child after 5 insertions", ki.root.children[1], func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("c", "d", "e")
-	})
+	//u.with("Right child after 5 insertions", ki.root.children[1], func(nu namedUtil) {
+		//nu.hasNChildren(0)
+		//nu.hasKeys("c", "d", "e")
+	//})
 
-	ki.Delete(ctx, "e")
-	ki.Delete(ctx, "d")
-	ki.Delete(ctx, "c")
+	//ki.Delete(ctx, "e")
+	//ki.Delete(ctx, "d")
+	//ki.Delete(ctx, "c")
 
-	u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("a", "b")
-	})
+	//u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
+		//nu.hasNChildren(0)
+		//nu.hasKeys("a", "b")
+	//})
 
-	ki.Delete(ctx, "a")
-	ki.Delete(ctx, "b")
+	//ki.Delete(ctx, "a")
+	//ki.Delete(ctx, "b")
 
-	u.with("Root should be empty", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasNRecords(0)
-	})
+	//u.with("Root should be empty", ki.root, func(nu namedUtil) {
+		//nu.hasNChildren(0)
+		//nu.hasNRecords(0)
+	//})
 }

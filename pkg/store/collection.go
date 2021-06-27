@@ -7,14 +7,23 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
+type collectionIndex interface {
+	Insert(context.Context, record.Record) error
+	Delete(context.Context, string) error
+	Update(context.Context, record.Record) error
+	Get(context.Context, string) error
+
+	Save() error
+}
+
 // A Collection is a named container for a group of records
 type Collection struct {
-	Name     string
-	baseDir  string
+	Name    string
+	baseDir string
 
 	s                *Store
 	primaryIndex     KeyIndex
-	//SecondaryIndexes []Index
+	SecondaryIndexes []collectionIndex
 }
 
 // Get the value associated with the key `k`, if a record

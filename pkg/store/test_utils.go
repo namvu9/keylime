@@ -109,10 +109,11 @@ func makeNewRecords(keys []string) (out []record.Record) {
 	return
 }
 
-func newNodeWithKeys(t int, keys []string) *Page {
+func newPageWithKeys(t int, keys []string) *Page {
 	return &Page{
 		t:       t,
 		records: makeNewRecords(keys),
+		loaded: true,
 	}
 }
 
@@ -120,9 +121,11 @@ func makePage(t int, records []record.Record, children ...*Page) *Page {
 	root := newPage(t)
 	root.records = records
 	root.children = children
+	root.loaded = true
 
 	for _, child := range children {
 		child.t = t
+		child.loaded = true
 	}
 
 	if len(children) == 0 {
