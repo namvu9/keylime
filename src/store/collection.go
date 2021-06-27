@@ -21,11 +21,8 @@ type Collection struct {
 	Name    string
 	baseDir string
 
-	s                *Store
-	primaryIndex     *KeyIndex
-	SecondaryIndexes []collectionIndex
-
-	storage ReadWriterTo
+	primaryIndex *KeyIndex
+	storage      ReadWriterTo
 }
 
 // Get the value associated with the key `k`, if a record
@@ -56,6 +53,11 @@ func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 }
 
 func (c *Collection) Save() error {
+	err := c.primaryIndex.Save()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -36,6 +36,7 @@ func (u util) hasKeys(name string, keys []string, node *page) {
 
 	if len(node.records) != len(keys) {
 		u.t.Errorf(errMsg)
+		return
 	}
 
 	for i, r := range node.records {
@@ -118,10 +119,9 @@ func newPageWithKeys(t int, keys []string) *page {
 }
 
 func makePage(t int, records []record.Record, children ...*page) *page {
-	root := newPage(t)
+	root := newPage(t, false)
 	root.records = records
 	root.children = children
-	root.loaded = true
 
 	for _, child := range children {
 		child.t = t

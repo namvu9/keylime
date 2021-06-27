@@ -1,8 +1,8 @@
 package store
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/namvu9/keylime/src/record"
@@ -11,24 +11,22 @@ import (
 func TestGet(t *testing.T) {
 	ctx := context.Background()
 	var (
-		root = makePage(2, makeRecords("10"),
-			makePage(2, makeRecords("1", "4", "8")),
-			makePage(2, makeRecords("12", "16", "20")),
+		root = makePage(2, makeRecords("g"),
+			makePage(2, []record.Record{
+				record.New("a", nil),
+				record.New("b", nil),
+				record.New("c", []byte{100, 100, 100}),
+			}),
+			makePage(2, []record.Record{
+				record.New("h", nil),
+				record.New("i", []byte{99, 99, 99}),
+				record.New("j", nil),
+			}),
 		)
 		ki = newKeyIndex(2)
 	)
 
-	recordA := record.New(root.children[0].records[1].Key, []byte{99, 99, 99})
-	recordB := record.New(root.children[1].records[2].Key, []byte{100, 100, 100})
-	recordC := record.New("100", []byte("4"))
-
-	root.children[0].records[1] = recordA
-	root.children[1].records[2] = recordB
-
-	ki.Insert(ctx, recordA)
-	ki.Insert(ctx, recordB)
-	ki.Insert(ctx, recordC)
-	ki.Insert(ctx, record.New("10", []byte("I'm not cool")))
+	ki.root = root
 
 	for i, test := range []struct {
 		k    string
@@ -37,12 +35,9 @@ func TestGet(t *testing.T) {
 		{"0", nil},
 		{"5", nil},
 		{"1000", nil},
-		{"4", []byte{99, 99, 99}},
-		{"20", []byte{100, 100, 100}},
-		{"10", []byte("I'm not cool")},
-		{"100", []byte(fmt.Sprint(4))},
+		{"c", []byte{100, 100, 100}},
+		{"i", []byte{99, 99, 99}},
 	} {
-
 		got, _ := ki.Get(ctx, test.k)
 
 		if test.want == nil && got != nil {
@@ -50,12 +45,12 @@ func TestGet(t *testing.T) {
 		}
 
 		if test.want != nil && got == nil {
-			fmt.Println(i, "should not have been nil")
+			t.Errorf("%s: should not have been nil", test.k)
 		}
 
-		//if test.want != nil && bytes.Compare(got.Value, test.want) != 0 {
-			//t.Errorf("[TestSearch] %d, key %v: Got %s; want %s ", i, test.k, got, test.want)
-		//}
+		if test.want != nil && bytes.Compare(got.Value, test.want) != 0 {
+			t.Errorf("[TestGet] %d, key %v: Got %s; want %s ", i, test.k, got.Value, test.want)
+		}
 	}
 }
 
@@ -120,7 +115,7 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Delete missing key", func(t *testing.T) {
 		ki := KeyIndex{
-			T: 2,
+			T:    2,
 			root: makePage(2, makeRecords("5")),
 		}
 
@@ -133,7 +128,7 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
 		ki := KeyIndex{
-			T: 2,
+			T:    2,
 			root: makePage(2, makeRecords("5")),
 		}
 
@@ -149,9 +144,9 @@ func TestDelete(t *testing.T) {
 		ki := KeyIndex{
 			T: 2,
 			root: makePage(2, makeRecords("5"),
-			makePage(2, makeRecords("2")),
-			makePage(2, makeRecords("8")),
-		),
+				makePage(2, makeRecords("2")),
+				makePage(2, makeRecords("8")),
+			),
 		}
 
 		ki.Delete(ctx, "5")
@@ -166,7 +161,7 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete from leaf", func(t *testing.T) {
 		var (
 			root = makePage(2, makeRecords("1", "2", "3"))
-			ki = &KeyIndex{root: root}
+			ki   = &KeyIndex{root: root}
 		)
 
 		ki.Delete(ctx, "2")
@@ -207,35 +202,35 @@ func TestBuildCollection(t *testing.T) {
 	ki.Insert(ctx, recordD)
 	ki.Insert(ctx, recordE)
 
-	//u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
-		//nu.hasNChildren(2)
-		//nu.hasKeys("b")
-	//})
+	u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
+		nu.hasNChildren(2)
+		nu.hasKeys("b")
+	})
 
-	//u.with("Left child after 5 insertions", ki.root.children[0], func(nu namedUtil) {
-		//nu.hasNChildren(0)
-		//nu.hasKeys("a")
-	//})
+	u.with("Left child after 5 insertions", ki.root.children[0], func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("a")
+	})
 
-	//u.with("Right child after 5 insertions", ki.root.children[1], func(nu namedUtil) {
-		//nu.hasNChildren(0)
-		//nu.hasKeys("c", "d", "e")
-	//})
+	u.with("Right child after 5 insertions", ki.root.children[1], func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("c", "d", "e")
+	})
 
-	//ki.Delete(ctx, "e")
-	//ki.Delete(ctx, "d")
-	//ki.Delete(ctx, "c")
+	ki.Delete(ctx, "e")
+	ki.Delete(ctx, "d")
+	ki.Delete(ctx, "c")
 
-	//u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
-		//nu.hasNChildren(0)
-		//nu.hasKeys("a", "b")
-	//})
+	u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasKeys("a", "b")
+	})
 
-	//ki.Delete(ctx, "a")
-	//ki.Delete(ctx, "b")
+	ki.Delete(ctx, "a")
+	ki.Delete(ctx, "b")
 
-	//u.with("Root should be empty", ki.root, func(nu namedUtil) {
-		//nu.hasNChildren(0)
-		//nu.hasNRecords(0)
-	//})
+	u.with("Root should be empty", ki.root, func(nu namedUtil) {
+		nu.hasNChildren(0)
+		nu.hasNRecords(0)
+	})
 }

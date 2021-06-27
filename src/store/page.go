@@ -111,18 +111,18 @@ func (p *page) Leaf() bool {
 	return p.leaf
 }
 
-func (p *page) newPage() *page {
-	np := newPage(p.t)
+func (p *page) newPage(leaf bool) *page {
+	np := newPage(p.t, leaf)
 	np.ki = p.ki
 	return np
 }
 
-func newPage(t int) *page {
+func newPage(t int, leaf bool) *page {
 	return &page{
 		ID:       uuid.New().String(),
 		children: []*page{},
 		records:  make([]record.Record, 0, 2*t-1),
-		leaf:     false,
+		leaf:     leaf,
 		t:        t,
 		loaded:   true,
 	}
@@ -188,8 +188,7 @@ func (p *page) splitChild(index int) {
 		panic("Cannot split non-full child")
 	}
 
-	newChild := p.newPage()
-	newChild.leaf = fullChild.leaf
+	newChild := p.newPage(fullChild.leaf)
 
 	medianKey, left, right := partitionMedian(fullChild.records)
 	p.insert(medianKey.Key, medianKey.Value)

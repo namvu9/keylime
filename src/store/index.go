@@ -12,13 +12,10 @@ type KeyIndex struct {
 	RootPage string
 	Height   int
 	T        int
-	baseDir  string
 
 	writeBuf map[*page]bool
-	c        *Collection
 	root     *page
-
-	storage PageReadWriter
+	storage  PageReadWriter
 }
 
 type PageReadWriter interface {
@@ -28,7 +25,7 @@ type PageReadWriter interface {
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	if ki.root.Full() {
-		newRoot := ki.newPage()
+		newRoot := ki.newPage(false)
 		newRoot.children = []*page{ki.root}
 		newRoot.splitChild(0)
 
@@ -37,7 +34,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 		ki.Height++
 
 		newRoot.save()
-		ki.c.Save()
+		ki.Save()
 	}
 
 	page := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
@@ -103,8 +100,8 @@ func (ki *KeyIndex) Save() error {
 	return nil
 }
 
-func (ki *KeyIndex) newPage() *page {
-	p := newPage(ki.T)
+func (ki *KeyIndex) newPage(leaf bool) *page {
+	p := newPage(ki.T, leaf)
 	p.ki = ki
 	return p
 }
@@ -134,7 +131,7 @@ func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error)
 	node := ki.root.iter(byKey(key)).Get()
 	i, ok := node.keyIndex(key)
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("KeyNotFound")
 	}
 
 	return &node.records[i], nil
@@ -146,8 +143,7 @@ func newKeyIndex(t int) *KeyIndex {
 		writeBuf: make(map[*page]bool),
 		storage:  MockPageStorage{},
 	}
-	ki.root = ki.newPage()
-	ki.root.leaf = true
+	ki.root = ki.newPage(true)
 	return ki
 }
 
@@ -160,4 +156,23 @@ func (mps MockPageStorage) Write(p *page) error {
 func (mps MockPageStorage) Read(p *page) error {
 	p.loaded = true
 	return nil
+}
+
+// OrderIndex indexes records by their order with respect to
+// some attribute
+type OrderIndex struct {
+	head interface{}
+	tail interface{}
+}
+
+func (oi *OrderIndex) Insert(r *record.Record) error {
+	return nil
+}
+
+func (oi *OrderIndex) Delete(r *record.Record) error {
+	return nil
+}
+
+func (c *Collection) OrderBy(attr interface{}) *OrderIndex {
+	return &OrderIndex{}
 }

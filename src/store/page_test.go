@@ -46,7 +46,7 @@ func TestPageIndex(t *testing.T) {
 		{"3", []string{"1", "2", "4"}, 2, false},
 		{"10", []string{"10", "5"}, 0, true},
 	} {
-		root := newPage(100)
+		root := newPage(100, true)
 		root.records = makeNewRecords(test.keys)
 		gotIndex, gotExists := root.keyIndex(test.k)
 
@@ -69,8 +69,7 @@ func TestInsertRecord(t *testing.T) {
 		{"6", []string{"1", "3", "5"}, []string{"1", "3", "5", "6"}},
 		{"10", []string{"1", "3", "5"}, []string{"1", "10", "3", "5"}},
 	} {
-		r := newPage(3)
-		r.leaf = true
+		r := newPage(3, true)
 		r.records = makeNewRecords(test.keys)
 
 		r.insert(test.k, nil)
@@ -481,7 +480,7 @@ func TestPredecessorSuccessorNode(t *testing.T) {
 }
 
 func TestFull(t *testing.T) {
-	root := newPage(2)
+	root := newPage(2, true)
 
 	if got := root.Full(); got {
 		t.Errorf("New(2).IsFull() = %v; want false", got)

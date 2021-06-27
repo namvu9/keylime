@@ -45,12 +45,6 @@ func handleCmd(ctx context.Context, cmd string, tokens []string) error {
 	}
 
 	switch strings.ToLower(cmd) {
-	case "list":
-		for _, collection := range s.Collections() {
-			fmt.Printf("\n-----------\nCollections\n-----------\n")
-			fmt.Println(collection.Name)
-			fmt.Printf("\n-----------\n")
-		}
 	case "set":
 		args := strings.SplitN(tokens[1], " ", 2)
 		return c.Set(ctx, args[0], []byte(args[1]))

@@ -45,10 +45,6 @@ type Store struct {
 }
 
 func (s Store) Collection(name string) (*Collection, error) {
-	if !s.initialized {
-		return nil, fmt.Errorf("Store has not been initialized")
-	}
-
 	c, ok := s.collections[name]
 	if !ok {
 		c = newCollection(name)
@@ -74,16 +70,6 @@ func (s Store) Collection(name string) (*Collection, error) {
 	return c, nil
 }
 
-// Collections returns a list of collections in a store
-func (s Store) Collections() []*Collection {
-	var out []*Collection
-	for _, c := range s.collections {
-		out = append(out, c)
-	}
-
-	return out
-}
-
 // New instantiates a store with the provided config and
 // options
 func New(cfg *Config) *Store {
@@ -92,6 +78,11 @@ func New(cfg *Config) *Store {
 		t:           cfg.T,
 		collections: make(map[string]*Collection),
 		storage:     cfg.Storage,
+	}
+
+	if cfg.Storage == nil {
+		fmt.Println("Warning: Storage has not been initialized")
+		s.storage = &MockReadWriterTo{}
 	}
 
 	return s
