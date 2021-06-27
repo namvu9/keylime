@@ -93,7 +93,7 @@ func (s Store) createCollection(name string) (*Collection, error) {
 		Name: name,
 		s:    &s,
 		primaryIndex: KeyIndex{
-			writeBuf: make(map[*Page]bool),
+			writeBuf: make(map[*page]bool),
 			baseDir:  path.Join(s.baseDir, name),
 			T:        s.t,
 			root:     root,

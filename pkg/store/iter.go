@@ -2,10 +2,10 @@ package store
 
 import "fmt"
 
-type iterFunc func(*Page) *Page
-type handleFunc func(*Page, *Page)
+type iterFunc func(*page) *page
+type handleFunc func(*page, *page)
 
-func (next iterFunc) done(p *Page) bool {
+func (next iterFunc) done(p *page) bool {
 	if !p.loaded {
 		// TODO: handle error
 		err := p.load()
@@ -23,7 +23,7 @@ func (next iterFunc) done(p *Page) bool {
 }
 
 type collectionIterator struct {
-	node    *Page
+	node    *page
 	next    iterFunc
 	handler handleFunc
 	err     error
@@ -34,7 +34,7 @@ func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 	return ci
 }
 
-func (ci *collectionIterator) Get() *Page {
+func (ci *collectionIterator) Get() *page {
 	for !ci.next.done(ci.node) {
 		if ci.handler != nil {
 			ci.handler(ci.node, ci.next(ci.node))
@@ -48,20 +48,20 @@ func (ci *collectionIterator) Get() *Page {
 
 // maxPage returns an iterator that terminates at the page
 // containing the largest key in the tree rooted at `p`.
-func (p *Page) maxPage() *collectionIterator {
+func (p *page) maxPage() *collectionIterator {
 	return p.iter(byMaxPage)
 }
 
 // minPage returns an iterator that terminates at the page
 // containing the smallest key in the tree rooted at `p`
-func (p *Page) minPage() *collectionIterator {
+func (p *page) minPage() *collectionIterator {
 	return p.iter(byMinPage)
 }
 
 // iter returns an iterator that traverses a `Collection`
 // of `Pages`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
-func (p *Page) iter(next iterFunc) *collectionIterator {
+func (p *page) iter(next iterFunc) *collectionIterator {
 	return &collectionIterator{
 		next: next,
 		node: p,
@@ -69,7 +69,7 @@ func (p *Page) iter(next iterFunc) *collectionIterator {
 }
 
 func byKey(k string) iterFunc {
-	return func(p *Page) *Page {
+	return func(p *page) *page {
 		index, exists := p.keyIndex(k)
 		if exists {
 			return p
@@ -79,10 +79,10 @@ func byKey(k string) iterFunc {
 	}
 }
 
-func byMinPage(p *Page) *Page {
+func byMinPage(p *page) *page {
 	return p.children[0]
 }
 
-func byMaxPage(p *Page) *Page {
+func byMaxPage(p *page) *page {
 	return p.children[len(p.children)-1]
 }

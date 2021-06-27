@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (p Page) String() string {
+func (p page) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "-----\nPage\n-----\n")
 	if p.ID != "" {

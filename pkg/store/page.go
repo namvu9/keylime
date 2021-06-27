@@ -9,12 +9,12 @@ import (
 	"github.com/namvu9/keylime/pkg/record"
 )
 
-// A Page is an implementation of a node in a B-tree.
-type Page struct {
+// A page is an implementation of a node in a B-tree.
+type page struct {
 	ID string
 
 	loaded   bool
-	children []*Page
+	children []*page
 	records  []record.Record
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -22,7 +22,7 @@ type Page struct {
 	ki *KeyIndex
 }
 
-func (p *Page) Get(k string) ([]byte, error) {
+func (p *page) Get(k string) ([]byte, error) {
 	index, ok := p.keyIndex(k)
 	if !ok {
 		return nil, errors.New("KeyNotFound")
@@ -33,7 +33,7 @@ func (p *Page) Get(k string) ([]byte, error) {
 
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
-func (p *Page) Delete(k string) error {
+func (p *page) Delete(k string) error {
 	if !p.loaded {
 		err := p.load()
 		if err != nil {
@@ -90,37 +90,37 @@ func (p *Page) Delete(k string) error {
 
 // Full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
-func (p *Page) Full() bool {
+func (p *page) Full() bool {
 	return len(p.records) == 2*p.t-1
 }
 
 // Sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
-func (p *Page) Sparse() bool {
+func (p *page) Sparse() bool {
 	return len(p.records) <= p.t-1
 }
 
 // Empty reports whether the node is empty (i.e., has no
 // records).
-func (p *Page) Empty() bool {
+func (p *page) Empty() bool {
 	return len(p.records) == 0
 }
 
 // Leaf returns true if `p` is a leaf node
-func (p *Page) Leaf() bool {
+func (p *page) Leaf() bool {
 	return p.leaf
 }
 
-func (p *Page) newPage() *Page {
+func (p *page) newPage() *page {
 	np := newPage(p.t)
 	np.ki = p.ki
 	return np
 }
 
-func newPage(t int) *Page {
-	return &Page{
+func newPage(t int) *page {
+	return &page{
 		ID:       uuid.New().String(),
-		children: []*Page{},
+		children: []*page{},
 		records:  make([]record.Record, 0, 2*t-1),
 		leaf:     false,
 		t:        t,
@@ -131,7 +131,7 @@ func newPage(t int) *Page {
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
-func (p *Page) keyIndex(k string) (index int, exists bool) {
+func (p *page) keyIndex(k string) (index int, exists bool) {
 	for i, kv := range p.records {
 		if k == kv.Key {
 			return i, true
@@ -146,7 +146,7 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *Page) insert(k string, value []byte) int {
+func (p *page) insert(k string, value []byte) int {
 	kv := record.New(k, value)
 	out := []record.Record{}
 
@@ -182,7 +182,7 @@ func (p *Page) insert(k string, value []byte) int {
 }
 
 // Panics if child is not full
-func (p *Page) splitChild(index int) {
+func (p *page) splitChild(index int) {
 	fullChild := p.children[index]
 	if !fullChild.Full() {
 		panic("Cannot split non-full child")
@@ -208,15 +208,15 @@ func (p *Page) splitChild(index int) {
 	p.save()
 }
 
-func (p *Page) insertRecord(r record.Record) int {
+func (p *page) insertRecord(r record.Record) int {
 	return p.insert(r.Key, r.Value)
 }
 
-func (p *Page) setRecord(index int, r record.Record) {
+func (p *page) setRecord(index int, r record.Record) {
 	p.records[index] = r
 }
 
-func (p *Page) insertChildren(index int, children ...*Page) {
+func (p *page) insertChildren(index int, children ...*page) {
 	if len(p.children) == 2*p.t {
 		panic("Cannot insert a child into a full node")
 	}
@@ -226,7 +226,7 @@ func (p *Page) insertChildren(index int, children ...*Page) {
 	nExistingChildren := len(p.children)
 	nChildren := len(children)
 
-	tmp := make([]*Page, nExistingChildren+nChildren)
+	tmp := make([]*page, nExistingChildren+nChildren)
 	copy(tmp[:index], p.children[:index])
 	copy(tmp[index:index+nChildren], children)
 	copy(tmp[nChildren+index:], p.children[index:])
@@ -234,7 +234,7 @@ func (p *Page) insertChildren(index int, children ...*Page) {
 	p.children = tmp
 }
 
-func (p *Page) predecessorPage(k string) *Page {
+func (p *page) predecessorPage(k string) *page {
 	if p.leaf {
 		return nil
 	}
@@ -247,7 +247,7 @@ func (p *Page) predecessorPage(k string) *Page {
 	return p.children[index].maxPage().Get()
 }
 
-func (p *Page) successorPage(k string) *Page {
+func (p *page) successorPage(k string) *page {
 	if p.leaf {
 		return nil
 	}
@@ -260,14 +260,14 @@ func (p *Page) successorPage(k string) *Page {
 	return p.children[index+1].minPage().Get()
 }
 
-func (p *Page) prevChildSibling(index int) *Page {
+func (p *page) prevChildSibling(index int) *page {
 	if index <= 0 {
 		return nil
 	}
 	return p.children[index-1]
 }
 
-func (p *Page) nextChildSibling(index int) *Page {
+func (p *page) nextChildSibling(index int) *page {
 	if index >= len(p.children)-1 {
 		return nil
 	}
@@ -275,7 +275,7 @@ func (p *Page) nextChildSibling(index int) *Page {
 }
 
 // TODO: TEST
-func (p *Page) mergeWith(median record.Record, other *Page) {
+func (p *page) mergeWith(median record.Record, other *page) {
 	p.records = append(p.records, median)
 	p.records = append(p.records, other.records...)
 	p.children = append(p.children, other.children...)
@@ -286,7 +286,7 @@ func (p *Page) mergeWith(median record.Record, other *Page) {
 // index `i` as the median key and removing the key from `b` in
 // the process. The original sibling node (i+1) is scheduled
 // for deletion.
-func (p *Page) mergeChildren(i int) {
+func (p *page) mergeChildren(i int) {
 	var (
 		pivotRecord = p.records[i]
 		leftChild   = p.children[i]
@@ -316,7 +316,7 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
 }
 
-func handleSparsePage(node, child *Page) {
+func handleSparsePage(node, child *page) {
 	if !child.Sparse() {
 		return
 	}
@@ -345,7 +345,7 @@ func handleSparsePage(node, child *Page) {
 		if !p.leaf {
 			// Move child from sibling to child
 			siblingLastChild := p.children[len(p.children)-1]
-			child.children = append([]*Page{siblingLastChild}, child.children...)
+			child.children = append([]*page{siblingLastChild}, child.children...)
 			p.children = p.children[:len(p.children)-1]
 		}
 		p.save()
@@ -376,7 +376,7 @@ func handleSparsePage(node, child *Page) {
 	node.save()
 }
 
-func splitFullPage(node, child *Page) {
+func splitFullPage(node, child *page) {
 	if !child.Full() {
 		return
 	}
@@ -389,7 +389,7 @@ func splitFullPage(node, child *Page) {
 	node.splitChild(index)
 }
 
-func (p *Page) childIndex(c *Page) (int, bool) {
+func (p *page) childIndex(c *page) (int, bool) {
 	for i, child := range p.children {
 		if child == c {
 			return i, true
@@ -399,7 +399,7 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 	return 0, false
 }
 
-func (p *Page) save() error{
+func (p *page) save() error{
 	if p.ki == nil {
 		return fmt.Errorf("Page has no reference to parent KeyIndex")
 	}
@@ -408,7 +408,7 @@ func (p *Page) save() error{
  return nil
 }
 
-func (p *Page) load() error {
+func (p *page) load() error {
 	if p.ki == nil {
 		return fmt.Errorf("Page has no reference to parent KeyIndex")
 	}

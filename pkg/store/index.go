@@ -14,22 +14,22 @@ type KeyIndex struct {
 	T        int
 	baseDir  string
 
-	writeBuf map[*Page]bool
+	writeBuf map[*page]bool
 	c        *Collection
-	root     *Page
+	root     *page
 
 	storage PageReadWriter
 }
 
 type PageReadWriter interface {
-	Write(*Page) error
-	Read(*Page) error
+	Write(*page) error
+	Read(*page) error
 }
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	if ki.root.Full() {
 		newRoot := ki.newPage()
-		newRoot.children = []*Page{ki.root}
+		newRoot.children = []*page{ki.root}
 		newRoot.splitChild(0)
 
 		ki.RootPage = newRoot.ID
@@ -46,24 +46,11 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	return nil
 }
 
-func (ki *KeyIndex) loadPage(p *Page) error {
-	if ki.storage == nil {
-		return fmt.Errorf("Reading from nil PageReadWriter")
+func (ki *KeyIndex) loadPage(p *page) error {
+	err := ki.storage.Read(p)
+	if err != nil {
+		return err
 	}
-
-	//data, err := ioutil.ReadFile(path.Join(ki.baseDir, p.ID))
-	//if err != nil {
-		//return err
-	//}
-
-	//dec := gob.NewDecoder(bytes.NewBuffer(data))
-	//err = dec.Decode(p)
-	//if err != nil {
-		//return err
-	//}
-	ki.storage.Read(p)
-
-	p.loaded = true
 
 	if !p.leaf {
 		for _, child := range p.children {
@@ -90,7 +77,7 @@ func (ki *KeyIndex) flushWriteBuffer() error {
 		//enc := gob.NewEncoder(&buf)
 		//err := enc.Encode(p)
 		//if err != nil {
-			//return err
+		//return err
 		//}
 
 		//err = os.WriteFile(path.Join(ki.baseDir, p.ID), buf.Bytes(), 0755)
@@ -103,7 +90,7 @@ func (ki *KeyIndex) flushWriteBuffer() error {
 	return nil
 }
 
-func (ki *KeyIndex) writePage(p *Page) {
+func (ki *KeyIndex) writePage(p *page) {
 	if ki == nil {
 		return
 	}
@@ -116,7 +103,7 @@ func (ki *KeyIndex) Save() error {
 	return nil
 }
 
-func (ki *KeyIndex) newPage() *Page {
+func (ki *KeyIndex) newPage() *page {
 	p := newPage(ki.T)
 	p.ki = ki
 	return p
@@ -156,9 +143,21 @@ func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error)
 func newKeyIndex(t int) *KeyIndex {
 	ki := &KeyIndex{
 		T:        t,
-		writeBuf: make(map[*Page]bool),
+		writeBuf: make(map[*page]bool),
+		storage:  MockPageStorage{},
 	}
 	ki.root = ki.newPage()
 	ki.root.leaf = true
 	return ki
+}
+
+type MockPageStorage struct{}
+
+func (mps MockPageStorage) Write(p *page) error {
+	return nil
+}
+
+func (mps MockPageStorage) Read(p *page) error {
+	p.loaded = true
+	return nil
 }
