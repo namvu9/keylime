@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/namvu9/keylime/pkg/record"
+	"github.com/namvu9/keylime/src/record"
 )
 
 func TestGet(t *testing.T) {

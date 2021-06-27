@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/namvu9/keylime/pkg/record"
+	"github.com/namvu9/keylime/src/record"
 )
 
 // A page is an implementation of a node in a B-tree.

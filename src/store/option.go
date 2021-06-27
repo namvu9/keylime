@@ -6,4 +6,5 @@ type Config struct {
 	Name    string `json:"name"`
 	BaseDir string `json:"baseDir"`
 	T       int    `json:"minDegree"` // Only applies when creating new stores
+	Storage ReadWriterTo
 }

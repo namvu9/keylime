@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/namvu9/keylime/pkg/store"
+	"github.com/namvu9/keylime/src/store"
 )
 
 var (
@@ -22,10 +22,6 @@ var (
 )
 
 func main() {
-	if err := s.Init(); err != nil {
-		log.Fatal(err)
-	}
-
 	for {
 		fmt.Print("KL> ")
 		ctx := context.Background()

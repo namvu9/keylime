@@ -2,9 +2,8 @@ package store
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/namvu9/keylime/pkg/record"
+	"github.com/namvu9/keylime/src/record"
 )
 
 type collectionIndex interface {
@@ -14,6 +13,7 @@ type collectionIndex interface {
 	Get(context.Context, string) error
 
 	Save() error
+	Read() error
 }
 
 // A Collection is a named container for a group of records
@@ -22,8 +22,10 @@ type Collection struct {
 	baseDir string
 
 	s                *Store
-	primaryIndex     KeyIndex
+	primaryIndex     *KeyIndex
 	SecondaryIndexes []collectionIndex
+
+	storage ReadWriterTo
 }
 
 // Get the value associated with the key `k`, if a record
@@ -53,15 +55,12 @@ func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 	return nil
 }
 
-func (c *Collection) save() error {
-	if c == nil {
-		return fmt.Errorf("Cannot save nil Collection pointer")
-	}
-	if c.s == nil {
-		return fmt.Errorf("Collection has no reference to parent store")
-	}
+func (c *Collection) Save() error {
+	return nil
+}
 
-	return c.s.writeCollection(c)
+func (c *Collection) Load() error {
+	return nil
 }
 
 // Delete record with key `k`. An error is returned of no
@@ -78,4 +77,16 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 	}
 
 	return err
+}
+
+func newCollection(name string) *Collection {
+	ki := newKeyIndex(2000)
+
+	c := &Collection{
+		Name:         name,
+		primaryIndex: ki,
+		storage:      MockReadWriterTo{},
+	}
+
+	return c
 }

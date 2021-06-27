@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/namvu9/keylime/pkg/record"
+	"github.com/namvu9/keylime/src/record"
 )
 
 // KeyIndex represents a B-tree that indexes records by key
@@ -37,7 +37,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 		ki.Height++
 
 		newRoot.save()
-		ki.c.save()
+		ki.c.Save()
 	}
 
 	page := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
