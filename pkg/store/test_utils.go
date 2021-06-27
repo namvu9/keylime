@@ -140,3 +140,30 @@ func makeRecords(keys ...string) []record.Record {
 
 	return out
 }
+
+// Iterates over a collection in order of key precedence
+func validate(p *Page, root bool) {
+	if !root && len(p.records) < p.t-1 || len(p.records) > 2*p.t-1 {
+		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.ID, len(p.records)))
+	}
+
+	if !p.leaf {
+		if len(p.children) != len(p.records) + 1 {
+			panic("Constraint violation: number of records should be len(children) - 1")
+		}
+		for i, child := range p.children {
+			if !child.loaded {
+				child.load()
+			}
+			validate(child, false)
+			if i < len(p.records) {
+				//r := p.records[i]
+			}
+		}
+	} else {
+		//for _, r := range p.records {
+			////fmt.Println(r)
+		//}
+
+	}
+}

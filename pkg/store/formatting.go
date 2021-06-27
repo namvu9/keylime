@@ -17,19 +17,18 @@ func (p Page) String() string {
 	fmt.Fprintf(&sb, "Loaded:\t\t%v\n", p.loaded)
 	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.leaf)
 	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.children))
-	fmt.Fprintf(&sb, "Keys:\t\t")
-	for _, key := range p.records {
-		fmt.Fprintf(&sb, "%v ", key)
+	fmt.Fprintf(&sb, "Records:\t")
+	for _, r := range p.records {
+		fmt.Fprintf(&sb, "%s ", r)
 	}
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
 }
 
-func (c Collection) String() string {
+func (ki KeyIndex) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "-----\nCollection\n-----\n")
-	fmt.Fprintf(&sb, "Name:\t%s\n", c.Name)
-	fmt.Fprintf(&sb, "Height:\t%d\n", c.Height)
+	fmt.Fprintf(&sb, "-----\nKeyIndex\n-----\n")
+	fmt.Fprintf(&sb, "Height:\t%d\n", ki.Height)
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
 }

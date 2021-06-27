@@ -2,11 +2,19 @@ package store
 
 import "fmt"
 
-// collection iterator.
 type iterFunc func(*Page) *Page
 type handleFunc func(*Page, *Page)
 
 func (next iterFunc) done(p *Page) bool {
+	if !p.loaded {
+		// TODO: handle error
+		err := p.load()
+		if err != nil {
+			fmt.Println("ERROR: could not load page", err)
+			return true
+		}
+	}
+
 	if p.leaf {
 		return true
 	}
@@ -21,7 +29,7 @@ type collectionIterator struct {
 	err     error
 }
 
-func (ci *collectionIterator) forEach(fn func(*Page, *Page)) *collectionIterator {
+func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 	ci.handler = fn
 	return ci
 }
@@ -33,14 +41,6 @@ func (ci *collectionIterator) Get() *Page {
 		}
 
 		ci.node = ci.next(ci.node)
-
-		if !ci.node.loaded {
-			// TODO: Return error
-			err := ci.node.load()
-			if err != nil {
-				fmt.Println("ERROR:", err)
-			}
-		}
 	}
 
 	return ci.node

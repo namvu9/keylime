@@ -24,6 +24,10 @@ func (r Record) IsEqualTo(other *Record) bool {
 }
 
 
+func (r Record) String() string {
+	return r.Key
+}
+
 func New(key string, value []byte) Record {
   return Record{
     Key: key,

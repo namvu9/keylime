@@ -51,6 +51,7 @@ func (s Store) Collection(name string) (*Collection, error) {
 	return c, nil
 }
 
+// Collections returns a list of collections in a store
 func (s Store) Collections() []*Collection {
 	var out []*Collection
 	for _, c := range s.collections {
@@ -62,15 +63,11 @@ func (s Store) Collections() []*Collection {
 
 // New instantiates a store with the provided config and
 // options
-func New(cfg *Config, opts ...Option) *Store {
+func New(cfg *Config) *Store {
 	s := &Store{
 		baseDir:     cfg.BaseDir,
 		t:           cfg.T,
 		collections: make(map[string]*Collection),
-	}
-
-	for _, opt := range opts {
-		opt.Apply(s)
 	}
 
 	return s
@@ -93,27 +90,30 @@ func (s Store) createCollection(name string) (*Collection, error) {
 	root.loaded = true
 
 	c := &Collection{
-		Name:     name,
-		RootPage: root.ID,
-		T:        s.t,
-		root:     root,
-		baseDir:  path.Join(s.baseDir, name),
-		writeBuf: make(map[*Page]bool),
-		s:        &s,
+		Name: name,
+		s:    &s,
+		primaryIndex: KeyIndex{
+			writeBuf: make(map[*Page]bool),
+			baseDir:  path.Join(s.baseDir, name),
+			T:        s.t,
+			root:     root,
+			RootPage: root.ID,
+		},
 	}
 
-	root.c = c
+	root.ki = &c.primaryIndex
 
 	err := os.Mkdir(path.Join(s.baseDir, c.Name), 0755)
 	if err != nil {
 		return c, err
 	}
 
-	c.writePage(root)
-	err = c.flushWriteBuffer()
-	if err != nil {
-		return c, err
-	}
+	c.primaryIndex.writePage(root)
+	c.primaryIndex.Save()
+	//err = c.FlushWriteBuffer()
+	//if err != nil {
+	//return c, err
+	//}
 
 	err = s.writeCollection(c)
 	if err != nil {
@@ -150,7 +150,7 @@ func (s *Store) loadCollection(name string) (*Collection, error) {
 	}
 
 	// TODO: implement newCollection function
-	c := Collection{baseDir: path.Join(s.baseDir, name), writeBuf: make(map[*Page]bool), s: s}
+	c := Collection{baseDir: path.Join(s.baseDir, name), s: s}
 
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
 	err = dec.Decode(&c)
@@ -158,35 +158,30 @@ func (s *Store) loadCollection(name string) (*Collection, error) {
 		return nil, err
 	}
 
-	c.root = c.newPage()
-	c.root.ID = c.RootPage
+	//c.root = c.newPage()
+	//c.root.ID = c.RootPage
 
-	err = c.loadPage(c.root)
-	if err != nil {
-		return nil, err
-	}
+	//err = c.loadPage(c.root)
+	//if err != nil {
+	//return nil, err
+	//}
 
-	fmt.Println(c.root)
+	fmt.Println("LOADED COLLECTION", c.Name)
+	fmt.Println(c)
 
 	return &c, err
 }
 
 // NewCollection returns a store
-func NewCollection(t int, opts ...CollectionOption) *Collection {
-	tree := &Collection{
-		T: t,
-	}
+func NewCollection(t int) *Collection {
+	c := &Collection{}
 
-	for _, fn := range opts {
-		fn(tree)
-	}
+	//if c.root == nil {
+		//c.root = c.newPage()
+		//c.root.leaf = true
+	//}
 
-	if tree.root == nil {
-		tree.root = tree.newPage()
-		tree.root.leaf = true
-	}
-
-	return tree
+	return c
 }
 func (s *Store) hasCollection(name string) bool {
 	if _, err := os.Stat(path.Join(s.baseDir, name)); os.IsNotExist(err) {

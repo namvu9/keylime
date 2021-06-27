@@ -19,7 +19,7 @@ type Page struct {
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
-	c *Collection
+	ki *KeyIndex
 }
 
 func (p *Page) Get(k string) ([]byte, error) {
@@ -113,7 +113,7 @@ func (p *Page) Leaf() bool {
 
 func (p *Page) newPage() *Page {
 	np := newPage(p.t)
-	np.c = p.c
+	np.ki = p.ki
 	return np
 }
 
@@ -147,10 +147,6 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
 func (p *Page) insert(k string, value []byte) int {
-	if p.Full() {
-		panic("Cannot insert key into full node")
-	}
-
 	kv := record.New(k, value)
 	out := []record.Record{}
 
@@ -162,6 +158,10 @@ func (p *Page) insert(k string, value []byte) int {
 		}
 
 		if kv.IsLessThan(key) {
+			if p.Full() {
+				panic(fmt.Sprintf("Cannot insert key into full node: %s", k))
+			}
+
 			out = append(out, kv)
 			p.records = append(out, p.records[i:]...)
 			p.save()
@@ -169,6 +169,10 @@ func (p *Page) insert(k string, value []byte) int {
 		}
 
 		out = append(out, p.records[i])
+	}
+
+	if p.Full() {
+		panic(fmt.Sprintf("Cannot insert key into full node: %s", k))
 	}
 
 	p.records = append(out, kv)
@@ -396,9 +400,9 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 }
 
 func (p *Page) save() {
-	p.c.writePage(p)
+	p.ki.writePage(p)
 }
 
 func (p *Page) load() error {
-	return p.c.loadPage(p)
+	return p.ki.loadPage(p)
 }
