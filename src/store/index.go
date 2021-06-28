@@ -15,12 +15,7 @@ type KeyIndex struct {
 
 	writeBuf map[*page]bool
 	root     *page
-	storage  PageReadWriter
-}
-
-type PageReadWriter interface {
-	Write(*page) error
-	Read(*page) error
+	storage  ReadWriterTo
 }
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
@@ -38,72 +33,9 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	}
 
 	page := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
-	page.insert(r.Key, r.Value)
+	page.insert(r)
 
 	return nil
-}
-
-func (ki *KeyIndex) loadPage(p *page) error {
-	err := ki.storage.Read(p)
-	if err != nil {
-		return err
-	}
-
-	if !p.leaf {
-		for _, child := range p.children {
-			child.ki = p.ki
-		}
-	}
-	fmt.Println("Loaded page", p.ID)
-	return nil
-}
-
-func (ki *KeyIndex) flushWriteBuffer() error {
-	defer func() {
-		for p := range ki.writeBuf {
-			delete(ki.writeBuf, p)
-		}
-	}()
-
-	for p := range ki.writeBuf {
-		if ki.storage == nil {
-			return fmt.Errorf("Writing to nil PageReadWriter")
-		}
-
-		//var buf bytes.Buffer
-		//enc := gob.NewEncoder(&buf)
-		//err := enc.Encode(p)
-		//if err != nil {
-		//return err
-		//}
-
-		//err = os.WriteFile(path.Join(ki.baseDir, p.ID), buf.Bytes(), 0755)
-		err := ki.storage.Write(p)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (ki *KeyIndex) writePage(p *page) {
-	if ki == nil {
-		return
-	}
-
-	ki.writeBuf[p] = true
-}
-
-// TODO: IMPLEMENT
-func (ki *KeyIndex) Save() error {
-	return nil
-}
-
-func (ki *KeyIndex) newPage(leaf bool) *page {
-	p := newPage(ki.T, leaf)
-	p.ki = ki
-	return p
 }
 
 func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
@@ -137,24 +69,20 @@ func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error)
 	return &node.records[i], nil
 }
 
-func newKeyIndex(t int) *KeyIndex {
-	ki := &KeyIndex{
-		T:        t,
-		writeBuf: make(map[*page]bool),
-		storage:  MockPageStorage{},
+func (ki *KeyIndex) flushWriteBuffer() error {
+	defer func() {
+		for p := range ki.writeBuf {
+			delete(ki.writeBuf, p)
+		}
+	}()
+
+	for p := range ki.writeBuf {
+		if ki.storage == nil {
+			return fmt.Errorf("Writing to nil PageReadWriter")
+		}
+		fmt.Println(p)
 	}
-	ki.root = ki.newPage(true)
-	return ki
-}
 
-type MockPageStorage struct{}
-
-func (mps MockPageStorage) Write(p *page) error {
-	return nil
-}
-
-func (mps MockPageStorage) Read(p *page) error {
-	p.loaded = true
 	return nil
 }
 
@@ -176,3 +104,6 @@ func (oi *OrderIndex) Delete(r *record.Record) error {
 func (c *Collection) OrderBy(attr interface{}) *OrderIndex {
 	return &OrderIndex{}
 }
+
+func (ki *KeyIndex) Save() error { return nil }
+func (ki *KeyIndex) Read() error { return nil }

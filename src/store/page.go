@@ -3,9 +3,9 @@ package store
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/record"
 )
 
@@ -13,13 +13,14 @@ import (
 type page struct {
 	ID string
 
-	loaded   bool
 	children []*page
 	records  []record.Record
+	loaded   bool
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
-	ki *KeyIndex
+	reader io.Reader
+	writer *BufferedStorage
 }
 
 func (p *page) Get(k string) ([]byte, error) {
@@ -34,13 +35,6 @@ func (p *page) Get(k string) ([]byte, error) {
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
 func (p *page) Delete(k string) error {
-	if !p.loaded {
-		err := p.load()
-		if err != nil {
-			return err
-		}
-	}
-
 	index, exists := p.keyIndex(k)
 	if !exists {
 		return fmt.Errorf("KeyNotFoundError")
@@ -88,6 +82,41 @@ func (p *page) Delete(k string) error {
 	return p.children[index].Delete(k)
 }
 
+// insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
+func (p *page) insert(r record.Record) int {
+	out := []record.Record{}
+
+	for i, key := range p.records {
+		if r.Key == key.Key {
+			p.records[i] = r
+			p.save()
+			return i
+		}
+
+		if r.IsLessThan(key) {
+			if p.Full() {
+				panic(fmt.Sprintf("Cannot insert key into full node: %s", key))
+			}
+
+			out = append(out, r)
+			p.records = append(out, p.records[i:]...)
+			p.save()
+			return i
+		}
+
+		out = append(out, p.records[i])
+	}
+
+	if p.Full() {
+		panic(fmt.Sprintf("Cannot insert key into full node: %s", r))
+	}
+
+	p.records = append(out, r)
+	p.save()
+
+	return len(p.records) - 1
+}
+
 // Full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
 func (p *page) Full() bool {
@@ -112,20 +141,8 @@ func (p *page) Leaf() bool {
 }
 
 func (p *page) newPage(leaf bool) *page {
-	np := newPage(p.t, leaf)
-	np.ki = p.ki
+	np := newPage(p.t, leaf, p.writer)
 	return np
-}
-
-func newPage(t int, leaf bool) *page {
-	return &page{
-		ID:       uuid.New().String(),
-		children: []*page{},
-		records:  make([]record.Record, 0, 2*t-1),
-		leaf:     leaf,
-		t:        t,
-		loaded:   true,
-	}
 }
 
 // keyIndex returns the index of key k in node b if it
@@ -145,42 +162,6 @@ func (p *page) keyIndex(k string) (index int, exists bool) {
 	return len(p.records), false
 }
 
-// insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *page) insert(k string, value []byte) int {
-	kv := record.New(k, value)
-	out := []record.Record{}
-
-	for i, key := range p.records {
-		if kv.Key == key.Key {
-			p.records[i] = kv
-			p.save()
-			return i
-		}
-
-		if kv.IsLessThan(key) {
-			if p.Full() {
-				panic(fmt.Sprintf("Cannot insert key into full node: %s", k))
-			}
-
-			out = append(out, kv)
-			p.records = append(out, p.records[i:]...)
-			p.save()
-			return i
-		}
-
-		out = append(out, p.records[i])
-	}
-
-	if p.Full() {
-		panic(fmt.Sprintf("Cannot insert key into full node: %s", k))
-	}
-
-	p.records = append(out, kv)
-	p.save()
-
-	return len(p.records) - 1
-}
-
 // Panics if child is not full
 func (p *page) splitChild(index int) {
 	fullChild := p.children[index]
@@ -191,7 +172,7 @@ func (p *page) splitChild(index int) {
 	newChild := p.newPage(fullChild.leaf)
 
 	medianKey, left, right := partitionMedian(fullChild.records)
-	p.insert(medianKey.Key, medianKey.Value)
+	p.insert(medianKey)
 
 	fullChild.records, newChild.records = left, right
 
@@ -205,10 +186,6 @@ func (p *page) splitChild(index int) {
 	newChild.save()
 	fullChild.save()
 	p.save()
-}
-
-func (p *page) insertRecord(r record.Record) int {
-	return p.insert(r.Key, r.Value)
 }
 
 func (p *page) setRecord(index int, r record.Record) {
@@ -292,19 +269,16 @@ func (p *page) mergeChildren(i int) {
 		rightChild  = p.children[i+1]
 	)
 
-	if !leftChild.loaded {
-		leftChild.load()
-	}
-	if !rightChild.loaded {
-		rightChild.load()
-	}
-
 	leftChild.mergeWith(pivotRecord, rightChild)
 
 	// Delete the key from the node
 	p.records = append(p.records[:i], p.records[i+1:]...)
 	// Remove rightChild
 	p.children = append(p.children[:i+1], p.children[i+2:]...)
+
+	p.save()
+	leftChild.save()
+	rightChild.deletePage()
 }
 
 func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
@@ -338,7 +312,7 @@ func handleSparsePage(node, child *page) {
 			siblingRecord = p.records[len(p.records)-1]
 		)
 
-		child.insertRecord(pivot)
+		child.insert(pivot)
 		node.setRecord(recordIndex, siblingRecord)
 
 		if !p.leaf {
@@ -366,12 +340,12 @@ func handleSparsePage(node, child *page) {
 		}
 		s.save()
 	} else if p != nil {
-		// TODO: Delete other node
 		node.mergeChildren(index - 1)
 	} else {
 		node.mergeChildren(index)
 	}
 
+	child.save()
 	node.save()
 }
 
@@ -398,18 +372,10 @@ func (p *page) childIndex(c *page) (int, bool) {
 	return 0, false
 }
 
-func (p *page) save() error{
-	if p.ki == nil {
-		return fmt.Errorf("Page has no reference to parent KeyIndex")
-	}
-
- p.ki.writePage(p)
- return nil
+func (p *page) save() error {
+	return p.writer.Write(p)
 }
-
-func (p *page) load() error {
-	if p.ki == nil {
-		return fmt.Errorf("Page has no reference to parent KeyIndex")
-	}
-	return p.ki.loadPage(p)
+func (p *page) load() error { return nil }
+func (p *page) deletePage() error {
+	return p.writer.Delete(p)
 }

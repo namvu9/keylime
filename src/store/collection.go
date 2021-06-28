@@ -6,16 +6,6 @@ import (
 	"github.com/namvu9/keylime/src/record"
 )
 
-type collectionIndex interface {
-	Insert(context.Context, record.Record) error
-	Delete(context.Context, string) error
-	Update(context.Context, record.Record) error
-	Get(context.Context, string) error
-
-	Save() error
-	Read() error
-}
-
 // A Collection is a named container for a group of records
 type Collection struct {
 	Name    string
@@ -41,6 +31,7 @@ func (c *Collection) Get(ctx context.Context, k string) []byte {
 // collection, an error is returned.
 func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 	r := record.New(k, value)
+
 	if err := c.primaryIndex.Insert(ctx, r); err != nil {
 		return err
 	}
@@ -81,14 +72,3 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 	return err
 }
 
-func newCollection(name string) *Collection {
-	ki := newKeyIndex(2000)
-
-	c := &Collection{
-		Name:         name,
-		primaryIndex: ki,
-		storage:      MockReadWriterTo{},
-	}
-
-	return c
-}

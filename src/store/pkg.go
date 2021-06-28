@@ -6,7 +6,6 @@ by a B-tree.
 package store
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -47,8 +46,7 @@ type Store struct {
 func (s Store) Collection(name string) (*Collection, error) {
 	c, ok := s.collections[name]
 	if !ok {
-		c = newCollection(name)
-		c.storage = s.storage.WithSegment(name)
+		c = newCollection(name, s.storage.WithSegment(name))
 
 		if s.hasCollection(name) {
 			err := c.Load()
@@ -70,29 +68,12 @@ func (s Store) Collection(name string) (*Collection, error) {
 	return c, nil
 }
 
-// New instantiates a store with the provided config and
-// options
-func New(cfg *Config) *Store {
-	s := &Store{
-		baseDir:     cfg.BaseDir,
-		t:           cfg.T,
-		collections: make(map[string]*Collection),
-		storage:     cfg.Storage,
+type Option func(*Store)
+
+func WithStorage(rw ReadWriterTo) Option {
+	return func(s *Store) {
+		s.storage = rw
 	}
-
-	if cfg.Storage == nil {
-		fmt.Println("Warning: Storage has not been initialized")
-		s.storage = &MockReadWriterTo{}
-	}
-
-	return s
-}
-
-func (s Store) createCollection(name string) (*Collection, error) {
-	c := newCollection(name)
-	err := c.Save()
-
-	return c, err
 }
 
 func (s Store) save() error {

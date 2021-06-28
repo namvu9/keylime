@@ -23,7 +23,7 @@ func TestGet(t *testing.T) {
 				record.New("j", nil),
 			}),
 		)
-		ki = newKeyIndex(2)
+		ki = newKeyIndex(2, nil)
 	)
 
 	ki.root = root
@@ -65,7 +65,7 @@ func TestInsert(t *testing.T) {
 				makePage(2, makeRecords("p", "q")),
 				makePage(2, makeRecords("x", "y")),
 			)
-			ki = newKeyIndex(2)
+			ki = newKeyIndex(2, nil)
 		)
 
 		ki.root = root
@@ -178,7 +178,7 @@ func TestDelete(t *testing.T) {
 func TestBuildCollection(t *testing.T) {
 	u := util{t}
 
-	ki := newKeyIndex(2)
+	ki := newKeyIndex(2, nil)
 	ctx := context.Background()
 
 	var (

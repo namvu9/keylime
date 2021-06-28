@@ -102,24 +102,37 @@ func (nu namedUtil) hasChildren(children ...*page) {
 	nu.u.hasChildren(nu.name, children, nu.node)
 }
 
-func makeNewRecords(keys []string) (out []record.Record) {
-	for _, k := range keys {
-		out = append(out, record.New(k, nil))
-	}
-
-	return
-}
-
 func newPageWithKeys(t int, keys []string) *page {
 	return &page{
 		t:       t,
-		records: makeNewRecords(keys),
-		loaded: true,
+		records: makeRecords(keys...),
+		loaded:  true,
+	}
+}
+
+func makePageWithBufferedStorage(bs *BufferedStorage) func(t int, records []record.Record, children ...*page) *page {
+	return func(t int, records []record.Record, children ...*page) *page {
+		root := newPage(t, false, nil)
+		root.writer = bs
+		root.records = records
+		root.children = children
+
+		for _, child := range children {
+			child.t = t
+			child.loaded = true
+		}
+
+		if len(children) == 0 {
+			root.leaf = true
+		}
+
+		return root
+
 	}
 }
 
 func makePage(t int, records []record.Record, children ...*page) *page {
-	root := newPage(t, false)
+	root := newPage(t, false, nil)
 	root.records = records
 	root.children = children
 
@@ -151,7 +164,7 @@ func validate(p *page, root bool) {
 	}
 
 	if !p.leaf {
-		if len(p.children) != len(p.records) + 1 {
+		if len(p.children) != len(p.records)+1 {
 			panic("Constraint violation: number of records should be len(children) - 1")
 		}
 		for i, child := range p.children {
@@ -165,8 +178,7 @@ func validate(p *page, root bool) {
 		}
 	} else {
 		//for _, r := range p.records {
-			////fmt.Println(r)
+		////fmt.Println(r)
 		//}
-
 	}
 }

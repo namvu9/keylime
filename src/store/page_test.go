@@ -32,32 +32,305 @@ func TestPageGet(t *testing.T) {
 	})
 }
 
-func TestPageIndex(t *testing.T) {
-	for i, test := range []struct {
-		k          string
-		keys       []string
-		wantIndex  int
-		wantExists bool
-	}{
-		{"0", []string{"1", "2", "3"}, 0, false},
-		{"1", []string{"1", "2", "3"}, 0, true},
-		{"4", []string{"1", "2", "3"}, 3, false},
-		{"4", []string{"1", "2", "4"}, 2, true},
-		{"3", []string{"1", "2", "4"}, 2, false},
-		{"10", []string{"10", "5"}, 0, true},
-	} {
-		root := newPage(100, true)
-		root.records = makeNewRecords(test.keys)
-		gotIndex, gotExists := root.keyIndex(test.k)
+func TestDeletePage(t *testing.T) {
+	bs := newBufferedStorage(nil)
+	makeBufPage := makePageWithBufferedStorage(bs)
 
-		if gotIndex != test.wantIndex || gotExists != test.wantExists {
-			t.Errorf("[TestKeyIndex] %d: Got (%v, %v); Want (%v, %v)", i, gotIndex, gotExists, test.wantIndex, test.wantExists)
+	t.Run("Missing key", func(t *testing.T) {
+		bs.flush()
+
+		page := newPageWithKeys(2, []string{"a", "c"})
+		page.writer = bs
+		err := page.Delete("b")
+		if err == nil {
+			t.Errorf("deleteKey should return error if key is not found")
 		}
-	}
+
+		if len(bs.writeBuf) != 0 {
+			t.Errorf("Failed deletion should not schedule any writes")
+		}
+	})
+
+	t.Run("Delete key in leaf", func(t *testing.T) {
+		u := util{t}
+
+		for index, test := range []struct {
+			targetKey string
+			want      []string
+		}{
+			{"a", []string{"b", "c"}},
+			{"b", []string{"a", "c"}},
+			{"c", []string{"a", "b"}},
+		} {
+			bs.flush()
+			var (
+				node = makeBufPage(2, makeRecords("a", "b", "c"))
+			)
+
+			err := node.Delete(test.targetKey)
+			if err != nil {
+				t.Errorf("Should not return error")
+			}
+
+			u.hasKeys(fmt.Sprintf("[DeleteKey]: %d", index), test.want, node)
+
+			if len(bs.writeBuf) != 1 {
+				t.Errorf("Deleting from leaf: Want=%d, Got=%d", 1, len(bs.writeBuf))
+			}
+
+			if got := bs.writeBuf[node.ID]; got != node {
+				t.Errorf("Schedule delete: Want=%p Got=%p", node, got)
+			}
+		}
+	})
+
+	t.Run("Internal node, predecessor has t keys", func(t *testing.T) {
+		u := &util{t}
+		bs.flush()
+
+		root := makeBufPage(2, makeRecords("5"),
+			makeBufPage(2, makeRecords("2", "3")),
+			makeBufPage(2, makeRecords("6")),
+		)
+		root.writer = bs
+
+		root.Delete("5")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("3")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("2")
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("6")
+		})
+
+		if got := len(bs.writeBuf); got != 2 {
+			t.Errorf("Buffered Writes: Got=%d, Want=%d", got, 2)
+		}
+
+		if got := bs.writeBuf[root.ID]; got == nil {
+			t.Errorf("root.children[0] not written")
+		}
+
+		if got := bs.writeBuf[root.children[0].ID]; got == nil {
+			t.Errorf("root.children[0] not written")
+		}
+	})
+
+	t.Run("Deep internal node, predecessor has t keys", func(t *testing.T) {
+		u := &util{t}
+		bs.flush()
+
+		predPage := makeBufPage(2, makeRecords("6"))
+		mergePage := makeBufPage(2, makeRecords("4"))
+		root := makeBufPage(2, makeRecords("9"),
+			makeBufPage(2, makeRecords("3", "5"),
+				makeBufPage(2, makeRecords("2")),
+				mergePage,
+				predPage,
+			),
+			makeBufPage(2, makeRecords("10000")),
+		)
+
+		root.Delete("9")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("6")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(2)
+			nu.hasKeys("3")
+
+			nu.withChild(0, func(nu namedUtil) {
+				nu.hasKeys("2")
+			})
+			nu.withChild(1, func(nu namedUtil) {
+				nu.hasKeys("4", "5")
+			})
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("10000")
+		})
+
+		if got := len(bs.writeBuf); got != 3 {
+			t.Errorf("Buffered writes: Got=%d, Want=%d", got, 3)
+		}
+
+		if got := bs.writeBuf[root.ID]; got == nil {
+			t.Errorf("Root not written")
+		}
+
+		if got := bs.writeBuf[root.children[0].ID]; got == nil {
+			t.Errorf("Left child not written")
+		}
+
+		if got := bs.writeBuf[mergePage.ID]; got == nil {
+			t.Errorf("MergePage not written")
+		}
+
+		if got := bs.deleteBuf[predPage.ID]; got == nil {
+			t.Errorf("PredPage not deleted")
+		}
+	})
+
+	t.Run("Internal node, successor has t keys", func(t *testing.T) {
+		u := &util{t}
+		bs.flush()
+
+		root := makeBufPage(2, makeRecords("5"),
+			makeBufPage(2, makeRecords("2")),
+			makeBufPage(2, makeRecords("6", "7")),
+		)
+
+		root.Delete("5")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("6")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("2")
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("7")
+		})
+
+		if got := len(bs.writeBuf); got != 2 {
+			t.Errorf("Buffered Writes: Got=%d, Want=%d", got, 2)
+		}
+
+		if got := bs.writeBuf[root.ID]; got == nil {
+			t.Errorf("Root not written")
+		}
+
+		if got := bs.writeBuf[root.children[1].ID]; got == nil {
+			t.Errorf("root.children[1] not written")
+		}
+	})
+
+	t.Run("Deep internal node, successor has t keys", func(t *testing.T) {
+		u := &util{t}
+		bs.flush()
+
+		mergedNode := makeBufPage(2, makeRecords("4"))
+		deleteNode := makeBufPage(2, makeRecords("7"))
+
+		root := makeBufPage(2, makeRecords("3"),
+			makeBufPage(2, makeRecords("10000")),
+			makeBufPage(2, makeRecords("5", "8"),
+				mergedNode,
+				deleteNode,
+				makeBufPage(2, makeRecords("9")),
+			),
+		)
+
+		root.Delete("3")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("4")
+			nu.hasNChildren(2)
+		})
+
+		u.with("Left child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("10000")
+
+		})
+
+		u.with("Right child", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(2)
+			nu.hasKeys("8")
+
+			nu.withChild(0, func(nu namedUtil) {
+				nu.hasKeys("5", "7")
+			})
+			nu.withChild(1, func(nu namedUtil) {
+				nu.hasKeys("9")
+			})
+		})
+
+		if got := len(bs.writeBuf); got != 3 {
+			t.Errorf("Buffered writes: Got=%d, Want=%d", got, 3)
+		}
+
+		if got := bs.writeBuf[root.ID]; got == nil {
+			t.Errorf("Root not written")
+		}
+
+		if got := bs.writeBuf[root.children[1].ID]; got == nil {
+			t.Errorf("Left child not written")
+		}
+
+		if got := bs.writeBuf[mergedNode.ID]; got == nil {
+			t.Errorf("MergePage not written")
+		}
+
+		if got := bs.deleteBuf[deleteNode.ID]; got == nil {
+			t.Errorf("PredPage not deleted")
+		}
+
+	})
+
+	t.Run("Internal node, predecessor and successor have t-1 keys", func(t *testing.T) {
+		u := &util{t}
+		bs.flush()
+
+		deletePage := makeBufPage(2, makeRecords("6"))
+		root := makeBufPage(2, makeRecords("5"),
+			makeBufPage(2, makeRecords("2")),
+			deletePage,
+		)
+
+		root.Delete("5")
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasNRecords(0)
+			nu.hasNChildren(1)
+
+			nu.withChild(0, func(nu namedUtil) {
+				nu.hasKeys("2", "6")
+				nu.hasNChildren(0)
+			})
+		})
+
+		if len(bs.writeBuf) != 2 {
+			t.Errorf("Want=%d Got=%d", 2, len(bs.writeBuf))
+		}
+		if got := bs.writeBuf[root.ID]; got == nil {
+			t.Errorf("Root not written")
+		}
+
+		if got := bs.writeBuf[root.children[0].ID]; got == nil {
+			t.Errorf("Left child not written")
+		}
+
+		if len(bs.deleteBuf) != 1 || bs.deleteBuf[deletePage.ID] == nil {
+			t.Errorf("Want=%d Got=%d", 2, len(bs.deleteBuf))
+		}
+
+	})
 }
 
 func TestInsertRecord(t *testing.T) {
 	u := util{t}
+	bs := newBufferedStorage(nil)
+	makeBufPage := makePageWithBufferedStorage(bs)
+
 	for i, test := range []struct {
 		k        string
 		keys     []string
@@ -69,22 +342,31 @@ func TestInsertRecord(t *testing.T) {
 		{"6", []string{"1", "3", "5"}, []string{"1", "3", "5", "6"}},
 		{"10", []string{"1", "3", "5"}, []string{"1", "10", "3", "5"}},
 	} {
-		r := newPage(3, true)
-		r.records = makeNewRecords(test.keys)
+		bs.flush()
 
-		r.insert(test.k, nil)
+		root := makeBufPage(3, makeRecords(test.keys...))
 
-		u.hasKeys(fmt.Sprintf("TestLeafInsert %d", i), test.wantKeys, r)
+		root.insert(record.New(test.k, nil))
+
+		u.hasKeys(fmt.Sprintf("TestLeafInsert %d", i), test.wantKeys, root)
+
+		if len(bs.writeBuf) != 1 || bs.writeBuf[root.ID] == nil {
+			t.Errorf("Root not written")
+		}
 	}
 }
 
 func TestSplitChild(t *testing.T) {
 	u := util{t}
+	bs := newBufferedStorage(nil)
+	makeBufPage := makePageWithBufferedStorage(bs)
+
 	t.Run("Full leaf child", func(t *testing.T) {
+		fullChild := makeBufPage(2, makeRecords("12", "14", "20"))
 		var (
-			root = makePage(2, makeRecords("10"),
-				makePage(2, makeRecords("1", "4", "8")),
-				makePage(2, makeRecords("12", "14", "20")),
+			root = makeBufPage(2, makeRecords("10"),
+				makeBufPage(2, makeRecords("1", "4", "8")),
+				fullChild,
 			)
 		)
 
@@ -94,29 +376,52 @@ func TestSplitChild(t *testing.T) {
 			nu.hasKeys("10", "14")
 			nu.hasNChildren(3)
 		})
+		newChild := root.children[2]
 
-		u.with("Right child", root.children[1], func(nu namedUtil) {
+		u.with("Full child", fullChild, func(nu namedUtil) {
 			nu.hasKeys("12")
 		})
 
-		u.with("New child", root.children[2], func(nu namedUtil) {
+		u.with("New child", newChild, func(nu namedUtil) {
 			nu.hasKeys("20")
 		})
+
+		if len(bs.writeBuf) != 3 {
+			t.Errorf("Want=%d Got=%d", 3, len(bs.writeBuf))
+		}
+
+		if bs.writeBuf[root.ID] == nil {
+			t.Errorf("Root not written")
+		}
+
+		if bs.writeBuf[fullChild.ID] == nil {
+			t.Errorf("Full child not written")
+		}
+
+		if bs.writeBuf[newChild.ID] == nil {
+			t.Errorf("New child not written")
+		}
+
+		if len(bs.deleteBuf) != 0 {
+			t.Errorf("Want=%d Got=%d", 0, len(bs.deleteBuf))
+		}
 	})
 
 	t.Run("Full internal node", func(t *testing.T) {
-		l2a_child := makePage(2, makeRecords("6", "7"))
-		l2b_child := makePage(2, makeRecords("9", "10"))
-		l2c_child := makePage(2, makeRecords("16", "17"))
-		l2d_child := makePage(2, makeRecords("19", "20"))
-		root := makePage(2, makeRecords("21"),
-			makePage(2, makeRecords("8", "15", "18"),
+		bs.flush()
+
+		l2a_child := makeBufPage(2, makeRecords("6", "7"))
+		l2b_child := makeBufPage(2, makeRecords("9", "10"))
+		l2c_child := makeBufPage(2, makeRecords("16", "17"))
+		l2d_child := makeBufPage(2, makeRecords("19", "20"))
+		root := makeBufPage(2, makeRecords("21"),
+			makeBufPage(2, makeRecords("8", "15", "18"),
 				l2a_child,
 				l2b_child,
 				l2c_child,
 				l2d_child,
 			),
-			makePage(2, makeRecords()),
+			makeBufPage(2, makeRecords()),
 		)
 
 		root.splitChild(0)
@@ -136,6 +441,26 @@ func TestSplitChild(t *testing.T) {
 			nu.hasKeys("18")
 			nu.hasChildren(l2c_child, l2d_child)
 		})
+
+		if got := len(bs.writeBuf); got != 3 {
+			t.Errorf("Got=%d Want=3", got)
+		}
+
+		if got := len(bs.deleteBuf); got != 0 {
+			t.Errorf("Got=%d Want=3", got)
+		}
+
+		if bs.writeBuf[root.ID] == nil {
+			t.Errorf("Root not written")
+		}
+
+		if bs.writeBuf[root.children[0].ID] == nil {
+			t.Errorf("Full child not written")
+		}
+
+		if bs.writeBuf[newChild.ID] == nil {
+			t.Errorf("New child not written")
+		}
 	})
 }
 
@@ -240,181 +565,28 @@ func TestInsertChild(t *testing.T) {
 	})
 }
 
-func TestDeletePage(t *testing.T) {
-	t.Run("Missing key", func(t *testing.T) {
-		page := newPageWithKeys(2, []string{"a", "c"})
-		err := page.Delete("b")
-		if err == nil {
-			t.Errorf("deleteKey should return error if key is not found")
+func TestPageIndex(t *testing.T) {
+	for i, test := range []struct {
+		k          string
+		keys       []string
+		wantIndex  int
+		wantExists bool
+	}{
+		{"0", []string{"1", "2", "3"}, 0, false},
+		{"1", []string{"1", "2", "3"}, 0, true},
+		{"4", []string{"1", "2", "3"}, 3, false},
+		{"4", []string{"1", "2", "4"}, 2, true},
+		{"3", []string{"1", "2", "4"}, 2, false},
+		{"10", []string{"10", "5"}, 0, true},
+	} {
+		root := newPage(100, true, nil)
+		root.records = makeRecords(test.keys...)
+		gotIndex, gotExists := root.keyIndex(test.k)
+
+		if gotIndex != test.wantIndex || gotExists != test.wantExists {
+			t.Errorf("[TestKeyIndex] %d: Got (%v, %v); Want (%v, %v)", i, gotIndex, gotExists, test.wantIndex, test.wantExists)
 		}
-	})
-
-	t.Run("Delete key in leaf", func(t *testing.T) {
-		u := util{t}
-		for index, test := range []struct {
-			targetKey string
-			want      []string
-		}{
-			{"a", []string{"b", "c"}},
-			{"b", []string{"a", "c"}},
-			{"c", []string{"a", "b"}},
-		} {
-			var (
-				node = makePage(2, makeRecords("a", "b", "c"))
-				err  = node.Delete(test.targetKey)
-			)
-
-			if err != nil {
-				t.Errorf("Should not return error")
-			}
-
-			u.hasKeys(fmt.Sprintf("[DeleteKey]: %d", index), test.want, node)
-		}
-	})
-
-	t.Run("Internal node, predecessor has t keys", func(t *testing.T) {
-		u := &util{t}
-		root := makePage(2, makeRecords("5"),
-			makePage(2, makeRecords("2", "3")),
-			makePage(2, makeRecords("6")),
-		)
-
-		root.Delete("5")
-
-		u.with("Root", root, func(nu namedUtil) {
-			nu.hasKeys("3")
-			nu.hasNChildren(2)
-		})
-
-		u.with("Left child", root.children[0], func(nu namedUtil) {
-			nu.hasNChildren(0)
-			nu.hasKeys("2")
-		})
-
-		u.with("Right child", root.children[1], func(nu namedUtil) {
-			nu.hasNChildren(0)
-			nu.hasKeys("6")
-		})
-	})
-
-	t.Run("Deep internal node, predecessor has t keys", func(t *testing.T) {
-		u := &util{t}
-		root := makePage(2, makeRecords("9"),
-			makePage(2, makeRecords("3", "5"),
-				makePage(2, makeRecords("2")),
-				makePage(2, makeRecords("4")),
-				makePage(2, makeRecords("6")),
-			),
-			makePage(2, makeRecords("10000")),
-		)
-
-		root.Delete("9")
-
-		u.with("Root", root, func(nu namedUtil) {
-			nu.hasKeys("6")
-			nu.hasNChildren(2)
-		})
-
-		u.with("Left child", root.children[0], func(nu namedUtil) {
-			nu.hasNChildren(2)
-			nu.hasKeys("3")
-
-			nu.withChild(0, func(nu namedUtil) {
-				nu.hasKeys("2")
-			})
-			nu.withChild(1, func(nu namedUtil) {
-				nu.hasKeys("4", "5")
-			})
-		})
-
-		u.with("Right child", root.children[1], func(nu namedUtil) {
-			nu.hasNChildren(0)
-			nu.hasKeys("10000")
-		})
-	})
-
-	t.Run("Internal node, successor has t keys", func(t *testing.T) {
-		u := &util{t}
-		root := makePage(2, makeRecords("5"),
-			makePage(2, makeRecords("2")),
-			makePage(2, makeRecords("6", "7")),
-		)
-
-		root.Delete("5")
-
-		u.with("Root", root, func(nu namedUtil) {
-			nu.hasKeys("6")
-			nu.hasNChildren(2)
-		})
-
-		u.with("Left child", root.children[0], func(nu namedUtil) {
-			nu.hasNChildren(0)
-			nu.hasKeys("2")
-		})
-
-		u.with("Right child", root.children[1], func(nu namedUtil) {
-			nu.hasNChildren(0)
-			nu.hasKeys("7")
-		})
-	})
-
-	t.Run("Deep internal node, successor has t keys", func(t *testing.T) {
-		u := &util{t}
-		root := makePage(2, makeRecords("3"),
-			makePage(2, makeRecords("10000")),
-			makePage(2, makeRecords("5", "8"),
-				makePage(2, makeRecords("4")),
-				makePage(2, makeRecords("7")),
-				makePage(2, makeRecords("9")),
-			),
-		)
-
-		root.Delete("3")
-
-		u.with("Root", root, func(nu namedUtil) {
-			nu.hasKeys("4")
-			nu.hasNChildren(2)
-		})
-
-		u.with("Left child", root.children[0], func(nu namedUtil) {
-			nu.hasNChildren(0)
-			nu.hasKeys("10000")
-
-		})
-
-		u.with("Right child", root.children[1], func(nu namedUtil) {
-			nu.hasNChildren(2)
-			nu.hasKeys("8")
-
-			nu.withChild(0, func(nu namedUtil) {
-				nu.hasKeys("5", "7")
-			})
-			nu.withChild(1, func(nu namedUtil) {
-				nu.hasKeys("9")
-			})
-		})
-	})
-
-	t.Run("Internal node, predecessor and successor have t-1 keys", func(t *testing.T) {
-		u := &util{t}
-		root := makePage(2, makeRecords("5"),
-			makePage(2, makeRecords("2")),
-			makePage(2, makeRecords("6")),
-		)
-
-		root.Delete("5")
-
-		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(0)
-			nu.hasNChildren(1)
-
-			nu.withChild(0, func(nu namedUtil) {
-				nu.hasKeys("2", "6")
-				nu.hasNChildren(0)
-			})
-		})
-
-	})
+	}
 }
 
 func TestMergeChildren(t *testing.T) {
@@ -462,7 +634,7 @@ func TestMergeChildren(t *testing.T) {
 	})
 }
 
-func TestPredecessorSuccessorNode(t *testing.T) {
+func TestPredecessorSuccessorPage(t *testing.T) {
 	target := makePage(2, makeRecords("99"))
 	root := makePage(2, makeRecords("a", "c"),
 		makePage(2, makeRecords()),
@@ -480,20 +652,20 @@ func TestPredecessorSuccessorNode(t *testing.T) {
 }
 
 func TestFull(t *testing.T) {
-	root := newPage(2, true)
+	root := newPage(2, true, nil)
 
 	if got := root.Full(); got {
 		t.Errorf("New(2).IsFull() = %v; want false", got)
 	}
 
-	root.records = makeNewRecords([]string{"1", "2", "3"})
+	root.records = makeRecords("1", "2", "3")
 
 	if got := root.Full(); !got {
 		t.Errorf("Want root.IsFull() = true, got %v", got)
 	}
 }
 
-func TestIsSparse(t *testing.T) {
+func TestSparse(t *testing.T) {
 	for i, test := range []struct {
 		t          int
 		keys       []string
@@ -610,11 +782,16 @@ func TestSplitFullPage(t *testing.T) {
 }
 
 func TestHandleSparsePage(t *testing.T) {
+	bs := newBufferedStorage(nil)
+	makeBufPage := makePageWithBufferedStorage(bs)
+
 	t.Run("Left sibling has t keys", func(t *testing.T) {
 		u := util{t}
-		root := makePage(2, makeRecords("c"),
-			makePage(2, makeRecords("a", "b")),
-			makePage(2, makeRecords("d")),
+		bs.flush()
+
+		root := makeBufPage(2, makeRecords("c"),
+			makeBufPage(2, makeRecords("a", "b")),
+			makeBufPage(2, makeRecords("d")),
 		)
 
 		handleSparsePage(root, root.children[1])
@@ -627,20 +804,37 @@ func TestHandleSparsePage(t *testing.T) {
 		u.with("Right child", root.children[1], func(nu namedUtil) {
 			nu.hasKeys("c", "d")
 		})
+
+		if got := len(bs.writeBuf); got != 3 {
+			t.Errorf("Got=%d, Want=3", got)
+		}
+
+		if bs.writeBuf[root.ID] == nil {
+			t.Errorf("Root not written")
+		}
+
+		if bs.writeBuf[root.children[0].ID] == nil {
+			t.Errorf("Left child not written")
+		}
+
+		if bs.writeBuf[root.children[1].ID] == nil {
+			t.Errorf("Right child not written")
+		}
 	})
 
 	t.Run("Left internal node sibling has t keys", func(t *testing.T) {
 		u := util{t}
-		movedChild := makePage(2, makeRecords())
-		root := makePage(2, makeRecords("c"),
-			makePage(2, makeRecords("a", "b"),
-				makePage(2, makeRecords()),
-				makePage(2, makeRecords()),
+
+		movedChild := makeBufPage(2, makeRecords())
+		root := makeBufPage(2, makeRecords("c"),
+			makeBufPage(2, makeRecords("a", "b"),
+				makeBufPage(2, makeRecords()),
+				makeBufPage(2, makeRecords()),
 				movedChild,
 			),
-			makePage(2, makeRecords("d"),
-				makePage(2, makeRecords()),
-				makePage(2, makeRecords()),
+			makeBufPage(2, makeRecords("d"),
+				makeBufPage(2, makeRecords()),
+				makeBufPage(2, makeRecords()),
 			),
 		)
 
@@ -663,9 +857,10 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Right sibling has t keys", func(t *testing.T) {
 		u := util{t}
-		root := makePage(2, makeRecords("c"),
-			makePage(2, makeRecords("a")),
-			makePage(2, makeRecords("d", "e")),
+		bs.flush()
+		root := makeBufPage(2, makeRecords("c"),
+			makeBufPage(2, makeRecords("a")),
+			makeBufPage(2, makeRecords("d", "e")),
 		)
 
 		handleSparsePage(root, root.children[0])
@@ -679,6 +874,22 @@ func TestHandleSparsePage(t *testing.T) {
 		u.with("Left child", root.children[0], func(nu namedUtil) {
 			nu.hasKeys("a", "c")
 		})
+
+		if got := len(bs.writeBuf); got != 3 {
+			t.Errorf("Got=%d, Want=3", got)
+		}
+
+		if bs.writeBuf[root.ID] == nil {
+			t.Errorf("Root not written")
+		}
+
+		if bs.writeBuf[root.children[0].ID] == nil {
+			t.Errorf("Left child not written")
+		}
+
+		if bs.writeBuf[root.children[1].ID] == nil {
+			t.Errorf("Right child not written")
+		}
 	})
 
 	t.Run("Right internal node sibling has t keys", func(t *testing.T) {
@@ -715,10 +926,15 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Both siblings are sparse", func(t *testing.T) {
 		u := util{t}
-		root := makePage(2, makeRecords("b", "d"),
-			makePage(2, makeRecords("a")),
-			makePage(2, makeRecords("c")),
-			makePage(2, makeRecords("e")),
+		bs.flush()
+
+		mergedPage := makeBufPage(2, makeRecords("a"))
+		deletedPage := makeBufPage(2, makeRecords("c"))
+
+		root := makeBufPage(2, makeRecords("b", "d"),
+			mergedPage,
+			deletedPage,
+			makeBufPage(2, makeRecords("e")),
 		)
 
 		handleSparsePage(root, root.children[1])
@@ -731,6 +947,25 @@ func TestHandleSparsePage(t *testing.T) {
 		u.with("Merged node", root.children[0], func(nu namedUtil) {
 			nu.hasKeys("a", "b", "c")
 		})
+
+		if got := len(bs.writeBuf); got != 2 {
+			t.Errorf("Got=%d Want=2", got)
+		}
+
+		if bs.writeBuf[root.ID] == nil {
+			t.Errorf("Root not written")
+		}
+		if bs.writeBuf[mergedPage.ID] == nil {
+			t.Errorf("Merged page not written")
+		}
+
+		if got := len(bs.deleteBuf); got != 1 {
+			t.Errorf("Got=%d Want=1", got)
+		}
+		if bs.deleteBuf[deletedPage.ID] == nil {
+			t.Errorf("Deleted page not deleted")
+		}
+
 	})
 
 	t.Run("Both siblings are sparse; no right sibling", func(t *testing.T) {
