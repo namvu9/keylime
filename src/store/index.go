@@ -13,9 +13,9 @@ type KeyIndex struct {
 	Height   int
 	T        int
 
-	writeBuf map[*page]bool
 	root     *page
 	storage  ReadWriterTo
+	bufWriter *BufferedStorage
 }
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
@@ -35,7 +35,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	page := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
 	page.insert(r)
 
-	return nil
+	return ki.bufWriter.flush()
 }
 
 func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
@@ -45,18 +45,17 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 		return err
 	}
 
-	if err := ki.flushWriteBuffer(); err != nil {
-		return err
-	}
-
 	if ki.root.Empty() && !ki.root.Leaf() {
+		oldRoot := ki.root
 		ki.root = ki.root.children[0]
 		ki.RootPage = ki.root.ID
 		ki.Height--
-		return ki.Save()
+
+		oldRoot.deletePage()
+		ki.Save()
 	}
 
-	return nil
+	return ki.bufWriter.flush()
 }
 
 func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error) {
@@ -67,23 +66,6 @@ func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error)
 	}
 
 	return &node.records[i], nil
-}
-
-func (ki *KeyIndex) flushWriteBuffer() error {
-	defer func() {
-		for p := range ki.writeBuf {
-			delete(ki.writeBuf, p)
-		}
-	}()
-
-	for p := range ki.writeBuf {
-		if ki.storage == nil {
-			return fmt.Errorf("Writing to nil PageReadWriter")
-		}
-		fmt.Println(p)
-	}
-
-	return nil
 }
 
 // OrderIndex indexes records by their order with respect to
@@ -105,5 +87,8 @@ func (c *Collection) OrderBy(attr interface{}) *OrderIndex {
 	return &OrderIndex{}
 }
 
-func (ki *KeyIndex) Save() error { return nil }
+func (ki *KeyIndex) Save() error {
+	_, err := ki.storage.Write(nil)
+	return err
+}
 func (ki *KeyIndex) Read() error { return nil }

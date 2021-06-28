@@ -57,6 +57,39 @@ func TestGet(t *testing.T) {
 func TestInsert(t *testing.T) {
 	u := util{t}
 
+	t.Run("KI is saved if root changes", func(t *testing.T) {
+		reporter := newMockReadWriterTo()
+		ki := newKeyIndex(2, reporter)
+		ki.root.records = makeRecords("k", "o", "s")
+
+		ki.Insert(context.Background(), record.New("q", nil))
+
+		u.with("Root", ki.root, func(nu namedUtil) {
+			nu.hasNChildren(2)
+		})
+
+		if !reporter.writes["key_index"] {
+			t.Errorf("KeyIndex not written")
+		}
+
+		if !reporter.writes[ki.root.ID] {
+			t.Errorf("New root not written")
+		}
+
+		if !reporter.writes[ki.root.children[0].ID] {
+			t.Errorf("New root not written")
+		}
+
+		if !reporter.writes[ki.root.children[1].ID] {
+			t.Errorf("New root not written")
+		}
+
+		if ki.RootPage != ki.root.ID {
+			t.Errorf("Want=%s Got=%s", ki.root.ID, ki.RootPage)
+		}
+
+	})
+
 	t.Run("Insertion into tree with full root and full target leaf", func(t *testing.T) {
 		var (
 			root = makePage(2, makeRecords("k", "o", "s"),
@@ -113,11 +146,57 @@ func TestInsert(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	ctx := context.Background()
-	t.Run("Delete missing key", func(t *testing.T) {
-		ki := KeyIndex{
-			T:    2,
-			root: makePage(2, makeRecords("5")),
+	u := util{t}
+
+	t.Run("KI is saved if root becomes empty", func(t *testing.T) {
+		reporter := newMockReadWriterTo()
+		ki := newKeyIndex(2, reporter)
+		deleteMe := ki.newPage(true)
+
+		oldRoot := ki.newPage(false)
+		oldRoot.records = append(oldRoot.records, record.New("5", nil))
+		oldRoot.children = []*page{
+			ki.newPage(true),
+			deleteMe, 
 		}
+
+		oldRoot.children[0].records = append(oldRoot.children[0].records, record.New("2", nil))
+		oldRoot.children[1].records = append(oldRoot.children[1].records, record.New("8", nil))
+
+		ki.root = oldRoot
+
+		ki.Delete(ctx, "5")
+
+		u.with("Root", ki.root, func(nu namedUtil) {
+			nu.hasNChildren(0)
+		})
+
+		if len(reporter.writes) != 2 {
+			t.Errorf("Want=2 Got=%d", len(reporter.writes))
+		}
+
+		if !reporter.writes["key_index"] {
+			t.Errorf("KeyIndex not written")
+		}
+
+		if !reporter.writes[ki.root.ID] {
+			t.Errorf("New root not written")
+		}
+
+		if len(reporter.deletes) != 2 {
+			t.Errorf("Want=1 Got=%d", len(reporter.deletes))
+		}
+		if !reporter.deletes[oldRoot.ID] {
+			t.Errorf("Old root not deleted")
+		}
+		if !reporter.deletes[deleteMe.ID] {
+			t.Errorf("Old root not deleted")
+		}
+	})
+
+	t.Run("Delete missing key", func(t *testing.T) {
+		ki := newKeyIndex(2, nil)
+		ki.root = makePage(2, makeRecords("5"))
 
 		err := ki.Delete(ctx, "10")
 		if err == nil {
@@ -127,10 +206,8 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
-		ki := KeyIndex{
-			T:    2,
-			root: makePage(2, makeRecords("5")),
-		}
+		ki := newKeyIndex(2, nil)
+		ki.root = makePage(2, makeRecords("5"))
 
 		ki.Delete(ctx, "5")
 		u.hasNRecords("Root", 0, ki.root)
@@ -141,13 +218,11 @@ func TestDelete(t *testing.T) {
 	// Case 0: Delete from root with 1 key
 	t.Run("Delete from root with 1 key", func(t2 *testing.T) {
 		u := util{t2}
-		ki := KeyIndex{
-			T: 2,
-			root: makePage(2, makeRecords("5"),
-				makePage(2, makeRecords("2")),
-				makePage(2, makeRecords("8")),
-			),
-		}
+		ki := newKeyIndex(2, nil)
+		ki.root = makePage(2, makeRecords("5"),
+			makePage(2, makeRecords("2")),
+			makePage(2, makeRecords("8")),
+		)
 
 		ki.Delete(ctx, "5")
 
@@ -159,10 +234,9 @@ func TestDelete(t *testing.T) {
 
 	// Case 1: Delete From Leaf
 	t.Run("Delete from leaf", func(t *testing.T) {
-		var (
-			root = makePage(2, makeRecords("1", "2", "3"))
-			ki   = &KeyIndex{root: root}
-		)
+		ki := newKeyIndex(2, nil)
+		root := makePage(2, makeRecords("1", "2", "3"))
+		ki.root = root
 
 		ki.Delete(ctx, "2")
 

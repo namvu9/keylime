@@ -14,24 +14,50 @@ import (
 type ReadWriterTo interface {
 	io.ReadWriter
 	WithSegment(pathSegment string) ReadWriterTo
+	Delete() error
 }
 
 type MockReadWriterTo struct {
+	root     *MockReadWriterTo
 	location string
+	writes   map[string]bool
+	deletes  map[string]bool
+	reads    map[string]bool
 }
 
-func (lrw MockReadWriterTo) Write(src []byte) (int, error) {
+func (lrw *MockReadWriterTo) Write(src []byte) (int, error) {
+	lrw.root.writes[lrw.location] = true
+
 	return 0, nil
 }
 
-func (lrw MockReadWriterTo) Read(dst []byte) (int, error) {
+func (lrw *MockReadWriterTo) Read(dst []byte) (int, error) {
+	lrw.root.reads[lrw.location] = true
 	return 0, nil
 }
 
-func (lrw MockReadWriterTo) WithSegment(s string) ReadWriterTo {
-	return MockReadWriterTo{
-		location: path.Join(lrw.location, s),
+func (rwt *MockReadWriterTo) Delete() error {
+	rwt.root.deletes[rwt.location] = true
+	return nil
+}
+
+func (mrwt *MockReadWriterTo) WithSegment(s string) ReadWriterTo {
+	rwt := &MockReadWriterTo{
+		root:     mrwt.root,
+		location: path.Join(mrwt.location, s),
 	}
+	return rwt
+}
+
+func newMockReadWriterTo() *MockReadWriterTo {
+	mrw := &MockReadWriterTo{
+		writes:  make(map[string]bool),
+		reads:   make(map[string]bool),
+		deletes: make(map[string]bool),
+	}
+	mrw.root = mrw
+
+	return mrw
 }
 
 type Store struct {
