@@ -10,7 +10,6 @@ import (
 // A Collection is a named container for a group of records
 type Collection struct {
 	Name    string
-	baseDir string
 
 	primaryIndex *KeyIndex
 	storage      ReadWriterTo
@@ -44,12 +43,12 @@ func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 	return nil
 }
 
-func (c *Collection) Save() error {
+func (c *Collection) Create() error {
 	_, err := c.storage.Write(nil)
 	if err != nil {
 		return err
 	}
-	err = c.primaryIndex.Save()
+	err = c.primaryIndex.Create()
 	if err != nil {
 		return err
 	}

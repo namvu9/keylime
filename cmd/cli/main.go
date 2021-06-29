@@ -69,12 +69,17 @@ var (
 	}
 
 	s      = store.New(cfg, store.WithStorage(fs))
+	c      *store.Collection
 	reader = bufio.NewReader(os.Stdin)
 )
 
 func main() {
 	for {
-		fmt.Print("KL> ")
+		if c == nil {
+			fmt.Print("KL> ")
+		} else {
+			fmt.Printf("[%s]> ", c.Name)
+		}
 		ctx := context.Background()
 
 		var (
@@ -100,11 +105,6 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 		}
 	}()
 
-	c, err := s.Collection("test")
-	if err != nil {
-		return err
-	}
-
 	switch strings.ToLower(cmd) {
 	case "set":
 		if len(args) < 2 {
@@ -129,6 +129,19 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
 		}
 		return c.Delete(ctx, args[0])
+	case "collection":
+		if len(args) != 1 {
+			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
+		}
+
+		collection, err := s.Collection(args[0])
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("Successfully created collection", args[0])
+		c = collection
+
 	case "exit":
 		os.Exit(0)
 	}

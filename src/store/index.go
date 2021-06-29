@@ -119,6 +119,24 @@ func (ki *KeyIndex) Save() error {
 
 	return nil
 }
+
+func (ki *KeyIndex) Create() error {
+	buf := new(bytes.Buffer)
+	enc := gob.NewEncoder(buf)
+	enc.Encode(ki)
+
+	_, err := ki.storage.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	err = ki.root.save()
+	if err != nil {
+		return err
+	}
+
+	return ki.bufWriter.flush()
+}
 func (ki *KeyIndex) read() error {
 	const op errors.Op = "(*KeyIndex).read"
 

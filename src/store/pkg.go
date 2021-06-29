@@ -86,7 +86,7 @@ func (s Store) Collection(name string) (*Collection, error) {
 
 			s.collections[name] = c
 		} else {
-			err := c.Save()
+			err := c.Create()
 			if err != nil {
 				return nil, err
 			}
@@ -104,17 +104,6 @@ func WithStorage(rw ReadWriterTo) Option {
 	return func(s *Store) {
 		s.storage = rw
 	}
-}
-
-func (s Store) save() error {
-	for _, c := range s.collections {
-		err := c.Save()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (s *Store) hasCollection(name string) bool {
