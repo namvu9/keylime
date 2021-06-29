@@ -155,7 +155,7 @@ func TestDelete(t *testing.T) {
 
 		oldRoot := ki.newPage(false)
 		oldRoot.records = append(oldRoot.records, record.New("5", nil))
-		oldRoot.children = []*page{
+		oldRoot.children = []*Page{
 			ki.newPage(true),
 			deleteMe, 
 		}
@@ -249,7 +249,7 @@ func TestDelete(t *testing.T) {
 	})
 }
 
-func TestBuildCollection(t *testing.T) {
+func TestBuildKeyIndex(t *testing.T) {
 	u := util{t}
 
 	ki := newKeyIndex(2, nil)

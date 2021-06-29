@@ -1,11 +1,15 @@
 package store
 
-import "fmt"
+import (
+	"fmt"
 
-type iterFunc func(*page) *page
-type handleFunc func(*page, *page)
+	"github.com/namvu9/keylime/src/errors"
+)
 
-func (next iterFunc) done(p *page) bool {
+type iterFunc func(*Page) *Page
+type handleFunc func(*Page, *Page)
+
+func (next iterFunc) done(p *Page) bool {
 	if !p.loaded {
 		// TODO: handle error
 		err := p.load()
@@ -23,10 +27,17 @@ func (next iterFunc) done(p *page) bool {
 }
 
 type collectionIterator struct {
-	node    *page
+	node    *Page
 	next    iterFunc
 	handler handleFunc
-	err     error
+	err     *errors.Error
+}
+
+// Err returns the error that caused the iteration to stop
+// prematurely. Returns nil if iteration terminated
+// successfully.
+func (ci *collectionIterator) Err() *errors.Error {
+	return ci.err
 }
 
 func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
@@ -34,7 +45,7 @@ func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 	return ci
 }
 
-func (ci *collectionIterator) Get() *page {
+func (ci *collectionIterator) Get() *Page {
 	for !ci.next.done(ci.node) {
 		if ci.handler != nil {
 			ci.handler(ci.node, ci.next(ci.node))
@@ -48,20 +59,20 @@ func (ci *collectionIterator) Get() *page {
 
 // maxPage returns an iterator that terminates at the page
 // containing the largest key in the tree rooted at `p`.
-func (p *page) maxPage() *collectionIterator {
+func (p *Page) maxPage() *collectionIterator {
 	return p.iter(byMaxPage)
 }
 
 // minPage returns an iterator that terminates at the page
 // containing the smallest key in the tree rooted at `p`
-func (p *page) minPage() *collectionIterator {
+func (p *Page) minPage() *collectionIterator {
 	return p.iter(byMinPage)
 }
 
 // iter returns an iterator that traverses a `Collection`
 // of `Pages`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
-func (p *page) iter(next iterFunc) *collectionIterator {
+func (p *Page) iter(next iterFunc) *collectionIterator {
 	return &collectionIterator{
 		next: next,
 		node: p,
@@ -69,7 +80,7 @@ func (p *page) iter(next iterFunc) *collectionIterator {
 }
 
 func byKey(k string) iterFunc {
-	return func(p *page) *page {
+	return func(p *Page) *Page {
 		index, exists := p.keyIndex(k)
 		if exists {
 			return p
@@ -79,10 +90,10 @@ func byKey(k string) iterFunc {
 	}
 }
 
-func byMinPage(p *page) *page {
+func byMinPage(p *Page) *Page {
 	return p.children[0]
 }
 
-func byMaxPage(p *page) *page {
+func byMaxPage(p *Page) *Page {
 	return p.children[len(p.children)-1]
 }

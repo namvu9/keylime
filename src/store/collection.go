@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/namvu9/keylime/src/record"
 )
@@ -37,14 +38,18 @@ func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 	}
 
 	if err := c.primaryIndex.Save(); err != nil {
-		return err
+		return fmt.Errorf("Could not persist primary index: %w", err)
 	}
 
 	return nil
 }
 
 func (c *Collection) Save() error {
-	err := c.primaryIndex.Save()
+	_, err := c.storage.Write(nil)
+	if err != nil {
+		return err
+	}
+	err = c.primaryIndex.Save()
 	if err != nil {
 		return err
 	}
@@ -53,7 +58,8 @@ func (c *Collection) Save() error {
 }
 
 func (c *Collection) Load() error {
-	return nil
+	err := c.primaryIndex.Load()
+	return err
 }
 
 // Delete record with key `k`. An error is returned of no

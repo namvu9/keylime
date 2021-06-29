@@ -492,7 +492,7 @@ func TestInsertChild(t *testing.T) {
 			newChild = newPageWithKeys(2, []string{"10"})
 		)
 
-		root.children = []*page{childA, childC}
+		root.children = []*Page{childA, childC}
 		root.insertChildren(1, newChild)
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasChildren(childA, newChild, childC)
@@ -507,7 +507,7 @@ func TestInsertChild(t *testing.T) {
 			newChild = newPageWithKeys(2, []string{"10"})
 		)
 
-		root.children = []*page{childA, childC}
+		root.children = []*Page{childA, childC}
 		root.insertChildren(2, newChild)
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasChildren(childA, childC, newChild)

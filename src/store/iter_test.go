@@ -6,7 +6,7 @@ func TestMaxPage(t *testing.T) {
 	max := makePage(2, makeRecords("11"))
 	for _, test := range []struct {
 		name string
-		p *page
+		p *Page
 	}{
 		{"from root",
 			makePage(2, makeRecords("7"),
@@ -34,7 +34,7 @@ func TestMinPage(t *testing.T) {
 	min := makePage(2, makeRecords("11"))
 	for _, test := range []struct {
 		name string
-		p *page
+		p *Page
 	}{
 		{"from root",
 			makePage(2, makeRecords("7"),

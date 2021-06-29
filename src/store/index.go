@@ -1,9 +1,12 @@
 package store
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"encoding/gob"
+	"io"
 
+	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/record"
 )
 
@@ -13,15 +16,15 @@ type KeyIndex struct {
 	Height   int
 	T        int
 
-	root     *page
-	storage  ReadWriterTo
+	root      *Page
 	bufWriter *BufferedStorage
+	storage   ReadWriterTo
 }
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 	if ki.root.Full() {
 		newRoot := ki.newPage(false)
-		newRoot.children = []*page{ki.root}
+		newRoot.children = []*Page{ki.root}
 		newRoot.splitChild(0)
 
 		ki.RootPage = newRoot.ID
@@ -39,10 +42,12 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 }
 
 func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
+	const op errors.Op = "(*KeyIndex).Delete"
+
 	page := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
 
 	if err := page.Delete(key); err != nil {
-		return err
+		return errors.Wrap(op, errors.InternalError, err)
 	}
 
 	if ki.root.Empty() && !ki.root.Leaf() {
@@ -59,10 +64,12 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 }
 
 func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error) {
+	const op errors.Op = "(*KeyIndex).Get"
+
 	node := ki.root.iter(byKey(key)).Get()
 	i, ok := node.keyIndex(key)
 	if !ok {
-		return nil, fmt.Errorf("KeyNotFound")
+		return nil, errors.NewKeyNotFoundError(op, key)
 	}
 
 	return &node.records[i], nil
@@ -87,8 +94,61 @@ func (c *Collection) OrderBy(attr interface{}) *OrderIndex {
 	return &OrderIndex{}
 }
 
-func (ki *KeyIndex) Save() error {
-	_, err := ki.storage.Write(nil)
-	return err
+type KeyIndexSerialized struct {
+	RootPage string
+	T        int
+	Height   int
 }
-func (ki *KeyIndex) Read() error { return nil }
+
+func (ki *KeyIndex) Save() error {
+	buf := new(bytes.Buffer)
+	enc := gob.NewEncoder(buf)
+	enc.Encode(ki)
+
+	_, err := ki.storage.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return ki.root.save()
+}
+func (ki *KeyIndex) read() error {
+	buf := new(bytes.Buffer)
+
+	for {
+		var b = make([]byte, 100)
+		n, err := ki.storage.Read(b)
+		if err != nil && err != io.EOF {
+			return err
+		}
+
+		if n > 0 {
+			buf.Write(b[:n])
+		}
+
+		if err == io.EOF {
+			dec := gob.NewDecoder(buf)
+			err := dec.Decode(ki)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+}
+
+func (ki *KeyIndex) Load() error {
+	err := ki.read()
+	if err != nil {
+		return err
+	}
+
+	return ki.loadRoot()
+}
+
+func (ki *KeyIndex) loadRoot() error {
+	ki.root = newPageWithID(ki.T, false, ki.RootPage, ki.bufWriter)
+
+	return ki.root.load()
+}

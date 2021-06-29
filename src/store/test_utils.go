@@ -11,23 +11,23 @@ type util struct {
 	t *testing.T
 }
 
-func (u util) with(name string, node *page, fn func(namedUtil)) {
+func (u util) with(name string, node *Page, fn func(namedUtil)) {
 	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), node})
 }
 
-func (u util) hasNRecords(name string, n int, node *page) {
+func (u util) hasNRecords(name string, n int, node *Page) {
 	if len(node.records) != n {
 		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.records), n)
 	}
 }
 
-func (u util) hasNChildren(name string, n int, node *page) {
+func (u util) hasNChildren(name string, n int, node *Page) {
 	if len(node.children) != n {
 		u.t.Errorf("len(%s.children), Got=%d; Want=%d", name, len(node.children), n)
 	}
 }
 
-func (u util) hasKeys(name string, keys []string, node *page) {
+func (u util) hasKeys(name string, keys []string, node *Page) {
 	var nKeys []string
 	for _, k := range node.records {
 		nKeys = append(nKeys, k.Key)
@@ -46,7 +46,7 @@ func (u util) hasKeys(name string, keys []string, node *page) {
 	}
 }
 
-func (u util) hasChildren(name string, children []*page, node *page) {
+func (u util) hasChildren(name string, children []*Page, node *Page) {
 	wantIDs := []string{}
 	for _, child := range children {
 		wantIDs = append(wantIDs, fmt.Sprintf("%p", child))
@@ -73,7 +73,7 @@ func (u util) hasChildren(name string, children []*page, node *page) {
 type namedUtil struct {
 	u    util
 	name string
-	node *page
+	node *Page
 }
 
 func (nu namedUtil) withChild(i int, fn func(namedUtil)) {
@@ -82,7 +82,7 @@ func (nu namedUtil) withChild(i int, fn func(namedUtil)) {
 	fn(u)
 }
 
-func (nu namedUtil) is(other *page) bool {
+func (nu namedUtil) is(other *Page) bool {
 	return nu.node == other
 }
 
@@ -98,20 +98,20 @@ func (nu namedUtil) hasKeys(keys ...string) {
 	nu.u.hasKeys(nu.name, keys, nu.node)
 }
 
-func (nu namedUtil) hasChildren(children ...*page) {
+func (nu namedUtil) hasChildren(children ...*Page) {
 	nu.u.hasChildren(nu.name, children, nu.node)
 }
 
-func newPageWithKeys(t int, keys []string) *page {
-	return &page{
+func newPageWithKeys(t int, keys []string) *Page {
+	return &Page{
 		t:       t,
 		records: makeRecords(keys...),
 		loaded:  true,
 	}
 }
 
-func makePageWithBufferedStorage(bs *BufferedStorage) func(t int, records []record.Record, children ...*page) *page {
-	return func(t int, records []record.Record, children ...*page) *page {
+func makePageWithBufferedStorage(bs *BufferedStorage) func(t int, records []record.Record, children ...*Page) *Page {
+	return func(t int, records []record.Record, children ...*Page) *Page {
 		root := newPage(t, false, nil)
 		root.writer = bs
 		root.records = records
@@ -131,7 +131,7 @@ func makePageWithBufferedStorage(bs *BufferedStorage) func(t int, records []reco
 	}
 }
 
-func makePage(t int, records []record.Record, children ...*page) *page {
+func makePage(t int, records []record.Record, children ...*Page) *Page {
 	root := newPage(t, false, nil)
 	root.records = records
 	root.children = children
@@ -158,7 +158,7 @@ func makeRecords(keys ...string) []record.Record {
 }
 
 // Iterates over a collection in order of key precedence
-func validate(p *page, root bool) {
+func validate(p *Page, root bool) {
 	if !root && len(p.records) < p.t-1 || len(p.records) > 2*p.t-1 {
 		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.ID, len(p.records)))
 	}

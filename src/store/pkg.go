@@ -6,15 +6,22 @@ by a B-tree.
 package store
 
 import (
+	"encoding/gob"
+	"fmt"
 	"io"
-	"os"
 	"path"
 )
+
+func init() {
+	fmt.Println("INIT")
+	gob.Register(MockReadWriterTo{})
+}
 
 type ReadWriterTo interface {
 	io.ReadWriter
 	WithSegment(pathSegment string) ReadWriterTo
 	Delete() error
+	Exists() (bool, error)
 }
 
 type MockReadWriterTo struct {
@@ -25,20 +32,24 @@ type MockReadWriterTo struct {
 	reads    map[string]bool
 }
 
-func (lrw *MockReadWriterTo) Write(src []byte) (int, error) {
-	lrw.root.writes[lrw.location] = true
+func (rwt *MockReadWriterTo) Write(src []byte) (int, error) {
+	rwt.root.writes[rwt.location] = true
 
 	return 0, nil
 }
 
-func (lrw *MockReadWriterTo) Read(dst []byte) (int, error) {
-	lrw.root.reads[lrw.location] = true
+func (rwt *MockReadWriterTo) Read(dst []byte) (int, error) {
+	rwt.root.reads[rwt.location] = true
 	return 0, nil
 }
 
 func (rwt *MockReadWriterTo) Delete() error {
 	rwt.root.deletes[rwt.location] = true
 	return nil
+}
+
+func (rwt *MockReadWriterTo) Exists() (bool, error) {
+	return true, nil
 }
 
 func (mrwt *MockReadWriterTo) WithSegment(s string) ReadWriterTo {
@@ -72,7 +83,7 @@ type Store struct {
 func (s Store) Collection(name string) (*Collection, error) {
 	c, ok := s.collections[name]
 	if !ok {
-		c = newCollection(name, s.storage.WithSegment(name))
+		c = newCollection(name, s.storage)
 
 		if s.hasCollection(name) {
 			err := c.Load()
@@ -110,13 +121,11 @@ func (s Store) save() error {
 		}
 	}
 
-	// TODO: Save store
-
 	return nil
 }
 
 func (s *Store) hasCollection(name string) bool {
-	if _, err := os.Stat(path.Join(s.baseDir, name)); os.IsNotExist(err) {
+	if ok, err := s.storage.WithSegment(name).Exists(); !ok || err != nil {
 		return false
 	}
 

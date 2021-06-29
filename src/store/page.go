@@ -1,19 +1,21 @@
 package store
 
 import (
-	"errors"
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/record"
 )
 
-// A page is an implementation of a node in a B-tree.
-type page struct {
+// A Page is an implementation of a node in a B-tree.
+type Page struct {
 	ID string
 
-	children []*page
+	children []*Page
 	records  []record.Record
 	loaded   bool
 	leaf     bool
@@ -23,10 +25,12 @@ type page struct {
 	writer *BufferedStorage
 }
 
-func (p *page) Get(k string) ([]byte, error) {
-	index, ok := p.keyIndex(k)
-	if !ok {
-		return nil, errors.New("KeyNotFound")
+func (p *Page) Get(k string) ([]byte, error) {
+	const op errors.Op = "(*page).Get"
+
+	index, exists := p.keyIndex(k)
+	if !exists {
+		return nil, errors.NewKeyNotFoundError(op, k)
 	}
 
 	return p.records[index].Value, nil
@@ -34,10 +38,11 @@ func (p *page) Get(k string) ([]byte, error) {
 
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
-func (p *page) Delete(k string) error {
+func (p *Page) Delete(k string) error {
+	const op errors.Op = "(*page).Delete"
 	index, exists := p.keyIndex(k)
 	if !exists {
-		return fmt.Errorf("KeyNotFoundError")
+		return errors.NewKeyNotFoundError(op, k)
 	}
 
 	if p.leaf {
@@ -48,7 +53,6 @@ func (p *page) Delete(k string) error {
 
 	// Case 1: Predcessor has at least t keys
 	if beforeChild := p.children[index]; !beforeChild.Sparse() {
-		beforeChild.load()
 		var (
 			maxPredPage = beforeChild.maxPage().forEach(handleSparsePage).Get()
 			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
@@ -62,7 +66,6 @@ func (p *page) Delete(k string) error {
 
 	// Case 2: Successor has at least t keys
 	if afterChild := p.children[index+1]; !afterChild.Sparse() {
-		afterChild.load()
 		var (
 			succ    = afterChild.minPage().forEach(handleSparsePage).Get()
 			succRec = succ.records[0]
@@ -83,7 +86,7 @@ func (p *page) Delete(k string) error {
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *page) insert(r record.Record) int {
+func (p *Page) insert(r record.Record) int {
 	out := []record.Record{}
 
 	for i, key := range p.records {
@@ -119,28 +122,28 @@ func (p *page) insert(r record.Record) int {
 
 // Full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
-func (p *page) Full() bool {
+func (p *Page) Full() bool {
 	return len(p.records) == 2*p.t-1
 }
 
 // Sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
-func (p *page) Sparse() bool {
+func (p *Page) Sparse() bool {
 	return len(p.records) <= p.t-1
 }
 
 // Empty reports whether the node is empty (i.e., has no
 // records).
-func (p *page) Empty() bool {
+func (p *Page) Empty() bool {
 	return len(p.records) == 0
 }
 
 // Leaf returns true if `p` is a leaf node
-func (p *page) Leaf() bool {
+func (p *Page) Leaf() bool {
 	return p.leaf
 }
 
-func (p *page) newPage(leaf bool) *page {
+func (p *Page) newPage(leaf bool) *Page {
 	np := newPage(p.t, leaf, p.writer)
 	return np
 }
@@ -148,7 +151,7 @@ func (p *page) newPage(leaf bool) *page {
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
-func (p *page) keyIndex(k string) (index int, exists bool) {
+func (p *Page) keyIndex(k string) (index int, exists bool) {
 	for i, kv := range p.records {
 		if k == kv.Key {
 			return i, true
@@ -163,7 +166,7 @@ func (p *page) keyIndex(k string) (index int, exists bool) {
 }
 
 // Panics if child is not full
-func (p *page) splitChild(index int) {
+func (p *Page) splitChild(index int) {
 	fullChild := p.children[index]
 	if !fullChild.Full() {
 		panic("Cannot split non-full child")
@@ -188,12 +191,12 @@ func (p *page) splitChild(index int) {
 	p.save()
 }
 
-func (p *page) setRecord(index int, r record.Record) {
+func (p *Page) setRecord(index int, r record.Record) {
 	p.records[index] = r
 }
 
-func (p *page) insertChildren(index int, children ...*page) {
-	if len(p.children) == 2*p.t {
+func (p *Page) insertChildren(index int, children ...*Page) {
+	if p.Full() {
 		panic("Cannot insert a child into a full node")
 	}
 
@@ -202,7 +205,7 @@ func (p *page) insertChildren(index int, children ...*page) {
 	nExistingChildren := len(p.children)
 	nChildren := len(children)
 
-	tmp := make([]*page, nExistingChildren+nChildren)
+	tmp := make([]*Page, nExistingChildren+nChildren)
 	copy(tmp[:index], p.children[:index])
 	copy(tmp[index:index+nChildren], children)
 	copy(tmp[nChildren+index:], p.children[index:])
@@ -210,7 +213,7 @@ func (p *page) insertChildren(index int, children ...*page) {
 	p.children = tmp
 }
 
-func (p *page) predecessorPage(k string) *page {
+func (p *Page) predecessorPage(k string) *Page {
 	if p.leaf {
 		return nil
 	}
@@ -223,7 +226,7 @@ func (p *page) predecessorPage(k string) *page {
 	return p.children[index].maxPage().Get()
 }
 
-func (p *page) successorPage(k string) *page {
+func (p *Page) successorPage(k string) *Page {
 	if p.leaf {
 		return nil
 	}
@@ -236,14 +239,14 @@ func (p *page) successorPage(k string) *page {
 	return p.children[index+1].minPage().Get()
 }
 
-func (p *page) prevChildSibling(index int) *page {
+func (p *Page) prevChildSibling(index int) *Page {
 	if index <= 0 {
 		return nil
 	}
 	return p.children[index-1]
 }
 
-func (p *page) nextChildSibling(index int) *page {
+func (p *Page) nextChildSibling(index int) *Page {
 	if index >= len(p.children)-1 {
 		return nil
 	}
@@ -251,7 +254,7 @@ func (p *page) nextChildSibling(index int) *page {
 }
 
 // TODO: TEST
-func (p *page) mergeWith(median record.Record, other *page) {
+func (p *Page) mergeWith(median record.Record, other *Page) {
 	p.records = append(p.records, median)
 	p.records = append(p.records, other.records...)
 	p.children = append(p.children, other.children...)
@@ -262,7 +265,7 @@ func (p *page) mergeWith(median record.Record, other *page) {
 // index `i` as the median key and removing the key from `b` in
 // the process. The original sibling node (i+1) is scheduled
 // for deletion.
-func (p *page) mergeChildren(i int) {
+func (p *Page) mergeChildren(i int) {
 	var (
 		pivotRecord = p.records[i]
 		leftChild   = p.children[i]
@@ -289,7 +292,7 @@ func partitionMedian(nums []record.Record) (record.Record, []record.Record, []re
 	return nums[medianIndex], nums[:medianIndex], nums[medianIndex+1:]
 }
 
-func handleSparsePage(node, child *page) {
+func handleSparsePage(node, child *Page) {
 	if !child.Sparse() {
 		return
 	}
@@ -318,7 +321,7 @@ func handleSparsePage(node, child *page) {
 		if !p.leaf {
 			// Move child from sibling to child
 			siblingLastChild := p.children[len(p.children)-1]
-			child.children = append([]*page{siblingLastChild}, child.children...)
+			child.children = append([]*Page{siblingLastChild}, child.children...)
 			p.children = p.children[:len(p.children)-1]
 		}
 		p.save()
@@ -349,7 +352,7 @@ func handleSparsePage(node, child *page) {
 	node.save()
 }
 
-func splitFullPage(node, child *page) {
+func splitFullPage(node, child *Page) {
 	if !child.Full() {
 		return
 	}
@@ -362,7 +365,7 @@ func splitFullPage(node, child *page) {
 	node.splitChild(index)
 }
 
-func (p *page) childIndex(c *page) (int, bool) {
+func (p *Page) childIndex(c *Page) (int, bool) {
 	for i, child := range p.children {
 		if child == c {
 			return i, true
@@ -372,10 +375,69 @@ func (p *page) childIndex(c *page) (int, bool) {
 	return 0, false
 }
 
-func (p *page) save() error {
+func (p *Page) save() error {
 	return p.writer.Write(p)
 }
-func (p *page) load() error { return nil }
-func (p *page) deletePage() error {
-	return p.writer.Delete(p)
+
+type PageSerialized struct {
+	ID string
+
+	Children []string
+	Records  []record.Record
+	loaded   bool
+	Leaf     bool
+	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 }
+
+func (p *Page) load() error {
+	data, err := io.ReadAll(p.reader)
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(data)
+	ps := PageSerialized{}
+
+	dec := gob.NewDecoder(buf)
+	err = dec.Decode(&ps)
+	if err != nil {
+		return err
+	}
+
+	ps.ToDeserialized(p)
+
+	return nil
+}
+
+func (p *Page) ToSerialized() *PageSerialized {
+	children := []string{}
+	for _, child := range p.children {
+		children = append(children, child.ID)
+	}
+
+	return &PageSerialized{
+		ID:       p.ID,
+		Records:  p.records,
+		Leaf:     p.leaf,
+		T:        p.t,
+		Children: children,
+	}
+}
+
+func (ps *PageSerialized) ToDeserialized(p *Page) {
+	p.ID = ps.ID
+	p.records = ps.Records
+	p.leaf = ps.Leaf
+	p.t = ps.T
+
+	children := []*Page{}
+
+	for _, child := range ps.Children {
+		np := p.newPage(false)
+		np.loaded = false
+		np.ID = child
+		children = append(children, np)
+	}
+
+}
+
+func (p *Page) deletePage() error { return p.writer.Delete(p) }
