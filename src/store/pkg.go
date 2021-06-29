@@ -7,6 +7,9 @@ package store
 
 import (
 	"io"
+	"io/ioutil"
+
+	"github.com/namvu9/keylime/src/errors"
 )
 
 type ReadWriterTo interface {
@@ -26,6 +29,8 @@ type Store struct {
 }
 
 func (s Store) Collection(name string) (*Collection, error) {
+	var op errors.Op = "(Store).Collection"
+
 	c, ok := s.collections[name]
 	if !ok {
 		c = newCollection(name, s.storage)
@@ -33,14 +38,14 @@ func (s Store) Collection(name string) (*Collection, error) {
 		if s.hasCollection(name) {
 			err := c.Load()
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(op, errors.InternalError, err)
 			}
 
 			s.collections[name] = c
 		} else {
 			err := c.Create()
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(op, errors.InternalError, err)
 			}
 		}
 
@@ -64,4 +69,14 @@ func (s *Store) hasCollection(name string) bool {
 	}
 
 	return true
+}
+
+func (s *Store) Info() {
+	files, _ := ioutil.ReadDir(s.baseDir)
+	for _, f := range files {
+		if f.IsDir() {
+			c, _ := s.Collection(f.Name())
+			c.Info()
+		}
+	}
 }

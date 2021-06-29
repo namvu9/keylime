@@ -58,7 +58,7 @@ func TestInsert(t *testing.T) {
 	u := util{t}
 
 	t.Run("KI is saved if root changes", func(t *testing.T) {
-		reporter := newMockReadWriterTo()
+		reporter := newIOReporter()
 		ki := newKeyIndex(2, reporter)
 		ki.root.records = makeRecords("k", "o", "s")
 
@@ -149,7 +149,7 @@ func TestDelete(t *testing.T) {
 	u := util{t}
 
 	t.Run("KI is saved if root becomes empty", func(t *testing.T) {
-		reporter := newMockReadWriterTo()
+		reporter := newIOReporter()
 		ki := newKeyIndex(2, reporter)
 		deleteMe := ki.newPage(true)
 

@@ -1,8 +1,6 @@
 package store
 
 import (
-	"fmt"
-
 	"github.com/namvu9/keylime/src/errors"
 )
 
@@ -41,13 +39,11 @@ func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 	return ci
 }
 
-// TODO: Return error
-func (ci *collectionIterator) Get() *Page {
+func (ci *collectionIterator) Get() (*Page, error) {
 	for !ci.next.done(ci.node) {
 		nextPage, err := ci.next(ci.node)
 		if err != nil {
-			fmt.Println(err)
-			return nil
+			return nil, err
 		}
 
 		if ci.handler != nil {
@@ -57,7 +53,7 @@ func (ci *collectionIterator) Get() *Page {
 		ci.node, _ = ci.next(ci.node)
 	}
 
-	return ci.node
+	return ci.node, nil
 }
 
 // maxPage returns an iterator that terminates at the page
@@ -83,9 +79,9 @@ func (p *Page) iter(next iterFunc) *collectionIterator {
 }
 
 func byKey(k string) iterFunc {
-	return func(p *Page) (*Page, error){
+	return func(p *Page) (*Page, error) {
 		index, exists := p.keyIndex(k)
-		
+
 		if exists {
 			return p, nil
 		}
@@ -94,10 +90,10 @@ func byKey(k string) iterFunc {
 	}
 }
 
-func byMinPage(p *Page) (*Page, error){
+func byMinPage(p *Page) (*Page, error) {
 	return p.Child(0)
 }
 
 func byMaxPage(p *Page) (*Page, error) {
-	return p.Child(len(p.children)-1)
+	return p.Child(len(p.children) - 1)
 }

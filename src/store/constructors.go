@@ -21,7 +21,7 @@ func New(cfg *Config, opts ...Option) *Store {
 
 	if s.storage == nil {
 		os.Stderr.WriteString("Warning: Storage has not been initialized\n")
-		s.storage = newMockReadWriterTo()
+		s.storage = newIOReporter()
 	}
 
 	return s
@@ -30,7 +30,7 @@ func New(cfg *Config, opts ...Option) *Store {
 func newCollection(name string, s ReadWriterTo) *Collection {
 	c := &Collection{
 		Name:    name,
-		storage: newMockReadWriterTo(),
+		storage: newIOReporter(),
 	}
 
 	if s != nil {
@@ -47,14 +47,14 @@ func newCollection(name string, s ReadWriterTo) *Collection {
 func newKeyIndex(t int, s ReadWriterTo) *KeyIndex {
 	ki := &KeyIndex{
 		T:       t,
-		storage: newMockReadWriterTo(),
+		storage: newIOReporter(),
 	}
 
 	if s != nil {
 		ki.storage = s.WithSegment("key_index")
 	}
 
-	ki.bufWriter = newBufferedStorage(s)
+	ki.bufWriter = newWriteBuffer(s)
 
 	ki.root = ki.newPage(true)
 	ki.RootPage = ki.root.ID
@@ -67,9 +67,9 @@ func (ki *KeyIndex) newPage(leaf bool) *Page {
 	return p
 }
 
-func newPage(t int, leaf bool, bs *BufferedStorage) *Page {
+func newPage(t int, leaf bool, bs *WriteBuffer) *Page {
 	id := uuid.New().String()
-	mockBs := newBufferedStorage(nil)
+	mockBs := newWriteBuffer(nil)
 
 	p := &Page{
 		ID:     id,
@@ -88,8 +88,8 @@ func newPage(t int, leaf bool, bs *BufferedStorage) *Page {
 	return p
 }
 
-func newPageWithID(t int, id string, bs *BufferedStorage) *Page {
-	mockBs := newBufferedStorage(nil)
+func newPageWithID(t int, id string, bs *WriteBuffer) *Page {
+	mockBs := newWriteBuffer(nil)
 
 	p := &Page{
 		ID:     id,

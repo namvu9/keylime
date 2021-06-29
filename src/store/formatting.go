@@ -27,8 +27,9 @@ func (p Page) String() string {
 
 func (ki KeyIndex) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "-----\nKeyIndex\n-----\n")
+	fmt.Fprintf(&sb, "\n-----\nKeyIndex\n-----\n")
 	fmt.Fprintf(&sb, "Height:\t%d\n", ki.Height)
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
 }
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/record"
 )
 
@@ -44,36 +45,58 @@ func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 }
 
 func (c *Collection) Create() error {
+	var op errors.Op = "(*Collection).Create"
+
 	_, err := c.storage.Write(nil)
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.IOError, err)
 	}
+
 	err = c.primaryIndex.Create()
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.InternalError, err)
 	}
 
 	return nil
 }
 
 func (c *Collection) Load() error {
+	var op errors.Op = "(*Collection).Load"
 	err := c.primaryIndex.Load()
-	return err
+
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
+	return nil
 }
 
 // Delete record with key `k`. An error is returned of no
 // such record exists
 func (c *Collection) Delete(ctx context.Context, k string) error {
+	var op errors.Op = "(*Collection).Delete"
+
 	err := c.primaryIndex.Delete(ctx, k)
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.InternalError, err)
 	}
 
 	err = c.primaryIndex.Save()
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.InternalError, err)
 	}
 
 	return err
+}
+
+
+func (c *Collection) Info() {
+	fmt.Println()
+	fmt.Println("---------------")
+	fmt.Println("Collection:", c.Name)
+	fmt.Println("---------------")
+
+	c.primaryIndex.Info()
+	fmt.Println()
 }
 

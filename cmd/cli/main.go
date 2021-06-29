@@ -113,7 +113,12 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 
 		key := args[0]
 		value := strings.Join(args[1:], " ")
-		return c.Set(ctx, key, []byte(value))
+		err := c.Set(ctx, key, []byte(value))
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("Successfully saved record with key", key)
 
 	case "get":
 		if len(args) < 1 {
@@ -139,11 +144,22 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 
-		fmt.Println("Successfully created collection", args[0])
+		fmt.Println("Successfully created/loaded collection", args[0])
 		c = collection
 
 	case "exit":
 		os.Exit(0)
+
+	case "info":
+		if c == nil {
+			s.Info()
+		} else {
+			c.Info()
+		}
+	case "info-all":
+		s.Info()
+	default:
+		fmt.Println("Unknown command:", cmd)
 	}
 
 	return nil

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"io"
 
 	"github.com/namvu9/keylime/src/errors"
@@ -17,11 +18,13 @@ type KeyIndex struct {
 	T        int
 
 	root      *Page
-	bufWriter *BufferedStorage
+	bufWriter *WriteBuffer
 	storage   ReadWriterTo
 }
 
 func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
+	const op errors.Op = "(*KeyIndex).Insert"
+
 	if ki.root.Full() {
 		newRoot := ki.newPage(false)
 		newRoot.children = []*Page{ki.root}
@@ -36,16 +39,23 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 		ki.Save()
 	}
 
-	page := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
+	page, err := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
 	page.insert(r)
 
-	return ki.bufWriter.flush()
+	return ki.bufWriter.Flush()
 }
 
 func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 	const op errors.Op = "(*KeyIndex).Delete"
 
-	page := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
+	page, err := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
 
 	if err := page.Delete(key); err != nil {
 		return errors.Wrap(op, errors.InternalError, err)
@@ -68,38 +78,23 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 		ki.Save()
 	}
 
-	return ki.bufWriter.flush()
+	return ki.bufWriter.Flush()
 }
 
 func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error) {
 	const op errors.Op = "(*KeyIndex).Get"
 
-	node := ki.root.iter(byKey(key)).Get()
+	node, err := ki.root.iter(byKey(key)).Get()
+	if err != nil {
+		return nil, errors.Wrap(op, errors.InternalError, err)
+	}
+
 	i, ok := node.keyIndex(key)
 	if !ok {
 		return nil, errors.NewKeyNotFoundError(op, key)
 	}
 
 	return &node.records[i], nil
-}
-
-// OrderIndex indexes records by their order with respect to
-// some attribute
-type OrderIndex struct {
-	head interface{}
-	tail interface{}
-}
-
-func (oi *OrderIndex) Insert(r *record.Record) error {
-	return nil
-}
-
-func (oi *OrderIndex) Delete(r *record.Record) error {
-	return nil
-}
-
-func (c *Collection) OrderBy(attr interface{}) *OrderIndex {
-	return &OrderIndex{}
 }
 
 type KeyIndexSerialized struct {
@@ -109,34 +104,38 @@ type KeyIndexSerialized struct {
 }
 
 func (ki *KeyIndex) Save() error {
+	var op errors.Op = "(*KeyIndex).Save"
+
 	buf := new(bytes.Buffer)
 	enc := gob.NewEncoder(buf)
 	enc.Encode(ki)
 
 	_, err := ki.storage.Write(buf.Bytes())
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.IOError, err)
 	}
 
 	return nil
 }
 
 func (ki *KeyIndex) Create() error {
+	var op errors.Op = "(*KeyIndex).Create"
+
 	buf := new(bytes.Buffer)
 	enc := gob.NewEncoder(buf)
 	enc.Encode(ki)
 
 	_, err := ki.storage.Write(buf.Bytes())
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.IOError, err)
 	}
 
 	err = ki.root.save()
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.InternalError, err)
 	}
 
-	return ki.bufWriter.flush()
+	return ki.bufWriter.Flush()
 }
 func (ki *KeyIndex) read() error {
 	const op errors.Op = "(*KeyIndex).read"
@@ -149,23 +148,86 @@ func (ki *KeyIndex) read() error {
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
 	err = dec.Decode(ki)
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.IOError, err)
 	}
 
 	return nil
 }
 
 func (ki *KeyIndex) Load() error {
+	var op errors.Op = "(*KeyIndex).Load"
+
 	err := ki.read()
 	if err != nil {
-		return err
+		return errors.Wrap(op, errors.InternalError, err)
 	}
 
 	return ki.loadRoot()
 }
 
 func (ki *KeyIndex) loadRoot() error {
+	var op errors.Op = "(*KeyIndex).loadRoot"
 	ki.root = newPageWithID(ki.T, ki.RootPage, ki.bufWriter)
 
-	return ki.root.load()
+	err := ki.root.load()
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
+	return nil
+}
+
+func (ki *KeyIndex) Info() {
+	in := Info{}
+	in.validate(ki.root, true)
+
+	fmt.Println("<KeyIndex>")
+	fmt.Println("Height:", ki.Height)
+	fmt.Println("T:", ki.T)
+	fmt.Println("Pages:", len(in.pages))
+	fmt.Printf("Records (%d): %v\n", len(in.records), in.records)
+}
+
+// OrderIndex indexes records by their order with respect to
+// some attribute
+type OrderIndex struct {
+	head *Node
+	tail *Node
+}
+
+type Node struct {
+	ID        string
+	BlockSize int
+	Records   []record.Record
+	prev      *Node
+	next      *Node
+}
+
+func newNode() *Node {
+	return &Node{}
+}
+
+func (n *Node) Full() bool {
+	return len(n.Records) >= n.BlockSize
+}
+
+func (n *Node) Insert(r record.Record) error {
+	n.Records = append(n.Records, r)
+	return nil
+}
+
+func (oi *OrderIndex) Insert(r record.Record) error {
+	if oi.head.Full() {
+		n := newNode()
+		n.next = oi.head
+		oi.head.prev = n
+		oi.head = n
+		return n.Insert(r)
+	}
+
+	return oi.head.Insert(r)
+}
+
+func (oi *OrderIndex) Delete(r *record.Record) error {
+	return nil
 }

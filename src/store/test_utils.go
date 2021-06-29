@@ -110,7 +110,7 @@ func newPageWithKeys(t int, keys []string) *Page {
 	}
 }
 
-func makePageWithBufferedStorage(bs *BufferedStorage) func(t int, records []record.Record, children ...*Page) *Page {
+func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.Record, children ...*Page) *Page {
 	return func(t int, records []record.Record, children ...*Page) *Page {
 		root := newPage(t, false, nil)
 		root.writer = bs
@@ -157,8 +157,13 @@ func makeRecords(keys ...string) []record.Record {
 	return out
 }
 
+type Info struct {
+	records []record.Record
+	pages   []*Page
+}
+
 // Iterates over a collection in order of key precedence
-func validate(p *Page, root bool) {
+func (info *Info) validate(p *Page, root bool) {
 	if !root && len(p.records) < p.t-1 || len(p.records) > 2*p.t-1 {
 		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.ID, len(p.records)))
 	}
@@ -171,14 +176,17 @@ func validate(p *Page, root bool) {
 			if !child.loaded {
 				child.load()
 			}
-			validate(child, false)
+			info.validate(child, false)
 			if i < len(p.records) {
-				//r := p.records[i]
+				r := p.records[i]
+				info.records = append(info.records, r)
 			}
 		}
 	} else {
-		//for _, r := range p.records {
-		////fmt.Println(r)
-		//}
+		for _, r := range p.records {
+			info.records = append(info.records, r)
+		}
 	}
+
+	info.pages = append(info.pages, p)
 }
