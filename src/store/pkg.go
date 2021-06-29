@@ -7,7 +7,6 @@ package store
 
 import (
 	"io"
-	"path"
 )
 
 type ReadWriterTo interface {
@@ -15,53 +14,6 @@ type ReadWriterTo interface {
 	WithSegment(pathSegment string) ReadWriterTo
 	Delete() error
 	Exists() (bool, error)
-}
-
-type MockReadWriterTo struct {
-	root     *MockReadWriterTo
-	location string
-	writes   map[string]bool
-	deletes  map[string]bool
-	reads    map[string]bool
-}
-
-func (rwt *MockReadWriterTo) Write(src []byte) (int, error) {
-	rwt.root.writes[rwt.location] = true
-
-	return 0, nil
-}
-
-func (rwt *MockReadWriterTo) Read(dst []byte) (int, error) {
-	rwt.root.reads[rwt.location] = true
-	return 0, nil
-}
-
-func (rwt *MockReadWriterTo) Delete() error {
-	rwt.root.deletes[rwt.location] = true
-	return nil
-}
-
-func (rwt *MockReadWriterTo) Exists() (bool, error) {
-	return true, nil
-}
-
-func (mrwt *MockReadWriterTo) WithSegment(s string) ReadWriterTo {
-	rwt := &MockReadWriterTo{
-		root:     mrwt.root,
-		location: path.Join(mrwt.location, s),
-	}
-	return rwt
-}
-
-func newMockReadWriterTo() *MockReadWriterTo {
-	mrw := &MockReadWriterTo{
-		writes:  make(map[string]bool),
-		reads:   make(map[string]bool),
-		deletes: make(map[string]bool),
-	}
-	mrw.root = mrw
-
-	return mrw
 }
 
 type Store struct {

@@ -1,8 +1,6 @@
 package store
 
 import (
-	"bytes"
-	"encoding/gob"
 	"os"
 
 	"github.com/google/uuid"
@@ -62,76 +60,6 @@ func newKeyIndex(t int, s ReadWriterTo) *KeyIndex {
 	ki.RootPage = ki.root.ID
 
 	return ki
-}
-
-type BufferedStorage struct {
-	ReadWriterTo
-	writeBuf  map[string]*Page
-	deleteBuf map[string]*Page
-}
-
-// Write schedules a page for being written to disk. If a
-// page has already been scheduled for a write or delete,
-// Write is a no-op.
-func (bs *BufferedStorage) Write(p *Page) error {
-	if _, ok := bs.deleteBuf[p.ID]; !ok {
-		bs.writeBuf[p.ID] = p
-	}
-	return nil
-}
-
-func (bs *BufferedStorage) Delete(p *Page) error {
-	bs.deleteBuf[p.ID] = p
-	delete(bs.writeBuf, p.ID)
-	return nil
-}
-
-func (bs *BufferedStorage) flush() error {
-	defer func() {
-		for k := range bs.writeBuf {
-			delete(bs.writeBuf, k)
-		}
-
-		for k := range bs.deleteBuf {
-			delete(bs.deleteBuf, k)
-		}
-	}()
-
-	for id, p := range bs.writeBuf {
-		buf := new(bytes.Buffer)
-		enc := gob.NewEncoder(buf)
-
-		ps := p.ToSerialized()
-
-
-		if err := enc.Encode(ps); err != nil {
-			return err
-		}
-		_, err := bs.WithSegment(id).Write(buf.Bytes())
-		if err != nil {
-			return err
-		}
-	}
-
-	//for k := range bs.deleteBuf {
-		//bs.WithSegment(k).Delete()
-	//}
-
-	return nil
-}
-
-func newBufferedStorage(rw ReadWriterTo) *BufferedStorage {
-	bs := &BufferedStorage{
-		newMockReadWriterTo(),
-		make(map[string]*Page),
-		make(map[string]*Page),
-	}
-
-	if rw != nil {
-		bs.ReadWriterTo = rw
-	}
-
-	return bs
 }
 
 func (ki *KeyIndex) newPage(leaf bool) *Page {

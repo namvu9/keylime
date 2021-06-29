@@ -64,6 +64,7 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 		ki.Height--
 
 		oldRoot.deletePage()
+		newRoot.save()
 		ki.Save()
 	}
 

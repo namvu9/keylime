@@ -84,7 +84,7 @@ func (p *Page) Delete(k string) error {
 	}
 
 	// Case 2: Successor has at least t keys
-	afterChild, err := p.Child(index)
+	afterChild, err := p.Child(index + 1)
 	if err != nil {
 		return err
 	}
@@ -428,9 +428,8 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 	return 0, false
 }
 
-func (p *Page) save() error {
-	return p.writer.Write(p)
-}
+func (p *Page) save() error       { return p.writer.Write(p) }
+func (p *Page) deletePage() error { return p.writer.Delete(p) }
 
 type PageSerialized struct {
 	ID string
@@ -498,5 +497,3 @@ func (ps *PageSerialized) ToDeserialized(p *Page) {
 	p.children = children
 	p.loaded = true
 }
-
-func (p *Page) deletePage() error { return p.writer.Delete(p) }

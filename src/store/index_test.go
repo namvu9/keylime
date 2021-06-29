@@ -157,7 +157,7 @@ func TestDelete(t *testing.T) {
 		oldRoot.records = append(oldRoot.records, record.New("5", nil))
 		oldRoot.children = []*Page{
 			ki.newPage(true),
-			deleteMe, 
+			deleteMe,
 		}
 
 		oldRoot.children[0].records = append(oldRoot.children[0].records, record.New("2", nil))
