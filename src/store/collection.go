@@ -18,13 +18,13 @@ type Collection struct {
 
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *Collection) Get(ctx context.Context, k string) []byte {
+func (c *Collection) Get(ctx context.Context, k string) ([]byte, error){
 	r, err := c.primaryIndex.Get(ctx, k)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return r.Value
+	return r.Value, err
 }
 
 // Set the value associated with key `k` in collection `c`.

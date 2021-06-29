@@ -21,12 +21,10 @@ type Error struct {
 	Op   Op          // Operation (where)
 	Kind interface{} // Category
 	Err  error       // The wrapped error (why)
-
-	// ... application-specific fields
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s: %s", e.Op, e.Err.Error())
+	return fmt.Sprintf("%s:\n  %s", e.Op, e.Err.Error())
 }
 
 func (e Error) Is(target error) bool {

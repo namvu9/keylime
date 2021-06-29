@@ -36,6 +36,21 @@ func (p *Page) Get(k string) ([]byte, error) {
 	return p.records[index].Value, nil
 }
 
+func (p *Page) Child(i int) (*Page, error) {
+	const op errors.Op = "(*Page).Child"
+
+	if got := len(p.children); i >= got {
+		return nil, errors.Wrap(op, errors.InternalError, fmt.Errorf("OutOfBounds %d (length %d)", i, got))
+	}
+
+	child := p.children[i]
+	if !child.loaded {
+		child.load()
+	}
+
+	return child, nil
+}
+
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
 func (p *Page) Delete(k string) error {
@@ -52,7 +67,11 @@ func (p *Page) Delete(k string) error {
 	}
 
 	// Case 1: Predcessor has at least t keys
-	if beforeChild := p.children[index]; !beforeChild.Sparse() {
+	beforeChild, err := p.Child(index)
+	if err != nil {
+		return err
+	}
+	if !beforeChild.Sparse() {
 		var (
 			maxPredPage = beforeChild.maxPage().forEach(handleSparsePage).Get()
 			predRec     = maxPredPage.records[len(maxPredPage.records)-1]
@@ -65,7 +84,11 @@ func (p *Page) Delete(k string) error {
 	}
 
 	// Case 2: Successor has at least t keys
-	if afterChild := p.children[index+1]; !afterChild.Sparse() {
+	afterChild, err := p.Child(index)
+	if err != nil {
+		return err
+	}
+	if !afterChild.Sparse() {
 		var (
 			succ    = afterChild.minPage().forEach(handleSparsePage).Get()
 			succRec = succ.records[0]
@@ -82,7 +105,12 @@ func (p *Page) Delete(k string) error {
 	p.mergeChildren(index)
 	p.save()
 
-	return p.children[index].Delete(k)
+	deleteChild, err := p.Child(index)
+	if err != nil {
+		return err
+	}
+
+	return deleteChild.Delete(k)
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
@@ -148,6 +176,11 @@ func (p *Page) newPage(leaf bool) *Page {
 	return np
 }
 
+func (p *Page) newPageWithID(id string) *Page {
+	return newPageWithID(p.t, id, p.writer)
+
+}
+
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
@@ -166,8 +199,14 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 }
 
 // Panics if child is not full
-func (p *Page) splitChild(index int) {
-	fullChild := p.children[index]
+func (p *Page) splitChild(index int) error {
+	const op errors.Op = "(*Page).splitChild"
+
+	fullChild, err := p.Child(index)
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
 	if !fullChild.Full() {
 		panic("Cannot split non-full child")
 	}
@@ -186,9 +225,22 @@ func (p *Page) splitChild(index int) {
 
 	p.insertChildren(index+1, newChild)
 
-	newChild.save()
-	fullChild.save()
-	p.save()
+	err = newChild.save()
+	if err != nil {
+		return err
+	}
+
+	err = fullChild.save()
+	if err != nil {
+		return err
+	}
+
+	err = p.save()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *Page) setRecord(index int, r record.Record) {
@@ -223,7 +275,8 @@ func (p *Page) predecessorPage(k string) *Page {
 		return nil
 	}
 
-	return p.children[index].maxPage().Get()
+	child, _ := p.Child(index)
+	return child.maxPage().Get()
 }
 
 func (p *Page) successorPage(k string) *Page {
@@ -410,6 +463,7 @@ func (p *Page) load() error {
 
 func (p *Page) ToSerialized() *PageSerialized {
 	children := []string{}
+
 	for _, child := range p.children {
 		children = append(children, child.ID)
 	}
@@ -431,13 +485,18 @@ func (ps *PageSerialized) ToDeserialized(p *Page) {
 
 	children := []*Page{}
 
-	for _, child := range ps.Children {
-		np := p.newPage(false)
+	for _, childID := range ps.Children {
+		if childID == ps.ID {
+			panic(fmt.Sprintf("Page %s has a child reference to itself", ps.ID))
+		}
+
+		np := p.newPageWithID(childID)
 		np.loaded = false
-		np.ID = child
 		children = append(children, np)
 	}
 
+	p.children = children
+	p.loaded = true
 }
 
 func (p *Page) deletePage() error { return p.writer.Delete(p) }

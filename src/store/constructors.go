@@ -38,9 +38,9 @@ func newCollection(name string, s ReadWriterTo) *Collection {
 	if s != nil {
 		c.storage = s.WithSegment(name)
 		c.primaryIndex =
-			newKeyIndex(2000, s.WithSegment(name))
+			newKeyIndex(2, s.WithSegment(name))
 	} else {
-		c.primaryIndex = newKeyIndex(2000, c.storage)
+		c.primaryIndex = newKeyIndex(2, c.storage)
 	}
 
 	return c
@@ -87,22 +87,35 @@ func (bs *BufferedStorage) Delete(p *Page) error {
 }
 
 func (bs *BufferedStorage) flush() error {
+	defer func() {
+		for k := range bs.writeBuf {
+			delete(bs.writeBuf, k)
+		}
+
+		for k := range bs.deleteBuf {
+			delete(bs.deleteBuf, k)
+		}
+	}()
+
 	for id, p := range bs.writeBuf {
 		buf := new(bytes.Buffer)
 		enc := gob.NewEncoder(buf)
 
-		if err := enc.Encode(p.ToSerialized()); err != nil {
+		ps := p.ToSerialized()
+
+
+		if err := enc.Encode(ps); err != nil {
 			return err
 		}
 		_, err := bs.WithSegment(id).Write(buf.Bytes())
-		delete(bs.writeBuf, id)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
-	for k := range bs.deleteBuf {
-		bs.WithSegment(k).Delete()
-		delete(bs.deleteBuf, k)
-	}
+	//for k := range bs.deleteBuf {
+		//bs.WithSegment(k).Delete()
+	//}
 
 	return nil
 }
@@ -147,12 +160,12 @@ func newPage(t int, leaf bool, bs *BufferedStorage) *Page {
 	return p
 }
 
-func newPageWithID(t int, leaf bool, id string, bs *BufferedStorage) *Page {
+func newPageWithID(t int, id string, bs *BufferedStorage) *Page {
 	mockBs := newBufferedStorage(nil)
 
 	p := &Page{
 		ID:     id,
-		leaf:   leaf,
+		leaf:   false,
 		t:      t,
 		writer: mockBs,
 		reader: mockBs.WithSegment(id),

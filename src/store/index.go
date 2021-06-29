@@ -26,6 +26,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 		newRoot := ki.newPage(false)
 		newRoot.children = []*Page{ki.root}
 		newRoot.splitChild(0)
+		newRoot.save()
 
 		ki.RootPage = newRoot.ID
 		ki.root = newRoot
@@ -52,7 +53,13 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 
 	if ki.root.Empty() && !ki.root.Leaf() {
 		oldRoot := ki.root
-		ki.root = ki.root.children[0]
+
+		newRoot, err := ki.root.Child(0)
+		if err != nil {
+			return errors.Wrap(op, errors.InternalError, err)
+		}
+
+		ki.root = newRoot
 		ki.RootPage = ki.root.ID
 		ki.Height--
 
@@ -110,32 +117,23 @@ func (ki *KeyIndex) Save() error {
 		return err
 	}
 
-	return ki.root.save()
+	return nil
 }
 func (ki *KeyIndex) read() error {
-	buf := new(bytes.Buffer)
+	const op errors.Op = "(*KeyIndex).read"
 
-	for {
-		var b = make([]byte, 100)
-		n, err := ki.storage.Read(b)
-		if err != nil && err != io.EOF {
-			return err
-		}
-
-		if n > 0 {
-			buf.Write(b[:n])
-		}
-
-		if err == io.EOF {
-			dec := gob.NewDecoder(buf)
-			err := dec.Decode(ki)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		}
+	data, err := io.ReadAll(ki.storage)
+	if err != nil {
+		return errors.Wrap(op, errors.IOError, err)
 	}
+
+	dec := gob.NewDecoder(bytes.NewBuffer(data))
+	err = dec.Decode(ki)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (ki *KeyIndex) Load() error {
@@ -148,7 +146,7 @@ func (ki *KeyIndex) Load() error {
 }
 
 func (ki *KeyIndex) loadRoot() error {
-	ki.root = newPageWithID(ki.T, false, ki.RootPage, ki.bufWriter)
+	ki.root = newPageWithID(ki.T, ki.RootPage, ki.bufWriter)
 
 	return ki.root.load()
 }

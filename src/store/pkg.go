@@ -6,16 +6,9 @@ by a B-tree.
 package store
 
 import (
-	"encoding/gob"
-	"fmt"
 	"io"
 	"path"
 )
-
-func init() {
-	fmt.Println("INIT")
-	gob.Register(MockReadWriterTo{})
-}
 
 type ReadWriterTo interface {
 	io.ReadWriter

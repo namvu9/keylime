@@ -6,24 +6,20 @@ import (
 	"github.com/namvu9/keylime/src/errors"
 )
 
-type iterFunc func(*Page) *Page
+type iterFunc func(*Page) (*Page, error)
 type handleFunc func(*Page, *Page)
 
 func (next iterFunc) done(p *Page) bool {
-	if !p.loaded {
-		// TODO: handle error
-		err := p.load()
-		if err != nil {
-			fmt.Println("ERROR: could not load page", err)
-			return true
-		}
-	}
-
 	if p.leaf {
 		return true
 	}
 
-	return next(p) == p
+	nextPage, err := next(p)
+	if err != nil {
+		return true
+	}
+
+	return nextPage == p
 }
 
 type collectionIterator struct {
@@ -45,13 +41,20 @@ func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 	return ci
 }
 
+// TODO: Return error
 func (ci *collectionIterator) Get() *Page {
 	for !ci.next.done(ci.node) {
-		if ci.handler != nil {
-			ci.handler(ci.node, ci.next(ci.node))
+		nextPage, err := ci.next(ci.node)
+		if err != nil {
+			fmt.Println(err)
+			return nil
 		}
 
-		ci.node = ci.next(ci.node)
+		if ci.handler != nil {
+			ci.handler(ci.node, nextPage)
+		}
+
+		ci.node, _ = ci.next(ci.node)
 	}
 
 	return ci.node
@@ -80,20 +83,21 @@ func (p *Page) iter(next iterFunc) *collectionIterator {
 }
 
 func byKey(k string) iterFunc {
-	return func(p *Page) *Page {
+	return func(p *Page) (*Page, error){
 		index, exists := p.keyIndex(k)
+		
 		if exists {
-			return p
+			return p, nil
 		}
 
-		return p.children[index]
+		return p.Child(index)
 	}
 }
 
-func byMinPage(p *Page) *Page {
-	return p.children[0]
+func byMinPage(p *Page) (*Page, error){
+	return p.Child(0)
 }
 
-func byMaxPage(p *Page) *Page {
-	return p.children[len(p.children)-1]
+func byMaxPage(p *Page) (*Page, error) {
+	return p.Child(len(p.children)-1)
 }

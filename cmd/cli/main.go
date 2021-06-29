@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"strings"
@@ -22,7 +22,6 @@ func (fs *FStorage) Delete() error {
 	return nil
 }
 
-// TODO: IMPLEMENT
 func (fs *FStorage) Read(dst []byte) (int, error) {
 	f, err := os.Open(fs.location)
 	defer f.Close()
@@ -33,6 +32,10 @@ func (fs *FStorage) Read(dst []byte) (int, error) {
 	n, err := f.ReadAt(dst, int64(fs.offset))
 	fs.offset += int64(n)
 
+	if err == io.EOF {
+		fs.offset = 0
+	}
+
 	return n, err
 }
 
@@ -41,7 +44,6 @@ func (fs *FStorage) Write(src []byte) (int, error) {
 		return 0, os.MkdirAll(fs.location, 0755)
 	}
 
-	fmt.Println("WRITE", fs.location)
 	return 0, ioutil.WriteFile(fs.location, src, 0755)
 }
 
@@ -77,39 +79,56 @@ func main() {
 
 		var (
 			text, _ = reader.ReadString('\n')
-			tokens  = strings.SplitN(strings.TrimSpace(text), " ", 2)
-			cmd     = tokens[0]
+			tokens  = strings.Split(strings.TrimSpace(text), " ")
 		)
 
-		if err := handleCmd(ctx, cmd, tokens); err != nil {
+		if len(tokens) < 1 {
+			fmt.Println("Syntax error: At least one command must be specified")
+			continue
+		}
+
+		if err := handleCmd(ctx, tokens[0], tokens[1:]); err != nil {
 			fmt.Println(err)
 		}
 	}
 }
 
-func handleCmd(ctx context.Context, cmd string, tokens []string) error {
+func handleCmd(ctx context.Context, cmd string, args []string) error {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+
 	c, err := s.Collection("test")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	switch strings.ToLower(cmd) {
 	case "set":
-		args := strings.SplitN(tokens[1], " ", 2)
-		return c.Set(ctx, args[0], []byte(args[1]))
-	case "set-if":
-		args := strings.SplitN(tokens[1], " ", 2)
-		if c.Get(ctx, args[0]) == nil {
-			return c.Set(ctx, args[0], []byte(args[1]))
+		if len(args) < 2 {
+			return fmt.Errorf("Syntax Error: Set requires exactly 2 arguments")
 		}
+
+		key := args[0]
+		value := strings.Join(args[1:], " ")
+		return c.Set(ctx, key, []byte(value))
+
 	case "get":
-		res := c.Get(ctx, tokens[1])
-		if res == nil {
-			return fmt.Errorf("KeyNotFound")
+		if len(args) < 1 {
+			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
+		}
+		res, err := c.Get(ctx, args[0])
+		if err != nil {
+			return err
 		}
 		fmt.Printf("%s\n", res)
 	case "delete":
-		return c.Delete(ctx, tokens[1])
+		if len(args) < 1 {
+			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
+		}
+		return c.Delete(ctx, args[0])
 	case "exit":
 		os.Exit(0)
 	}
