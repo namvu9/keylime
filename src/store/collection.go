@@ -24,13 +24,17 @@ type Collection struct {
 
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *Collection) Get(ctx context.Context, k string) ([]byte, error) {
+func (c *Collection) Get(ctx context.Context, k string) (*record.Record, error) {
 	r, err := c.primaryIndex.Get(ctx, k)
 	if err != nil {
 		return nil, err
 	}
 
-	return r.Value, err
+	if c.Schema != nil {
+		return c.Schema.WithDefaults(r), nil 
+	}
+
+	return r, nil
 }
 
 // Set the value associated with key `k` in collection `c`.
@@ -54,6 +58,30 @@ func (c *Collection) Set(ctx context.Context, k string, fields map[string]interf
 
 	if err := c.primaryIndex.Save(); err != nil {
 		return fmt.Errorf("Could not persist primary index: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
+	// Retrieve record
+	wrapError := errors.WrapWith("(*Collection).Update", errors.InternalError)
+	r, err := c.primaryIndex.Get(ctx, k)
+	if err != nil {
+		return wrapError(err)
+	}
+
+	clone := r.UpdateFields(fields)
+	if c.Schema != nil {
+		err := c.Schema.Validate(clone)
+		if err != nil {
+			return wrapError(err)
+		}
+	}
+
+	err = c.primaryIndex.Insert(ctx, *clone)
+	if err != nil {
+		wrapError(err)
 	}
 
 	return nil

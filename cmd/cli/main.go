@@ -75,6 +75,19 @@ var (
 )
 
 func main() {
+	collection, err := s.Collection("users")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	if collection.Exists() {
+		err := collection.Load()
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("Successfully loaded collection", "users")
+		c = collection
+	}
 
 	for {
 		if c == nil {
@@ -110,27 +123,70 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 	switch strings.ToLower(cmd) {
 	case "set":
 		if len(args) < 2 {
-			return fmt.Errorf("Syntax Error: Set requires exactly 2 arguments")
+			return fmt.Errorf("Syntax error: Set <key> key1=value1 key2=value2 ...")
 		}
 
 		key := args[0]
-		value := strings.Join(args[1:], " ")
-		err := c.Set(ctx, key, map[string]interface{}{"random": value})
+		fields := make(map[string]interface{})
+
+		for _, kv := range args[1:] {
+			data := strings.Split(kv, "=")
+			if len(data) != 2 {
+				return fmt.Errorf("Syntax error: Set <key> key1=value1 key2=value2 ...")
+			}
+
+			fields[data[0]] = data[1]
+		}
+		err := c.Set(ctx, key, fields)
 		if err != nil {
 			return err
 		}
 
 		fmt.Println("Successfully saved record with key", key)
+	case "update":
+		if len(args) < 2 {
+			return fmt.Errorf("Syntax Error: Set requires exactly 2 arguments")
+		}
+
+		key := args[0]
+		fields := make(map[string]interface{})
+
+		for _, kv := range args[1:] {
+			data := strings.Split(kv, "=")
+			if len(data) != 2 {
+				return fmt.Errorf("Syntax error: Set <key> key1=value1 key2=value2 ...")
+			}
+
+			fields[data[0]] = data[1]
+		}
+
+		err := c.Update(ctx, key, fields)
+		if err != nil {
+			return err
+		}
 
 	case "get":
 		if len(args) < 1 {
 			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
 		}
-		res, err := c.Get(ctx, args[0])
+		fieldPath := strings.Split(args[0], ".")
+		res, err := c.Get(ctx, fieldPath[0])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s\n", res)
+
+		var val interface{}
+		for _, field := range fieldPath {
+			val = res.Data[field].Value
+		}
+
+		if val != nil {
+			fmt.Println(val)
+		} else {
+
+			fmt.Printf("%s\n", res)
+		}
+
 	case "delete":
 		if len(args) < 1 {
 			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
@@ -153,7 +209,7 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			if args[0] == "users" {
 				sb := types.NewSchemaBuilder()
 				sb.AddField("name", types.String)
-				sb.AddField("email", types.String, types.Optional)
+				sb.AddField("email", types.String, types.Optional, types.WithDefault("dufus@gmail.com"))
 				sb.AddField("age", types.Number, types.WithDefault(4))
 				schema, _ = sb.Build()
 			}
@@ -162,6 +218,14 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			if err != nil {
 				return err
 			}
+			err = collection.Set(ctx, "a", map[string]interface{}{
+				"name": "Nam",
+				"age":  10,
+			})
+			if err != nil {
+				return err
+			}
+
 			fmt.Println("Successfully created collection", args[0])
 		}
 

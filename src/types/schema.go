@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
@@ -54,7 +55,7 @@ func (s *Schema) Validate(r *Record) ValidationError {
 	}
 
 	for name, data := range r.Data {
-		expectedType, ok := s.fields[name]
+		expected, ok := s.fields[name]
 
 		if !ok {
 			es[name] = append(es[name], wrapError(fmt.Errorf("Unknown field %s", name)))
@@ -62,10 +63,20 @@ func (s *Schema) Validate(r *Record) ValidationError {
 
 		if data.Type == Unknown {
 			wrapError(fmt.Errorf("Value has type Unknown"))
+			continue
 		}
 
-		if data.Type != expectedType.Type {
-			es[name] = append(es[name], wrapError(fmt.Errorf("Expected value of type %s but got %s", expectedType.Type, data.Type)))
+		// Test this case
+		if data.Type == String && expected.Type == Number {
+			v, err := strconv.ParseFloat(data.Value.(string), 64)
+			if err == nil {
+				r.Set(name, v)
+				continue
+			}
+		}
+
+		if data.Type != expected.Type {
+			es[name] = append(es[name], wrapError(fmt.Errorf("Expected value of type %s but got %s", expected.Type, data.Type)))
 		}
 	}
 
@@ -73,6 +84,10 @@ func (s *Schema) Validate(r *Record) ValidationError {
 		if _, ok := r.Data[name]; !ok && field.Required {
 			es[name] = append(es[name], wrapError(fmt.Errorf("Required field missing: %s", name)))
 		}
+	}
+
+	if len(es) == 0 {
+		return nil
 	}
 
 	return es

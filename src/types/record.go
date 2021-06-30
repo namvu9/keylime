@@ -1,9 +1,19 @@
 package types
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
+
+func Prettify(v interface{}) (string, error) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
 
 type Record struct {
 	Key     string
@@ -18,7 +28,7 @@ type compareFunc func(Record, Record) int
 // TODO: TEST
 func (r *Record) Set(name string, value interface{}) {
 	r.Data[name] = Data{
-		Type: GetDataType(value),
+		Type:  GetDataType(value),
 		Value: value,
 	}
 }
@@ -45,22 +55,43 @@ func (r Record) IsEqualTo(other *Record) bool {
 }
 
 func (r Record) String() string {
-	return r.Key
+	s, _ := Prettify(r.Data)
+	return fmt.Sprintf("%s=%s", r.Key, s)
 }
 
 func (r *Record) SetFields(fields map[string]interface{}) {
 	r.Data = make(map[string]Data)
-	r.UpdateFields(fields)
-}
 
-func (r *Record) UpdateFields(fields map[string]interface{}) {
 	for name, value := range fields {
 		r.Data[name] = Data{
 			Type:  GetDataType(value),
 			Value: value,
 		}
 	}
+}
 
+func (r *Record) Clone() *Record {
+	clone := NewRecord(r.Key)
+	for name, data := range r.Data {
+		clone.Data[name] = data
+	}
+
+	return clone
+}
+
+// TODO: Make sure original isn't affected
+func (r *Record) UpdateFields(fields map[string]interface{}) *Record {
+	c := r.Clone()
+	
+	for name, value := range fields {
+		c.Data[name] = Data{
+			Type:  GetDataType(value),
+			Value: value,
+		}
+	}
+	
+
+	return c
 }
 
 func byKey(this, that Record) int {
@@ -79,8 +110,8 @@ func New(key string, value []byte) Record {
 
 func NewRecord(key string) *Record {
 	return &Record{
-		Key:   key,
-		TS:    time.Now(),
-		Data:  make(map[string]Data),
+		Key:  key,
+		TS:   time.Now(),
+		Data: make(map[string]Data),
 	}
 }
