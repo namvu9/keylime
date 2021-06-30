@@ -49,12 +49,18 @@ func (r Record) String() string {
 }
 
 func (r *Record) SetFields(fields map[string]interface{}) {
+	r.Data = make(map[string]Data)
+	r.UpdateFields(fields)
+}
+
+func (r *Record) UpdateFields(fields map[string]interface{}) {
 	for name, value := range fields {
 		r.Data[name] = Data{
 			Type:  GetDataType(value),
 			Value: value,
 		}
 	}
+
 }
 
 func byKey(this, that Record) int {
@@ -71,10 +77,9 @@ func New(key string, value []byte) Record {
 	}
 }
 
-func NewRecord(key string, value []byte) *Record {
+func NewRecord(key string) *Record {
 	return &Record{
 		Key:   key,
-		Value: value,
 		TS:    time.Now(),
 		Data:  make(map[string]Data),
 	}

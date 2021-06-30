@@ -1,7 +1,10 @@
 package types
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
+	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
 )
@@ -10,9 +13,42 @@ type Schema struct {
 	fields map[string]Field
 }
 
-func (s *Schema) Validate(r *Record) map[string]error {
+func (s *Schema) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(s.fields)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (s *Schema) GobDecode(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+	err := dec.Decode(&s.fields)
+	return err
+}
+
+type ValidationError map[string][]error
+
+func (ve ValidationError) Error() string {
+	var sb strings.Builder
+	sb.WriteString("\nInvalid fields:\n")
+	for name, err := range ve {
+		sb.WriteString(fmt.Sprintf("%s:\n", name))
+		for _, e := range err {
+			sb.WriteString(fmt.Sprintf("%s\n", e.Error()))
+		}
+	}
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+func (s *Schema) Validate(r *Record) ValidationError {
 	wrapError := errors.WrapWith("(*Schema).Validate", errors.SchemaValidationError)
-	es := make(map[string]error)
+	es := make(ValidationError)
 	if s == nil {
 		return es
 	}
@@ -21,21 +57,42 @@ func (s *Schema) Validate(r *Record) map[string]error {
 		expectedType, ok := s.fields[name]
 
 		if !ok {
-			es[name] = wrapError(fmt.Errorf("Unknown field %s", name))
+			es[name] = append(es[name], wrapError(fmt.Errorf("Unknown field %s", name)))
+		}
+
+		if data.Type == Unknown {
+			wrapError(fmt.Errorf("Value has type Unknown"))
 		}
 
 		if data.Type != expectedType.Type {
-			es[name] = wrapError(fmt.Errorf("Expected value of type %s but got %s", expectedType.Type, data.Type))
+			es[name] = append(es[name], wrapError(fmt.Errorf("Expected value of type %s but got %s", expectedType.Type, data.Type)))
 		}
 	}
 
 	for name, field := range s.fields {
 		if _, ok := r.Data[name]; !ok && field.Required {
-			es[name] = wrapError(fmt.Errorf("Required field missing: %s", name))
+			es[name] = append(es[name], wrapError(fmt.Errorf("Required field missing: %s", name)))
 		}
 	}
 
 	return es
+}
+
+func (s *Schema) String() string {
+	var sb strings.Builder
+	sb.WriteString("SCHEMA:")
+
+	for name, field := range s.fields {
+		sb.WriteString(fmt.Sprintf("\n- %s\n", name))
+		sb.WriteString(fmt.Sprintf("* Type: %s\n", field.Type))
+		sb.WriteString(fmt.Sprintf("* Required: %v\n", field.Required))
+		if field.Default != nil {
+			sb.WriteString(fmt.Sprintf("* Default: %v\n", field.Default))
+		}
+
+	}
+
+	return sb.String()
 }
 
 type SchemaBuilder struct {
@@ -45,7 +102,7 @@ type SchemaBuilder struct {
 func (s *SchemaBuilder) Build() (*Schema, []error) {
 	wrapError := errors.WrapWith("(*SchemaBuilder).Build", errors.InvalidSchemaError)
 
-	schema := newSchema()
+	schema := NewSchema()
 	errors := []error{}
 
 	for name, field := range s.fields {
@@ -71,7 +128,7 @@ func (s *SchemaBuilder) Build() (*Schema, []error) {
 // and returns a pointer to a record with the schema's
 // default values applied
 func (s *Schema) WithDefaults(r *Record) *Record {
-	rCopy := NewRecord(r.Key, r.Value)
+	rCopy := NewRecord(r.Key)
 
 	// TODO: Does this copy work as intended??
 	for name, field := range r.Data {
@@ -110,7 +167,7 @@ func CopyObj(obj map[string]interface{}) map[string]interface{} {
 	return clone
 }
 
-func newSchema() *Schema {
+func NewSchema() *Schema {
 	return &Schema{
 		fields: make(map[string]Field),
 	}

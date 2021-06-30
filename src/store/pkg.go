@@ -8,8 +8,6 @@ package store
 import (
 	"io"
 	"io/ioutil"
-
-	"github.com/namvu9/keylime/src/errors"
 )
 
 type ReadWriterTo interface {
@@ -29,27 +27,13 @@ type Store struct {
 }
 
 func (s Store) Collection(name string) (*Collection, error) {
-	var op errors.Op = "(Store).Collection"
+	//var op errors.Op = "(Store).Collection"
 
 	c, ok := s.collections[name]
 	if !ok {
-		c = newCollection(name, s.storage)
-
-		if s.hasCollection(name) {
-			err := c.Load()
-			if err != nil {
-				return nil, errors.Wrap(op, errors.InternalError, err)
-			}
-
-			s.collections[name] = c
-		} else {
-			err := c.Create()
-			if err != nil {
-				return nil, errors.Wrap(op, errors.InternalError, err)
-			}
-		}
-
+		c := newCollection(name, s.storage)
 		s.collections[name] = c
+		return c, nil
 	}
 
 	return c, nil

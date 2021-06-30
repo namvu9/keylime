@@ -1,16 +1,22 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
+	"io"
 
 	"github.com/namvu9/keylime/src/errors"
+	"github.com/namvu9/keylime/src/types"
+	klTypes "github.com/namvu9/keylime/src/types"
 	record "github.com/namvu9/keylime/src/types"
 )
 
 // A Collection is a named container for a group of records
 type Collection struct {
-	Name string
+	Name   string
+	Schema *klTypes.Schema
 
 	primaryIndex *KeyIndex
 	storage      ReadWriterTo
@@ -30,10 +36,19 @@ func (c *Collection) Get(ctx context.Context, k string) ([]byte, error) {
 // Set the value associated with key `k` in collection `c`.
 // If a record with that key already exists in the
 // collection, an error is returned.
-func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
-	r := record.New(k, value)
+func (c *Collection) Set(ctx context.Context, k string, fields map[string]interface{}) error {
+	wrapError := errors.WrapWith("(*Collection).Set", errors.InternalError)
+	r := record.NewRecord(k)
+	r.SetFields(fields)
 
-	if err := c.primaryIndex.Insert(ctx, r); err != nil {
+	if c.Schema != nil {
+		err := c.Schema.Validate(r)
+		if err != nil {
+			return wrapError(err)
+		}
+	}
+
+	if err := c.primaryIndex.Insert(ctx, *r); err != nil {
 		return err
 	}
 
@@ -44,7 +59,8 @@ func (c *Collection) Set(ctx context.Context, k string, value []byte) error {
 	return nil
 }
 
-func (c *Collection) Create() error {
+// TODO: If this fails, clean up
+func (c *Collection) Create(s *klTypes.Schema) error {
 	var op errors.Op = "(*Collection).Create"
 
 	_, err := c.storage.Write(nil)
@@ -52,7 +68,14 @@ func (c *Collection) Create() error {
 		return errors.Wrap(op, errors.IOError, err)
 	}
 
+	c.Schema = s
+
 	err = c.primaryIndex.Create()
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
+	err = c.Save()
 	if err != nil {
 		return errors.Wrap(op, errors.InternalError, err)
 	}
@@ -66,6 +89,29 @@ func (c *Collection) Load() error {
 
 	if err != nil {
 		return errors.Wrap(op, errors.InternalError, err)
+	}
+
+	schemaReader := c.storage.WithSegment("schema")
+	ok, err := schemaReader.Exists()
+	if err != nil {
+		return errors.Wrap(op, errors.IOError, err)
+	}
+	if ok {
+		data, err := io.ReadAll(schemaReader)
+		if err != nil {
+			return errors.Wrap(op, errors.IOError, err)
+		}
+
+		s := types.NewSchema()
+
+		buf := bytes.NewBuffer(data)
+		dec := gob.NewDecoder(buf)
+		err = dec.Decode(&s)
+		if err != nil {
+			return errors.Wrap(op, errors.IOError, err)
+		}
+
+		c.Schema = s
 	}
 
 	return nil
@@ -89,12 +135,45 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 	return err
 }
 
+func (c *Collection) Save() error {
+	wrapError := errors.WrapWith("(*Collection).Save", errors.IOError)
+
+	if c.Schema != nil {
+		w := c.storage.WithSegment("schema")
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		err := enc.Encode(c.Schema)
+		if err != nil {
+			return wrapError(err)
+		}
+
+		_, err = w.Write(buf.Bytes())
+		if err != nil {
+			return wrapError(err)
+		}
+	}
+
+	return nil
+}
+
 func (c *Collection) Info() {
 	fmt.Println()
 	fmt.Println("---------------")
 	fmt.Println("Collection:", c.Name)
 	fmt.Println("---------------")
 
+	if c.Schema != nil {
+		fmt.Println(c.Schema)
+	}
 	c.primaryIndex.Info()
 	fmt.Println()
+}
+
+func (c *Collection) Exists() bool {
+	if ok, err := c.storage.Exists(); !ok || err != nil {
+		return false
+	}
+
+	return true
+
 }

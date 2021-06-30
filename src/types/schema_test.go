@@ -160,7 +160,7 @@ func TestSchemaValidation(t *testing.T) {
 		},
 	} {
 
-		r := NewRecord("someKey", nil)
+		r := NewRecord("someKey")
 		r.SetFields(test.fields)
 
 		err := schema.Validate(r)
@@ -206,7 +206,7 @@ func TestSchemaWithDefaults(t *testing.T) {
 		t.Errorf("Did not expect schema build to fail")
 	}
 
-	r := NewRecord("k", nil)
+	r := NewRecord("k")
 	r.Set("name", "Nam")
 	rCopy := schema.WithDefaults(r)
 

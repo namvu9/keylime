@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/namvu9/keylime/src/store"
+	"github.com/namvu9/keylime/src/types"
 )
 
 type FStorage struct {
@@ -74,6 +75,7 @@ var (
 )
 
 func main() {
+
 	for {
 		if c == nil {
 			fmt.Print("KL> ")
@@ -113,7 +115,7 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 
 		key := args[0]
 		value := strings.Join(args[1:], " ")
-		err := c.Set(ctx, key, []byte(value))
+		err := c.Set(ctx, key, map[string]interface{}{"random": value})
 		if err != nil {
 			return err
 		}
@@ -140,11 +142,29 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 		}
 
 		collection, err := s.Collection(args[0])
-		if err != nil {
-			return err
+		if collection.Exists() {
+			collection.Load()
+			if err != nil {
+				return err
+			}
+			fmt.Println("Successfully loaded collection", args[0])
+		} else {
+			var schema *types.Schema
+			if args[0] == "users" {
+				sb := types.NewSchemaBuilder()
+				sb.AddField("name", types.String)
+				sb.AddField("email", types.String, types.Optional)
+				sb.AddField("age", types.Number, types.WithDefault(4))
+				schema, _ = sb.Build()
+			}
+
+			err = collection.Create(schema)
+			if err != nil {
+				return err
+			}
+			fmt.Println("Successfully created collection", args[0])
 		}
 
-		fmt.Println("Successfully created/loaded collection", args[0])
 		c = collection
 
 	case "exit":
