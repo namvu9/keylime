@@ -123,7 +123,7 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 	switch strings.ToLower(cmd) {
 	case "set":
 		if len(args) < 2 {
-			return fmt.Errorf("Syntax error: Set <key> key1=value1 key2=value2 ...")
+			return fmt.Errorf("syntax error: Set <key> key1=value1 key2=value2 ...")
 		}
 
 		key := args[0]

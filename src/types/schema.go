@@ -81,8 +81,10 @@ func (s *Schema) Validate(r *Record) ValidationError {
 	}
 
 	for name, field := range s.fields {
-		if _, ok := r.Data[name]; !ok && field.Required {
+		if v, ok := r.Data[name]; !ok && field.Required {
 			es[name] = append(es[name], wrapError(fmt.Errorf("Required field missing: %s", name)))
+		} else if v.Value == nil && field.Required {
+			es[name] = append(es[name], wrapError(fmt.Errorf("Required field is non-nullable: %s", name)))
 		}
 	}
 

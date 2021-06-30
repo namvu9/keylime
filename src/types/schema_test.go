@@ -171,7 +171,7 @@ func TestSchemaValidation(t *testing.T) {
 
 		for _, fieldName := range test.invalidFields {
 			if err[fieldName] == nil {
-				t.Errorf("Expected %s to be invalid", fieldName)
+				t.Errorf("%d: Expected %s (%v) to be invalid", i, fieldName, test.fields["age"])
 			}
 		}
 
