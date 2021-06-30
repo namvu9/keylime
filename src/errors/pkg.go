@@ -4,10 +4,15 @@ import (
 	"fmt"
 )
 
+// TODO: Rethink this
 const (
 	KeyNotFoundError Kind = iota
 	InternalError
 	IOError
+	InvalidArguments
+	InvalidSchemaError
+	SchemaValidationError
+	Unknown
 )
 
 // OP
@@ -17,10 +22,41 @@ const (
 type Op string
 type Kind int
 
+func (k Kind) String() string {
+	switch k {
+	case KeyNotFoundError:
+		return "KeyNotFoundError"
+	case InternalError:
+		return "InternalError"
+	case IOError:
+		return "IOError"
+	case InvalidArguments:
+		return "InvalidArguments"
+	case InvalidSchemaError:
+		return "InvalidSchemaError"
+	default:
+		return "Unknown"
+	}
+}
+
+func GetKind(e interface{}) Kind {
+	if v, ok := e.(*Error); ok {
+		return v.Kind
+	}
+
+	if v, ok := e.(Error); ok {
+		return v.Kind
+	}
+
+	return Unknown
+}
+
 type Error struct {
-	Op   Op          // Operation (where)
-	Kind interface{} // Category
-	Err  error       // The wrapped error (why)
+	Op   Op    // Operation (where)
+	Kind Kind  // Category
+	Err  error // The wrapped error (why)
+
+	Collection string
 }
 
 func (e *Error) Error() string {
@@ -62,5 +98,15 @@ func Wrap(op Op, kind Kind, err error) *Error {
 		Op:   op,
 		Kind: kind,
 		Err:  err,
+	}
+}
+
+func WrapWith(op Op, kind Kind) func(error) *Error {
+	return func(e error) *Error {
+		return &Error{
+			Op:   op,
+			Kind: kind,
+			Err:  e,
+		}
 	}
 }

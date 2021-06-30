@@ -13,7 +13,7 @@ type Record struct {
 	Deleted bool
 }
 
-type compareFunc func(*Record, *Record) int
+type compareFunc func(Record, Record) int
 
 // TODO: TEST
 func (r *Record) Set(name string, value interface{}) {
@@ -32,11 +32,11 @@ func (r Record) CreatedAt() time.Time {
 	return r.TS
 }
 
-func (r *Record) IsLessThan(other *Record) bool {
+func (r *Record) IsLessThan(other Record) bool {
 	return r.Compare(byKey, other) < 0
 }
 
-func (r *Record) Compare(by compareFunc, other *Record) int {
+func (r Record) Compare(by compareFunc, other Record) int {
 	return by(r, other)
 }
 
@@ -57,7 +57,7 @@ func (r *Record) SetFields(fields map[string]interface{}) {
 	}
 }
 
-func byKey(this, that *Record) int {
+func byKey(this, that Record) int {
 	return strings.Compare(this.Key, that.Key)
 }
 

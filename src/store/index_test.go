@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/namvu9/keylime/src/record"
+	record "github.com/namvu9/keylime/src/types"
 )
 
 func TestGet(t *testing.T) {

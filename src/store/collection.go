@@ -5,12 +5,12 @@ import (
 	"fmt"
 
 	"github.com/namvu9/keylime/src/errors"
-	"github.com/namvu9/keylime/src/record"
+	record "github.com/namvu9/keylime/src/types"
 )
 
 // A Collection is a named container for a group of records
 type Collection struct {
-	Name    string
+	Name string
 
 	primaryIndex *KeyIndex
 	storage      ReadWriterTo
@@ -18,7 +18,7 @@ type Collection struct {
 
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *Collection) Get(ctx context.Context, k string) ([]byte, error){
+func (c *Collection) Get(ctx context.Context, k string) ([]byte, error) {
 	r, err := c.primaryIndex.Get(ctx, k)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,6 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 	return err
 }
 
-
 func (c *Collection) Info() {
 	fmt.Println()
 	fmt.Println("---------------")
@@ -99,4 +98,3 @@ func (c *Collection) Info() {
 	c.primaryIndex.Info()
 	fmt.Println()
 }
-

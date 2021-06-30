@@ -71,7 +71,7 @@ func (s *SchemaBuilder) Build() (*Schema, []error) {
 // and returns a pointer to a record with the schema's
 // default values applied
 func (s *Schema) WithDefaults(r *Record) *Record {
-	rCopy := New(r.Key, r.Value)
+	rCopy := NewRecord(r.Key, r.Value)
 
 	// TODO: Does this copy work as intended??
 	for name, field := range r.Data {

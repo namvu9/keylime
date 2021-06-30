@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/namvu9/keylime/src/record"
+	record "github.com/namvu9/keylime/src/types"
 )
 
 type util struct {

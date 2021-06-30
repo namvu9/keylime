@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"github.com/namvu9/keylime/src/errors"
-	"github.com/namvu9/keylime/src/record"
+	record "github.com/namvu9/keylime/src/types"
 )
 
 // KeyIndex represents a B-tree that indexes records by key

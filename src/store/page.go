@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
-	"github.com/namvu9/keylime/src/record"
+	record "github.com/namvu9/keylime/src/types"
 )
 
 // A Page is an implementation of a node in a B-tree.
