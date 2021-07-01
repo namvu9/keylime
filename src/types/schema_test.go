@@ -198,12 +198,110 @@ func TestSchemaValidation(t *testing.T) {
 	}
 }
 
+func TestImplicitTypeConversion(t *testing.T) {
+	for i, test := range []struct {
+		input        interface{}
+		fieldType    Type
+		inferredType Type
+		opts         []SchemaFieldOption
+	}{
+		{
+			input:        "4",
+			inferredType: String,
+			fieldType:    String,
+		},
+		{
+			input:        4,
+			inferredType: Number,
+			fieldType:    Number,
+		},
+		{
+			input:        4.32,
+			inferredType: Number,
+			fieldType:    Number,
+		},
+		{
+			input:        "4",
+			inferredType: String,
+			fieldType:    Number,
+		},
+		{
+			input:        "4.32",
+			inferredType: String,
+			fieldType:    Number,
+		},
+		{
+			input:        false,
+			inferredType: Boolean,
+			fieldType:    Boolean,
+		},
+		{
+			input:        "false",
+			inferredType: String,
+			fieldType:    Boolean,
+		},
+		{
+			input:        true,
+			inferredType: Boolean,
+			fieldType:    Boolean,
+		},
+		{
+			input:        "true",
+			inferredType: String,
+			fieldType:    Boolean,
+		},
+		{
+			input:        map[string]interface{}{},
+			inferredType: Map,
+			fieldType:    Map,
+		},
+		{
+			input:        map[string]interface{}{},
+			inferredType: Map,
+			fieldType:    Object,
+			opts:         []SchemaFieldOption{WithSchema(&Schema{})},
+		},
+		{
+			input:        []interface{}{4},
+			inferredType: Array,
+			fieldType:    Array,
+		},
+	} {
+		sb := NewSchemaBuilder()
+		sb.AddField("Test", test.fieldType, test.opts...)
+		schema, err := sb.Build()
+		if err != nil {
+			t.Logf("Schema build failed: %s", err)
+		}
+
+		r := NewRecord("k")
+		r.Set("Test", test.input)
+
+		field, _ := r.Get("Test")
+
+		if !field.IsType(test.inferredType) {
+			t.Errorf("%d: Inferred type, want %s got %s", i, test.inferredType, field.Type)
+		}
+
+		e := schema.Validate(r)
+		if e != nil {
+			t.Logf("Schema validation fails: %s", err)
+		}
+
+		field2, _ := r.Get("Test")
+
+		if !field2.IsType(test.fieldType) {
+			t.Errorf("%d: Expected final type to be %s got %s", i, test.fieldType, field.Type)
+		}
+	}
+}
+
 func TestSchemaWithDefaults(t *testing.T) {
 	personSchema := &Schema{
 		fields: map[string]SchemaField{
 			"age": {
-				Type: Number,
-				Required: false,
+				Type:         Number,
+				Required:     false,
 				DefaultValue: 10,
 			},
 		},

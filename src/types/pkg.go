@@ -1,6 +1,8 @@
 package types
 
-import "encoding/gob"
+import (
+	"encoding/gob"
+)
 
 func init() {
 	gob.Register(map[string]interface{}{})
@@ -36,6 +38,8 @@ func (dt Type) String() string {
 		return "Map"
 	case Array:
 		return "Array"
+	case Boolean:
+		return "Boolean"
 	default:
 		return "Unknown"
 	}

@@ -28,10 +28,7 @@ type compareFunc func(Record, Record) int
 
 // TODO: TEST
 func (r *Record) Set(name string, value interface{}) {
-	r.Fields[name] = Field{
-		Type:  GetDataType(value),
-		Value: value,
-	}
+	r.Fields[name] = NewField(value)
 }
 
 func (r *Record) Get(fieldPath ...string) (Field, bool) {
@@ -41,11 +38,11 @@ func (r *Record) Get(fieldPath ...string) (Field, bool) {
 	}
 	if len(fieldPath) > 1 {
 		for _, fieldName := range fieldPath[1:] {
-			if !f.IsType(Object) {
+			if !f.IsOneOf(Object, Map) {
 				return f, false
 			}
 
-			ob, ok := f.Value.(map[string]Field)
+			ob, ok := f.Value.(map[string]interface{})
 			if !ok {
 				return f, false
 			}
@@ -55,7 +52,7 @@ func (r *Record) Get(fieldPath ...string) (Field, bool) {
 				return f, false
 			}
 
-			f = v
+			f = NewField(v)
 		}
 	}
 
@@ -87,10 +84,7 @@ func (r *Record) SetFields(fields map[string]interface{}) {
 	r.Fields = make(map[string]Field)
 
 	for name, value := range fields {
-		r.Fields[name] = Field{
-			Type:  GetDataType(value),
-			Value: value,
-		}
+		r.Set(name, value)
 	}
 }
 
@@ -193,6 +187,17 @@ func (f *Field) ToNumber() error {
 	return nil
 }
 
+func (f *Field) ToBoolean() error {
+	v, err := strconv.ParseBool(f.Value.(string))
+	if err != nil {
+		return err
+	}
+
+	f.Value = v
+	f.Type = Boolean
+	return nil
+}
+
 func (f *Field) Validate(name string, schemaField SchemaField) []error {
 	var (
 		errs = []error{}
@@ -214,7 +219,7 @@ func (f *Field) Validate(name string, schemaField SchemaField) []error {
 		return f.Validate(name, schemaField)
 	}
 
-	if f.IsType(Object) && schemaField.Schema != nil {
+	if f.IsType(Object) {
 		obj := f.Value.(map[string]interface{})
 		r := NewRecord("k")
 		r.SetFields(obj)
@@ -275,6 +280,15 @@ func (f *Field) ToType(t Type) error {
 		if err != nil {
 			return err
 		}
+	case Boolean:
+		if !f.IsType(String) {
+			return fmt.Errorf("TypeConversionError: Cannot convert %s to %s", f.Type, t)
+		}
+		err := f.ToBoolean()
+		if err != nil {
+			return err
+		}
+
 	default:
 		return fmt.Errorf("TypeConversionError: Cannot convert %s to %s", f.Type, t)
 	}
@@ -284,4 +298,13 @@ func (f *Field) ToType(t Type) error {
 
 func (f *Field) IsType(t Type) bool {
 	return f.Type == t
+}
+
+func (f *Field) IsOneOf(ts ...Type) bool {
+	for _, t := range ts {
+		if f.Type == t {
+			return true
+		}
+	}
+	return false
 }

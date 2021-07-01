@@ -56,6 +56,8 @@ func (s *Schema) Validate(r *Record) ValidationError {
 			err := field.Validate(name, sf)
 			if err != nil {
 				es[name] = err
+			} else {
+				r.Fields[name] = field
 			}
 		}
 	}
