@@ -4,68 +4,55 @@ import (
 	"fmt"
 )
 
-// TODO: Rethink this
+type Code string
+
+// Application error codes
 const (
-	KeyNotFoundError Kind = iota
-	InternalError
-	IOError
-	InvalidArguments
-	InvalidSchemaError
-	SchemaValidationError
-	Unknown
+	ENotFound Code = "NotFound"
+	EIO            = "IO Error"
+
+	// The application received a request that it did not know
+	// how to handle
+	EBadRequest = "Bad request"
+	EInternal   = "Internal Error"
+	EUnknown
 )
 
 // OP
 // A unique string describing a method or a function
 // Multiple operations can construct a friendly stack trace
-
 type Op string
-type Kind int
 
-func (k Kind) String() string {
-	switch k {
-	case KeyNotFoundError:
-		return "KeyNotFoundError"
-	case InternalError:
-		return "InternalError"
-	case IOError:
-		return "IOError"
-	case InvalidArguments:
-		return "InvalidArguments"
-	case InvalidSchemaError:
-		return "InvalidSchemaError"
-	default:
-		return "Unknown"
-	}
-}
-
-func GetKind(e interface{}) Kind {
+func GetKind(e interface{}) Code {
 	if v, ok := e.(*Error); ok {
-		return v.Kind
+		return v.Code
 	}
 
 	if v, ok := e.(Error); ok {
-		return v.Kind
+		return v.Code
 	}
 
-	return Unknown
+	return EUnknown
 }
 
 type Error struct {
-	Op   Op    // Operation (where)
-	Kind Kind  // Category
-	Err  error // The wrapped error (why)
+	Op    Op     // Operation 
+	Code  Code   // Category
+	Err   error  // The wrapped error 
+	ReqID string // The ID for the current request
+}
 
-	Collection string
+func GetRequestID(e Error) string {
+	return e.ReqID
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s:\n  %s", e.Op, e.Err.Error())
+	return fmt.Sprintf("%s:\n %s", e.Op, e.Err.Error())
 }
 
 func (e Error) Is(target error) bool {
 	if other, ok := target.(*Error); ok {
-		return e.Kind == other.Kind
+		return e.Code == other.Code
 	}
 
 	return false
@@ -88,24 +75,24 @@ func Ops(e *Error) []Op {
 func NewKeyNotFoundError(op Op, key string) *Error {
 	return &Error{
 		Op:   op,
-		Kind: KeyNotFoundError,
+		Code: ENotFound,
 		Err:  fmt.Errorf("KeyNotFound: %s", key),
 	}
 }
 
-func Wrap(op Op, kind Kind, err error) *Error {
+func Wrap(op Op, kind Code, err error) *Error {
 	return &Error{
 		Op:   op,
-		Kind: kind,
+		Code: kind,
 		Err:  err,
 	}
 }
 
-func WrapWith(op Op, kind Kind) func(error) *Error {
+func WrapWith(op Op, kind Code) func(error) *Error {
 	return func(e error) *Error {
 		return &Error{
 			Op:   op,
-			Kind: kind,
+			Code: kind,
 			Err:  e,
 		}
 	}

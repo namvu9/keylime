@@ -40,7 +40,7 @@ func (s *Schema) GobDecode(data []byte) error {
 // validation passes, nil is returned.
 func (s *Schema) Validate(r *Record) ValidationError {
 	var (
-		wrapError = errors.WrapWith("(*Schema).Validate", errors.SchemaValidationError)
+		wrapError = errors.WrapWith("(*Schema).Validate", errors.EInternal)
 		es        = make(ValidationError)
 	)
 
@@ -140,7 +140,7 @@ func NewField(v interface{}) Field {
 
 // TODO: Return error instead of []error
 func (s *SchemaBuilder) Build() (*Schema, []error) {
-	wrapError := errors.WrapWith("(*SchemaBuilder).Build", errors.InvalidSchemaError)
+	wrapError := errors.WrapWith("(*SchemaBuilder).Build", errors.EInternal)
 
 	schema := NewSchema()
 	errors := []error{}

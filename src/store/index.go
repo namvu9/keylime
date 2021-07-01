@@ -43,7 +43,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 
 	page, err := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	page.insert(r)
@@ -56,11 +56,11 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 
 	page, err := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	if err := page.Delete(key); err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	if ki.root.Empty() && !ki.root.Leaf() {
@@ -68,7 +68,7 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 
 		newRoot, err := ki.root.Child(0)
 		if err != nil {
-			return errors.Wrap(op, errors.InternalError, err)
+			return errors.Wrap(op, errors.EInternal, err)
 		}
 
 		ki.root = newRoot
@@ -88,7 +88,7 @@ func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error)
 
 	node, err := ki.root.iter(byKey(key)).Get()
 	if err != nil {
-		return nil, errors.Wrap(op, errors.InternalError, err)
+		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
 
 	i, ok := node.keyIndex(key)
@@ -114,7 +114,7 @@ func (ki *KeyIndex) Save() error {
 
 	_, err := ki.storage.Write(buf.Bytes())
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	return nil
@@ -129,12 +129,12 @@ func (ki *KeyIndex) Create() error {
 
 	_, err := ki.storage.Write(buf.Bytes())
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	err = ki.root.save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return ki.bufWriter.Flush()
@@ -144,13 +144,13 @@ func (ki *KeyIndex) read() error {
 
 	data, err := io.ReadAll(ki.storage)
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
 	err = dec.Decode(ki)
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	return nil
@@ -161,7 +161,7 @@ func (ki *KeyIndex) Load() error {
 
 	err := ki.read()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return ki.loadRoot()
@@ -173,7 +173,7 @@ func (ki *KeyIndex) loadRoot() error {
 
 	err := ki.root.load()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return nil

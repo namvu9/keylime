@@ -42,7 +42,7 @@ type Fields = map[string]interface{}
 // If a record with that key already exists in the
 // collection, an error is returned.
 func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
-	wrapError := errors.WrapWith("(*Collection).Set", errors.InternalError)
+	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
 	r := types.NewRecord(k)
 	r.SetFields(fields)
 
@@ -81,7 +81,7 @@ func (c *Collection) GetFirst(ctx context.Context, n int) []*types.Record {
 
 func (c *Collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
 	// Retrieve record
-	wrapError := errors.WrapWith("(*Collection).Update", errors.InternalError)
+	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
 	r, err := c.primaryIndex.Get(ctx, k)
 	if err != nil {
 		return wrapError(err)
@@ -114,24 +114,24 @@ func (c *Collection) Create(s *types.Schema) error {
 
 	_, err := c.storage.Write(nil)
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	c.Schema = s
 
 	err = c.primaryIndex.Create()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	err = c.orderIndex.Save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	err = c.Save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return nil
@@ -142,23 +142,23 @@ func (c *Collection) Load() error {
 	err := c.primaryIndex.Load()
 
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	err = c.orderIndex.Load()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	schemaReader := c.storage.WithSegment("schema")
 	ok, err := schemaReader.Exists()
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 	if ok {
 		data, err := io.ReadAll(schemaReader)
 		if err != nil {
-			return errors.Wrap(op, errors.IOError, err)
+			return errors.Wrap(op, errors.EIO, err)
 		}
 
 		s := types.NewSchema()
@@ -167,7 +167,7 @@ func (c *Collection) Load() error {
 		dec := gob.NewDecoder(buf)
 		err = dec.Decode(&s)
 		if err != nil {
-			return errors.Wrap(op, errors.IOError, err)
+			return errors.Wrap(op, errors.EIO, err)
 		}
 
 		c.Schema = s
@@ -183,19 +183,19 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 
 	err := c.primaryIndex.Delete(ctx, k)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	err = c.primaryIndex.Save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return err
 }
 
 func (c *Collection) Save() error {
-	wrapError := errors.WrapWith("(*Collection).Save", errors.IOError)
+	wrapError := errors.WrapWith("(*Collection).Save", errors.EIO)
 
 	if c.Schema != nil {
 		w := c.storage.WithSegment("schema")

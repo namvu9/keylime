@@ -40,7 +40,7 @@ func (p *Page) Child(i int) (*Page, error) {
 	const op errors.Op = "(*Page).Child"
 
 	if got := len(p.children); i >= got {
-		return nil, errors.Wrap(op, errors.InternalError, fmt.Errorf("OutOfBounds %d (length %d)", i, got))
+		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("OutOfBounds %d (length %d)", i, got))
 	}
 
 	child := p.children[i]
@@ -69,13 +69,13 @@ func (p *Page) Delete(k string) error {
 	// Case 1: Predcessor has at least t keys
 	beforeChild, err := p.Child(index)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	if !beforeChild.Sparse() {
 		maxPredPage, err := beforeChild.maxPage().forEach(handleSparsePage).Get()
 		if err != nil {
-			return errors.Wrap(op, errors.InternalError, err)
+			return errors.Wrap(op, errors.EInternal, err)
 		}
 
 		predRec := maxPredPage.records[len(maxPredPage.records)-1]
@@ -89,13 +89,13 @@ func (p *Page) Delete(k string) error {
 	// Case 2: Successor has at least t keys
 	afterChild, err := p.Child(index + 1)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	if !afterChild.Sparse() {
 		succ, err := afterChild.minPage().forEach(handleSparsePage).Get()
 		if err != nil {
-			return errors.Wrap(op, errors.InternalError, err)
+			return errors.Wrap(op, errors.EInternal, err)
 		}
 
 		succRec := succ.records[0]
@@ -113,7 +113,7 @@ func (p *Page) Delete(k string) error {
 
 	deleteChild, err := p.Child(index)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return deleteChild.Delete(k)
@@ -210,11 +210,11 @@ func (p *Page) splitChild(index int) error {
 
 	fullChild, err := p.Child(index)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	if !fullChild.Full() {
-		return errors.Wrap(op, errors.InternalError, fmt.Errorf("Cannot split non-full child"))
+		return errors.Wrap(op, errors.EInternal, fmt.Errorf("Cannot split non-full child"))
 	}
 
 	newChild := p.newPage(fullChild.leaf)
@@ -233,17 +233,17 @@ func (p *Page) splitChild(index int) error {
 
 	err = newChild.save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	err = fullChild.save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	err = p.save()
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return nil
@@ -274,7 +274,7 @@ func (p *Page) insertChildren(index int, children ...*Page) {
 func (p *Page) predecessorPage(k string) (*Page, error) {
 	const op errors.Op = "(*Page).predecessorPage"
 	if p.leaf {
-		return nil, errors.Wrap(op, errors.InternalError, fmt.Errorf("Leaf has no predecessor page"))
+		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("Leaf has no predecessor page"))
 	}
 
 	index, exists := p.keyIndex(k)
@@ -284,12 +284,12 @@ func (p *Page) predecessorPage(k string) (*Page, error) {
 
 	child, err := p.Child(index)
 	if err != nil {
-		return nil, errors.Wrap(op, errors.InternalError, err)
+		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
 
 	page, err := child.maxPage().Get()
 	if err != nil {
-		return nil, errors.Wrap(op, errors.InternalError, err)
+		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return page, nil
@@ -299,7 +299,7 @@ func (p *Page) successorPage(k string) (*Page, error) {
 	const op errors.Op = "(*Page).successorPage"
 
 	if p.leaf {
-		return nil, errors.Wrap(op, errors.InternalError, fmt.Errorf("Leaf has no successor page"))
+		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("Leaf has no successor page"))
 	}
 
 	index, exists := p.keyIndex(k)
@@ -309,7 +309,7 @@ func (p *Page) successorPage(k string) (*Page, error) {
 
 	page, err := p.children[index+1].minPage().Get()
 	if err != nil {
-		return nil, errors.Wrap(op, errors.InternalError, err)
+		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
 
 	return page, nil
@@ -461,7 +461,7 @@ func (p *Page) save() error {
 
 	err := p.writer.Write(p)
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	return nil
@@ -472,7 +472,7 @@ func (p *Page) deletePage() error {
 
 	err := p.writer.Delete(p)
 	if err != nil {
-		return errors.Wrap(op, errors.IOError, err)
+		return errors.Wrap(op, errors.EIO, err)
 	}
 
 	return nil
@@ -493,7 +493,7 @@ func (p *Page) load() error {
 
 	data, err := io.ReadAll(p.reader)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 	buf := bytes.NewBuffer(data)
 	ps := PageSerialized{}
@@ -501,7 +501,7 @@ func (p *Page) load() error {
 	dec := gob.NewDecoder(buf)
 	err = dec.Decode(&ps)
 	if err != nil {
-		return errors.Wrap(op, errors.InternalError, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
 	ps.ToDeserialized(p)

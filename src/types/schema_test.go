@@ -39,32 +39,32 @@ func TestSchemaBuilder(t *testing.T) {
 		for i, test := range []struct {
 			Type    Type
 			Options []SchemaFieldOption
-			Errors  []errors.Kind
+			Errors  []errors.Code
 		}{
 			{
 				Type:    String,
 				Options: []SchemaFieldOption{WithDefault(4)},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Boolean,
 				Options: []SchemaFieldOption{WithDefault(4)},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Number,
 				Options: []SchemaFieldOption{WithDefault("lol")},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Map,
 				Options: []SchemaFieldOption{WithDefault("lol")},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Object,
 				Options: []SchemaFieldOption{WithDefault("lol"), WithSchema(&Schema{})},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 		} {
 			sb := NewSchemaBuilder()
@@ -91,32 +91,32 @@ func TestSchemaBuilder(t *testing.T) {
 		for i, test := range []struct {
 			Type    Type
 			Options []SchemaFieldOption
-			Errors  []errors.Kind
+			Errors  []errors.Code
 		}{
 			{
 				Type:    String,
 				Options: []SchemaFieldOption{WithDefault("Nam")},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Boolean,
 				Options: []SchemaFieldOption{WithDefault(true)},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Number,
 				Options: []SchemaFieldOption{WithDefault(30.2)},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Number,
 				Options: []SchemaFieldOption{WithDefault(30)},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 			{
 				Type:    Object,
 				Options: []SchemaFieldOption{WithDefault(map[string]interface{}{}), WithSchema(&Schema{})},
-				Errors:  []errors.Kind{errors.InvalidSchemaError},
+				Errors:  []errors.Code{errors.EInternal},
 			},
 		} {
 			sb := NewSchemaBuilder()

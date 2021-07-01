@@ -168,27 +168,23 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 
 	case "get":
 		if len(args) < 1 {
-			return fmt.Errorf("Syntax Error: Get requires exactly 1 argument")
+			return fmt.Errorf("Syntax Error: Get requires at least 1 argument")
 		}
 
-		selector := strings.Split(args[0], ":")
-		key := selector[0]
+		key := args[0]
 
-		res, err := c.Get(ctx, key)
+		rec, err := c.Get(ctx, key)
 		if err != nil {
 			return err
 		}
 
-		if len(selector) == 2 {
-			fieldPath := strings.Split(selector[1], ".")
-			v, ok := res.Get(fieldPath...)
-			if !ok {
-				return fmt.Errorf("Fieldpath %v does not exist", fieldPath)
-			}
-
-			fmt.Println(v)
+		if len(args) > 1 {
+			selectors := types.MakeFieldSelectors(args[1:]...)
+			res := rec.Select(selectors...)
+			s, _ := types.Prettify(res)
+			fmt.Printf("%s=%s\n", key, s)
 		} else {
-			fmt.Println(res)
+			fmt.Println(rec)
 		}
 
 		return nil
@@ -236,21 +232,24 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			if err != nil {
 				return err
 			}
-			fields := map[string]interface{}{
-				"name":   "Nam",
-				"age":    10,
-				"people": []interface{}{4},
-				"Object": map[string]interface{}{
-					"name":  "BITCH",
-					"age":   99,
-					"email": "9319vuna@gmail.com",
-				},
-			}
 
-			for i := 0; i < 4; i++ {
-				err = collection.Set(ctx, fmt.Sprint(i), fields)
-				if err != nil {
-					return err
+			if args[0] == "users" {
+				fields := map[string]interface{}{
+					"name":   "Nam",
+					"age":    10,
+					"people": []interface{}{4},
+					"Object": map[string]interface{}{
+						"name":  "BITCH",
+						"age":   99,
+						"email": "9319vuna@gmail.com",
+					},
+				}
+
+				for i := 0; i < 4; i++ {
+					err = collection.Set(ctx, fmt.Sprint(i), fields)
+					if err != nil {
+						return err
+					}
 				}
 			}
 
@@ -279,7 +278,6 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 		res := c.GetFirst(ctx, int(n))
 		fmt.Println(len(res), res)
 
-
 		return nil
 	case "tail":
 		if len(args) != 1 {
@@ -290,7 +288,6 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 
 		res := c.GetLast(ctx, int(n))
 		fmt.Println(len(res), res)
-
 
 		return nil
 

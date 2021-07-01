@@ -59,6 +59,21 @@ func (r *Record) Get(fieldPath ...string) (Field, bool) {
 	return f, true
 }
 
+func (r Record) Select(selectFn ...FieldSelector) map[string]interface{} {
+	out := make(map[string]interface{})
+
+	for _, selectFn := range selectFn {
+		name, field, ok := selectFn(r)
+		if !ok {
+			out[name] = fmt.Errorf("Value at fieldpath %s does not exist", name)
+		} else {
+			out[name] = field
+		}
+	}
+
+	return out
+}
+
 func (r Record) CreatedAt() time.Time {
 	return r.TS
 }
@@ -307,4 +322,49 @@ func (f *Field) IsOneOf(ts ...Type) bool {
 		}
 	}
 	return false
+}
+
+type FieldSelector func(Record) (string, Field, bool)
+
+func MakeFieldSelectors(selectors ...string) []FieldSelector {
+	out := []FieldSelector{}
+
+	for _, selector := range selectors {
+		name := selector
+		
+		out = append(out, func(r Record) (string, Field, bool) {
+			fieldPath := strings.Split(name, ".")
+			f, ok := r.Fields[fieldPath[0]]
+
+			if !ok {
+				return name, f, false
+			}
+
+			if len(fieldPath) > 1 {
+				for _, fieldName := range fieldPath[1:] {
+					if !f.IsOneOf(Object, Map) {
+						return name, f, false
+					}
+
+					ob, ok := f.Value.(map[string]interface{})
+					if !ok {
+						return name, f, false
+					}
+
+					v, ok := ob[fieldName]
+					if !ok {
+						return name, f, false
+					}
+
+					f = NewField(v)
+				}
+
+			}
+
+			return name, f, true
+		})
+
+	}
+
+	return out
 }
