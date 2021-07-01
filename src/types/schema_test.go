@@ -335,7 +335,6 @@ func TestSchemaWithDefaults(t *testing.T) {
 	}
 
 	if equal(val.Value, def) {
-		fmt.Println(val)
 		t.Errorf("The schema should provide a copy of the default value")
 	}
 

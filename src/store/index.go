@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/errors"
+	"github.com/namvu9/keylime/src/types"
 	record "github.com/namvu9/keylime/src/types"
 )
 
@@ -188,46 +190,168 @@ func (ki *KeyIndex) Info() {
 	fmt.Printf("Records (%d): %v\n", len(in.records), in.records)
 }
 
+type ID string
+type NodeMap map[ID]*Node
+
 // OrderIndex indexes records by their order with respect to
 // some attribute
 type OrderIndex struct {
-	head *Node
-	tail *Node
+	head ID
+	tail ID
+
+	nodes     NodeMap
+	BlockSize int // Number of records inside each node
+	Storage   ReadWriterTo
+}
+
+func (oi *OrderIndex) Node(id ID) (*Node, error) {
+	if id == "" {
+		return nil, fmt.Errorf("No ID provided")
+	}
+
+	v, ok := oi.nodes[id]
+	if !ok {
+		n := newNodeWithID(id, oi.Storage)
+		err := n.Load()
+		if err != nil {
+			return nil, err
+		}
+
+		oi.nodes[id] = n
+		return n, nil
+	}
+
+	return v, nil
 }
 
 type Node struct {
-	ID        string
-	BlockSize int
-	Records   []record.Record
-	prev      *Node
-	next      *Node
+	ID   ID
+	Prev ID
+	Next ID
+
+	Capacity int
+	Records  []*record.Record
+	Storage  ReadWriterTo
+	loaded   bool
 }
 
-func newNode() *Node {
-	return &Node{}
+func (n *Node) Load() error {
+	n.loaded = true
+	return nil
+}
+
+func (oi *OrderIndex) newNode() *Node {
+	oldHead, _ := oi.Node(oi.head)
+
+	n := newNode(oi.BlockSize, oi.Storage)
+	n.loaded = true
+	n.Next = oldHead.ID
+	oi.nodes[n.ID] = n
+
+	oldHead.Prev = n.ID
+	oi.head = n.ID
+
+	return n
+}
+
+func newNode(capacity int, s ReadWriterTo) *Node {
+	n := &Node{ID: ID(uuid.NewString()), Capacity: capacity, Storage: newIOReporter(), loaded: true}
+
+	if s != nil {
+		n.Storage = s.WithSegment(string(n.ID))
+	}
+
+	return n
+}
+
+func newNodeWithID(id ID, s ReadWriterTo) *Node {
+	n := &Node{ID: id, Storage: newIOReporter()}
+	if s != nil {
+		n.Storage = s.WithSegment(string(n.ID))
+	}
+
+	return n
 }
 
 func (n *Node) Full() bool {
-	return len(n.Records) >= n.BlockSize
+	return len(n.Records) >= n.Capacity
 }
 
-func (n *Node) Insert(r record.Record) error {
+func (n *Node) Insert(r *record.Record) error {
 	n.Records = append(n.Records, r)
 	return nil
 }
 
-func (oi *OrderIndex) Insert(r record.Record) error {
-	if oi.head.Full() {
-		n := newNode()
-		n.next = oi.head
-		oi.head.prev = n
-		oi.head = n
-		return n.Insert(r)
+func (oi *OrderIndex) Insert(r *record.Record) error {
+	headNode, _ := oi.Node(oi.head)
+	if headNode.Full() {
+		headNode = oi.newNode()
 	}
 
-	return oi.head.Insert(r)
+	return headNode.Insert(r)
 }
 
 func (oi *OrderIndex) Delete(r *record.Record) error {
 	return nil
+}
+
+func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
+	out := []*types.Record{}
+
+	var node *Node
+	if asc {
+		node, _ = oi.Node(oi.tail)
+	} else {
+		node, _ = oi.Node(oi.head)
+	}
+
+
+	for node != nil {
+		if asc {
+			for _, r := range node.Records {
+				if len(out) == n {
+					return out
+				}
+				if !r.Deleted {
+					out = append(out, r)
+				}
+			}
+
+			node, _ = oi.Node(node.Prev)
+		} else {
+			for i := len(node.Records) - 1; i >= 0; i-- {
+				r := node.Records[i]
+
+				if len(out) == n {
+					return out
+				}
+
+				if !r.Deleted {
+					out = append(out, r)
+				}
+			}
+
+			node, _ = oi.Node(node.Next)
+		}
+
+	}
+
+	return out
+}
+
+func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
+	node := newNode(blockSize, s)
+	oi := &OrderIndex{
+		BlockSize: blockSize,
+		Storage:   newIOReporter(),
+		head:      node.ID,
+		tail:      node.ID,
+		nodes:     NodeMap{node.ID: node},
+	}
+
+	if s != nil {
+		oi.Storage = s
+	}
+
+	return oi
 }

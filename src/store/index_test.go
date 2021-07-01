@@ -3,24 +3,25 @@ package store
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"testing"
 
-	record "github.com/namvu9/keylime/src/types"
+	"github.com/namvu9/keylime/src/types"
 )
 
 func TestGet(t *testing.T) {
 	ctx := context.Background()
 	var (
 		root = makePage(2, makeRecords("g"),
-			makePage(2, []record.Record{
-				record.New("a", nil),
-				record.New("b", nil),
-				record.New("c", []byte{100, 100, 100}),
+			makePage(2, []types.Record{
+				types.New("a", nil),
+				types.New("b", nil),
+				types.New("c", []byte{100, 100, 100}),
 			}),
-			makePage(2, []record.Record{
-				record.New("h", nil),
-				record.New("i", []byte{99, 99, 99}),
-				record.New("j", nil),
+			makePage(2, []types.Record{
+				types.New("h", nil),
+				types.New("i", []byte{99, 99, 99}),
+				types.New("j", nil),
 			}),
 		)
 		ki = newKeyIndex(2, nil)
@@ -62,7 +63,7 @@ func TestInsert(t *testing.T) {
 		ki := newKeyIndex(2, reporter)
 		ki.root.records = makeRecords("k", "o", "s")
 
-		ki.Insert(context.Background(), record.New("q", nil))
+		ki.Insert(context.Background(), types.New("q", nil))
 
 		u.with("Root", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(2)
@@ -104,9 +105,9 @@ func TestInsert(t *testing.T) {
 		ki.root = root
 
 		var (
-			recordA = record.New("d", []byte{99})
-			recordB = record.New("r", []byte{99})
-			recordC = record.New("z", []byte{99})
+			recordA = types.New("d", []byte{99})
+			recordB = types.New("r", []byte{99})
+			recordC = types.New("z", []byte{99})
 		)
 
 		ctx := context.Background()
@@ -154,14 +155,14 @@ func TestDelete(t *testing.T) {
 		deleteMe := ki.newPage(true)
 
 		oldRoot := ki.newPage(false)
-		oldRoot.records = append(oldRoot.records, record.New("5", nil))
+		oldRoot.records = append(oldRoot.records, types.New("5", nil))
 		oldRoot.children = []*Page{
 			ki.newPage(true),
 			deleteMe,
 		}
 
-		oldRoot.children[0].records = append(oldRoot.children[0].records, record.New("2", nil))
-		oldRoot.children[1].records = append(oldRoot.children[1].records, record.New("8", nil))
+		oldRoot.children[0].records = append(oldRoot.children[0].records, types.New("2", nil))
+		oldRoot.children[1].records = append(oldRoot.children[1].records, types.New("8", nil))
 
 		ki.root = oldRoot
 
@@ -256,12 +257,12 @@ func TestBuildKeyIndex(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		recordA = record.New("a", nil)
-		recordB = record.New("b", nil)
-		recordC = record.New("c", nil)
+		recordA = types.New("a", nil)
+		recordB = types.New("b", nil)
+		recordC = types.New("c", nil)
 
-		recordD = record.New("d", nil)
-		recordE = record.New("e", nil)
+		recordD = types.New("d", nil)
+		recordE = types.New("e", nil)
 	)
 
 	ki.Insert(ctx, recordA)
@@ -307,4 +308,183 @@ func TestBuildKeyIndex(t *testing.T) {
 		nu.hasNChildren(0)
 		nu.hasNRecords(0)
 	})
+}
+
+func TestInsertOrderIndex(t *testing.T) {
+	t.Run("Normal insert", func(t *testing.T) {
+		oi := newOrderIndex(2, nil)
+		r := types.NewRecord("k")
+
+		oi.Insert(r)
+
+		headNode, _ := oi.Node(oi.head)
+
+		if got := len(headNode.Records); got != 1 {
+			t.Errorf("n records, want %d got %d", 1, got)
+		}
+
+		if first := headNode.Records[0]; first != r || first.Key != "k" {
+			t.Errorf("Expected first record to have key k, got %s", first.Key)
+		}
+	})
+
+	t.Run("Insertion into full node", func(t *testing.T) {
+		oi := newOrderIndex(2, nil)
+		oldHead, _ := oi.Node(oi.head)
+		oldHead.Records = []*types.Record{nil, nil}
+
+		r := types.NewRecord("o")
+		oi.Insert(r)
+
+		if oi.head == oi.tail {
+			t.Errorf("Expected new node to be allocated")
+		}
+
+		if oi.tail != oldHead.ID {
+			t.Errorf("Expected old head to be new tail")
+		}
+
+		newHead, _ := oi.Node(oi.head)
+		if newHead.Next != oi.tail {
+			t.Errorf("New head does not reference old head")
+		}
+
+		if oldHead.Prev != oi.head {
+			t.Errorf("Old head does not reference new head")
+		}
+	})
+}
+
+func TestGetOrderIndex(t *testing.T) {
+	t.Run("Desc: n < records in index", func(t *testing.T) {
+		oi := newOrderIndex(2, nil)
+
+		d := types.NewRecord("d")
+		d.Deleted = true
+
+		oi.Insert(types.NewRecord("a"))
+		oi.Insert(types.NewRecord("b"))
+		oi.Insert(types.NewRecord("c"))
+		oi.Insert(d)
+		oi.Insert(types.NewRecord("e"))
+
+		res := oi.Get(4, false)
+
+		if len(res) != 4 {
+			t.Errorf("Want %d Got %d", 4, len(res))
+		}
+
+		if got := res[0].Key; got != "e" {
+			t.Errorf("0: Want key e, got %s", got)
+		}
+		if got := res[1].Key; got != "c" {
+			t.Errorf("1: Want key c, got %s", got)
+		}
+		if got := res[2].Key; got != "b" {
+			t.Errorf("2: Want key b, got %s", got)
+		}
+		if got := res[3].Key; got != "a" {
+			t.Errorf("3: Want key a, got %s", got)
+		}
+	})
+
+	t.Run("Desc: n > records in index", func(t *testing.T) {
+		oi := newOrderIndex(2, nil)
+
+		d := types.NewRecord("d")
+		d.Deleted = true
+
+		oi.Insert(types.NewRecord("a"))
+		oi.Insert(types.NewRecord("b"))
+		oi.Insert(types.NewRecord("c"))
+		oi.Insert(d)
+		oi.Insert(types.NewRecord("e"))
+
+		res := oi.Get(100, false)
+
+		if len(res) != 4 {
+			t.Errorf("Want %d Got %d", 4, len(res))
+		}
+
+		if got := res[0].Key; got != "e" {
+			t.Errorf("0: Want key e, got %s", got)
+		}
+		if got := res[1].Key; got != "c" {
+			t.Errorf("1: Want key c, got %s", got)
+		}
+		if got := res[2].Key; got != "b" {
+			t.Errorf("2: Want key b, got %s", got)
+		}
+		if got := res[3].Key; got != "a" {
+			t.Errorf("3: Want key a, got %s", got)
+		}
+	})
+
+	t.Run("Asc: n < records in index", func(t *testing.T) {
+		oi := newOrderIndex(2, nil)
+
+		d := types.NewRecord("d")
+		d.Deleted = true
+
+		oi.Insert(types.NewRecord("a"))
+		oi.Insert(types.NewRecord("b"))
+		oi.Insert(types.NewRecord("c"))
+		oi.Insert(d)
+		oi.Insert(types.NewRecord("e"))
+
+		res := oi.Get(4, true)
+
+		if len(res) != 4 {
+			t.Errorf("Want %d Got %d", 4, len(res))
+		}
+
+		if got := res[0].Key; got != "a" {
+			t.Errorf("0: Want key a, got %s", got)
+		}
+		if got := res[1].Key; got != "b" {
+			t.Errorf("1: Want key b, got %s", got)
+		}
+		if got := res[2].Key; got != "c" {
+			t.Errorf("2: Want key c, got %s", got)
+		}
+		if got := res[3].Key; got != "e" {
+			t.Errorf("3: Want key e, got %s", got)
+		}
+	})
+
+	t.Run("Asc: n > records in index", func(t *testing.T) {
+		oi := newOrderIndex(2, nil)
+
+		d := types.NewRecord("d")
+		d.Deleted = true
+
+		oi.Insert(types.NewRecord("a"))
+		oi.Insert(types.NewRecord("b"))
+		oi.Insert(types.NewRecord("c"))
+		oi.Insert(d)
+		oi.Insert(types.NewRecord("e"))
+
+		res := oi.Get(100, true)
+
+		if len(res) != 4 {
+			t.Errorf("Want %d Got %d", 4, len(res))
+		}
+
+		if got := res[0].Key; got != "a" {
+			t.Errorf("0: Want key a, got %s", got)
+		}
+		if got := res[1].Key; got != "b" {
+			t.Errorf("1: Want key b, got %s", got)
+		}
+		if got := res[2].Key; got != "c" {
+			t.Errorf("2: Want key c, got %s", got)
+		}
+		if got := res[3].Key; got != "e" {
+			t.Errorf("3: Want key e, got %s", got)
+		}
+	})
+}
+
+func equal(a, b interface{}) bool {
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }
