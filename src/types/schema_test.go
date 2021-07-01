@@ -38,27 +38,32 @@ func TestSchemaBuilder(t *testing.T) {
 	t.Run("InvalidDefaultValue", func(t *testing.T) {
 		for i, test := range []struct {
 			Type    Type
-			Options []FieldOption
+			Options []SchemaFieldOption
 			Errors  []errors.Kind
 		}{
 			{
 				Type:    String,
-				Options: []FieldOption{WithDefault(4)},
+				Options: []SchemaFieldOption{WithDefault(4)},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Boolean,
-				Options: []FieldOption{WithDefault(4)},
+				Options: []SchemaFieldOption{WithDefault(4)},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Number,
-				Options: []FieldOption{WithDefault("lol")},
+				Options: []SchemaFieldOption{WithDefault("lol")},
+				Errors:  []errors.Kind{errors.InvalidSchemaError},
+			},
+			{
+				Type:    Map,
+				Options: []SchemaFieldOption{WithDefault("lol")},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Object,
-				Options: []FieldOption{WithDefault("lol")},
+				Options: []SchemaFieldOption{WithDefault("lol"), WithSchema(&Schema{})},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 		} {
@@ -68,6 +73,7 @@ func TestSchemaBuilder(t *testing.T) {
 			_, err := sb.Build()
 
 			if len(err) != len(test.Errors) {
+				fmt.Println(err)
 				t.Errorf("%d: Expected %d error, Got %d", i, len(test.Errors), len(err))
 			}
 
@@ -84,32 +90,32 @@ func TestSchemaBuilder(t *testing.T) {
 	t.Run("Valid default type", func(t *testing.T) {
 		for i, test := range []struct {
 			Type    Type
-			Options []FieldOption
+			Options []SchemaFieldOption
 			Errors  []errors.Kind
 		}{
 			{
 				Type:    String,
-				Options: []FieldOption{WithDefault("Nam")},
+				Options: []SchemaFieldOption{WithDefault("Nam")},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Boolean,
-				Options: []FieldOption{WithDefault(true)},
+				Options: []SchemaFieldOption{WithDefault(true)},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Number,
-				Options: []FieldOption{WithDefault(30.2)},
+				Options: []SchemaFieldOption{WithDefault(30.2)},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Number,
-				Options: []FieldOption{WithDefault(30)},
+				Options: []SchemaFieldOption{WithDefault(30)},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 			{
 				Type:    Object,
-				Options: []FieldOption{WithDefault(map[string]interface{}{})},
+				Options: []SchemaFieldOption{WithDefault(map[string]interface{}{}), WithSchema(&Schema{})},
 				Errors:  []errors.Kind{errors.InvalidSchemaError},
 			},
 		} {
@@ -119,6 +125,7 @@ func TestSchemaBuilder(t *testing.T) {
 			_, err := sb.Build()
 
 			if len(err) != 0 {
+				fmt.Println(err)
 				t.Errorf("%d: Expected 0 errors, Got %d", i, len(err))
 			}
 		}
@@ -189,17 +196,25 @@ func TestSchemaValidation(t *testing.T) {
 		}
 
 	}
-
-	// Test valid records
-	// Test invalid records
-	// Test whether the schema applies the correct defaults
 }
 
 func TestSchemaWithDefaults(t *testing.T) {
+	personSchema := &Schema{
+		fields: map[string]SchemaField{
+			"age": {
+				Type: Number,
+				Required: false,
+				DefaultValue: 10,
+			},
+		},
+	}
+
 	def := map[string]interface{}{"age": 4}
 	sb := NewSchemaBuilder()
 	sb.AddField("name", String, WithDefault("Godzilla"), Optional)
-	sb.AddField("ob", Object, WithDefault(def), Optional)
+	sb.AddField("age", Number, WithDefault(4))
+	sb.AddField("ob", Object, WithSchema(personSchema))
+	sb.AddField("map", Map, WithDefault(def), Optional)
 
 	schema, err := sb.Build()
 	if err != nil {
@@ -216,13 +231,13 @@ func TestSchemaWithDefaults(t *testing.T) {
 
 	def["age"] = 8
 
-	val, ok := rCopy.Get("ob")
-
+	val, ok := rCopy.Get("map")
 	if !ok {
-		t.Errorf("Expected default value for field 'ob'")
+		t.Errorf("Expected default value for field 'map'")
 	}
 
 	if equal(val.Value, def) {
+		fmt.Println(val)
 		t.Errorf("The schema should provide a copy of the default value")
 	}
 

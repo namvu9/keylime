@@ -132,7 +132,7 @@ func (p *Page) insert(r record.Record) int {
 
 		if r.IsLessThan(key) {
 			if p.Full() {
-				panic(fmt.Errorf("Cannot insert key into full node: %s", key))
+				panic(fmt.Errorf("Cannot insert key into full node: %s", key.Key))
 			}
 
 			out = append(out, r)
@@ -145,7 +145,7 @@ func (p *Page) insert(r record.Record) int {
 	}
 
 	if p.Full() {
-		panic(fmt.Sprintf("Cannot insert key into full node: %s", r))
+		panic(fmt.Sprintf("Cannot insert key into full node: %s", r.Key))
 	}
 
 	p.records = append(out, r)

@@ -19,7 +19,7 @@ func (p Page) String() string {
 	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.children))
 	fmt.Fprintf(&sb, "Records:\t")
 	for _, r := range p.records {
-		fmt.Fprintf(&sb, "%s ", r)
+		fmt.Fprintf(&sb, "%v ", r)
 	}
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()

@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,7 +19,7 @@ func Prettify(v interface{}) (string, error) {
 type Record struct {
 	Key     string
 	Value   []byte // Deprecated
-	Data    map[string]Data
+	Fields  map[string]Field
 	TS      time.Time
 	Deleted bool
 }
@@ -27,15 +28,38 @@ type compareFunc func(Record, Record) int
 
 // TODO: TEST
 func (r *Record) Set(name string, value interface{}) {
-	r.Data[name] = Data{
+	r.Fields[name] = Field{
 		Type:  GetDataType(value),
 		Value: value,
 	}
 }
 
-func (r *Record) Get(name string) (Data, bool) {
-	val, ok := r.Data[name]
-	return val, ok
+func (r *Record) Get(fieldPath ...string) (Field, bool) {
+	f, ok := r.Fields[fieldPath[0]]
+	if !ok {
+		return f, false
+	}
+	if len(fieldPath) > 1 {
+		for _, fieldName := range fieldPath[1:] {
+			if !f.IsType(Object) {
+				return f, false
+			}
+
+			ob, ok := f.Value.(map[string]Field)
+			if !ok {
+				return f, false
+			}
+
+			v, ok := ob[fieldName]
+			if !ok {
+				return f, false
+			}
+
+			f = v
+		}
+	}
+
+	return f, true
 }
 
 func (r Record) CreatedAt() time.Time {
@@ -54,16 +78,16 @@ func (r Record) IsEqualTo(other *Record) bool {
 	return r.Key == other.Key
 }
 
-func (r Record) String() string {
-	s, _ := Prettify(r.Data)
+func (r *Record) String() string {
+	s, _ := Prettify(r.Fields)
 	return fmt.Sprintf("%s=%s", r.Key, s)
 }
 
 func (r *Record) SetFields(fields map[string]interface{}) {
-	r.Data = make(map[string]Data)
+	r.Fields = make(map[string]Field)
 
 	for name, value := range fields {
-		r.Data[name] = Data{
+		r.Fields[name] = Field{
 			Type:  GetDataType(value),
 			Value: value,
 		}
@@ -72,8 +96,8 @@ func (r *Record) SetFields(fields map[string]interface{}) {
 
 func (r *Record) Clone() *Record {
 	clone := NewRecord(r.Key)
-	for name, data := range r.Data {
-		clone.Data[name] = data
+	for name, field := range r.Fields {
+		clone.Fields[name] = field
 	}
 
 	return clone
@@ -82,14 +106,13 @@ func (r *Record) Clone() *Record {
 // TODO: Make sure original isn't affected
 func (r *Record) UpdateFields(fields map[string]interface{}) *Record {
 	c := r.Clone()
-	
+
 	for name, value := range fields {
-		c.Data[name] = Data{
+		c.Fields[name] = Field{
 			Type:  GetDataType(value),
 			Value: value,
 		}
 	}
-	
 
 	return c
 }
@@ -101,17 +124,164 @@ func byKey(this, that Record) int {
 // TODO: Deprecate
 func New(key string, value []byte) Record {
 	return Record{
-		Key:   key,
-		Value: value,
-		TS:    time.Now(),
-		Data:  make(map[string]Data),
+		Key:    key,
+		Value:  value,
+		TS:     time.Now(),
+		Fields: make(map[string]Field),
 	}
 }
 
 func NewRecord(key string) *Record {
 	return &Record{
-		Key:  key,
-		TS:   time.Now(),
-		Data: make(map[string]Data),
+		Key:    key,
+		TS:     time.Now(),
+		Fields: make(map[string]Field),
 	}
+}
+
+type Field struct {
+	Type  Type
+	Value interface{}
+}
+
+func (f *Field) ToMap() error {
+	var (
+		v       = make(map[string]interface{})
+		jsonstr = f.Value.(string)
+	)
+
+	if err := json.Unmarshal([]byte(jsonstr), &v); err != nil {
+		return err
+	}
+
+	f.Value = v
+	f.Type = Map
+
+	return nil
+}
+
+// TODO: Test
+func (f *Field) ToObject() error {
+	m := make(map[string]interface{})
+
+	if f.IsType(Map) {
+		m = f.Value.(map[string]interface{})
+	}
+
+	if f.IsType(String) {
+		jsonstr := f.Value.(string)
+		if err := json.Unmarshal([]byte(jsonstr), &m); err != nil {
+			return err
+		}
+	}
+
+	f.Value = m
+	f.Type = Object
+
+	return nil
+}
+
+func (f *Field) ToNumber() error {
+	v, err := strconv.ParseFloat(f.Value.(string), 64)
+	if err != nil {
+		return err
+	}
+
+	f.Value = v
+	f.Type = Number
+
+	return nil
+}
+
+func (f *Field) Validate(name string, schemaField SchemaField) []error {
+	var (
+		errs = []error{}
+	)
+
+	if f.IsType(Unknown) {
+		errs = append(errs, fmt.Errorf("Field has unknown type: %s", name))
+		return errs
+	}
+
+	// Test this case
+	if f.Type != schemaField.Type {
+		err := f.ToType(schemaField.Type)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("Expected value of type %s but got %s", schemaField.Type, f.Type))
+			return errs
+		}
+
+		return f.Validate(name, schemaField)
+	}
+
+	if f.IsType(Object) && schemaField.Schema != nil {
+		obj := f.Value.(map[string]interface{})
+		r := NewRecord("k")
+		r.SetFields(obj)
+		objErrs := schemaField.Schema.Validate(r)
+
+		if len(objErrs) != 0 {
+			errs = append(errs, objErrs)
+		}
+	}
+
+	if f.IsType(Array) {
+		arr, ok := f.Value.([]interface{})
+		if !ok {
+			errs = append(errs, fmt.Errorf("Could not convert value to []interface{}"))
+			return errs
+		}
+
+		if schemaField.ElementType != nil {
+			for _, e := range arr {
+				if got := GetDataType(e); got != *schemaField.ElementType {
+					errs = append(errs, fmt.Errorf("Expected element of type %s but got %s", schemaField.ElementType, got))
+				}
+			}
+		}
+
+		if schemaField.Min != nil {
+			if len(arr) < *schemaField.Min {
+				errs = append(errs, fmt.Errorf("Expected at least %d elements, Got %d", *schemaField.Min, len(arr)))
+			}
+		}
+
+		if schemaField.Max != nil {
+			if len(arr) < *schemaField.Min {
+				errs = append(errs, fmt.Errorf("Expected at most %d elements, Got %d", *schemaField.Max, len(arr)))
+			}
+		}
+	}
+
+	if len(errs) != 0 {
+		return errs
+	}
+
+	return nil
+}
+
+func (f *Field) ToType(t Type) error {
+	switch t {
+	case Object:
+		err := f.ToObject()
+		if err != nil {
+			return err
+		}
+	case Number:
+		if !f.IsType(String) {
+			return fmt.Errorf("TypeConversionError: Cannot convert %s to %s", f.Type, t)
+		}
+		err := f.ToNumber()
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("TypeConversionError: Cannot convert %s to %s", f.Type, t)
+	}
+
+	return nil
+}
+
+func (f *Field) IsType(t Type) bool {
+	return f.Type == t
 }

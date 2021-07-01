@@ -9,14 +9,12 @@ import (
 
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/types"
-	klTypes "github.com/namvu9/keylime/src/types"
-	record "github.com/namvu9/keylime/src/types"
 )
 
 // A Collection is a named container for a group of records
 type Collection struct {
 	Name   string
-	Schema *klTypes.Schema
+	Schema *types.Schema
 
 	primaryIndex *KeyIndex
 	storage      ReadWriterTo
@@ -24,25 +22,27 @@ type Collection struct {
 
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *Collection) Get(ctx context.Context, k string) (*record.Record, error) {
+func (c *Collection) Get(ctx context.Context, k string) (*types.Record, error) {
 	r, err := c.primaryIndex.Get(ctx, k)
 	if err != nil {
 		return nil, err
 	}
 
 	if c.Schema != nil {
-		return c.Schema.WithDefaults(r), nil 
+		return c.Schema.WithDefaults(r), nil
 	}
 
 	return r, nil
 }
 
+type Fields = map[string]interface{}
+
 // Set the value associated with key `k` in collection `c`.
 // If a record with that key already exists in the
 // collection, an error is returned.
-func (c *Collection) Set(ctx context.Context, k string, fields map[string]interface{}) error {
+func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 	wrapError := errors.WrapWith("(*Collection).Set", errors.InternalError)
-	r := record.NewRecord(k)
+	r := types.NewRecord(k)
 	r.SetFields(fields)
 
 	if c.Schema != nil {
@@ -88,7 +88,7 @@ func (c *Collection) Update(ctx context.Context, k string, fields map[string]int
 }
 
 // TODO: If this fails, clean up
-func (c *Collection) Create(s *klTypes.Schema) error {
+func (c *Collection) Create(s *types.Schema) error {
 	var op errors.Op = "(*Collection).Create"
 
 	_, err := c.storage.Write(nil)

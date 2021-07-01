@@ -167,25 +167,30 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 
 	case "get":
 		if len(args) < 1 {
-			return fmt.Errorf("Syntax Error: Set requires exactly 1 argument")
+			return fmt.Errorf("Syntax Error: Get requires exactly 1 argument")
 		}
-		fieldPath := strings.Split(args[0], ".")
-		res, err := c.Get(ctx, fieldPath[0])
+
+		selector := strings.Split(args[0], ":")
+		key := selector[0]
+
+		res, err := c.Get(ctx, key)
 		if err != nil {
 			return err
 		}
 
-		var val interface{}
-		for _, field := range fieldPath {
-			val = res.Data[field].Value
-		}
+		if len(selector) == 2 {
+			fieldPath := strings.Split(selector[1], ".")
+			v, ok := res.Get(fieldPath...)
+			if !ok {
+				return fmt.Errorf("Fieldpath %v does not exist", fieldPath)
+			}
 
-		if val != nil {
-			fmt.Println(val)
+			fmt.Println(v)
 		} else {
-
-			fmt.Printf("%s\n", res)
+			fmt.Println(res)
 		}
+
+		return nil
 
 	case "delete":
 		if len(args) < 1 {
@@ -211,7 +216,19 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 				sb.AddField("name", types.String)
 				sb.AddField("email", types.String, types.Optional, types.WithDefault("dufus@gmail.com"))
 				sb.AddField("age", types.Number, types.WithDefault(4))
-				schema, _ = sb.Build()
+				personSchema, _ := sb.Build()
+
+				sb = types.ExtendSchema(personSchema)
+				sb.AddField("people", types.Array, types.WithElementType(types.Number), types.WithMin(1))
+				sb.AddField("Object", types.Object, types.WithSchema(personSchema))
+
+				userSchema, errs := sb.Build()
+				if errs != nil {
+					fmt.Println(errs)
+					return err
+				}
+
+				schema = userSchema
 			}
 
 			err = collection.Create(schema)
@@ -219,8 +236,14 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 				return err
 			}
 			err = collection.Set(ctx, "a", map[string]interface{}{
-				"name": "Nam",
-				"age":  10,
+				"name":   "Nam",
+				"age":    10,
+				"people": []interface{}{4},
+				"Object": map[string]interface{}{
+					"name": "BITCH",
+					"age": 99,
+					"email": "9319vuna@gmail.com",
+				},
 			})
 			if err != nil {
 				return err
