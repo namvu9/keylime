@@ -311,13 +311,14 @@ func TestBuildKeyIndex(t *testing.T) {
 }
 
 func TestInsertOrderIndex(t *testing.T) {
+	ctx := context.Background()
 	t.Run("Normal insert", func(t *testing.T) {
 		oi := newOrderIndex(2, nil)
 		r := types.NewRecord("k")
 
-		oi.Insert(r)
+		oi.Insert(ctx, r)
 
-		headNode, _ := oi.Node(oi.head)
+		headNode, _ := oi.Node(oi.Head)
 
 		if got := len(headNode.Records); got != 1 {
 			t.Errorf("n records, want %d got %d", 1, got)
@@ -330,43 +331,44 @@ func TestInsertOrderIndex(t *testing.T) {
 
 	t.Run("Insertion into full node", func(t *testing.T) {
 		oi := newOrderIndex(2, nil)
-		oldHead, _ := oi.Node(oi.head)
+		oldHead, _ := oi.Node(oi.Head)
 		oldHead.Records = []*types.Record{nil, nil}
 
 		r := types.NewRecord("o")
-		oi.Insert(r)
+		oi.Insert(ctx, r)
 
-		if oi.head == oi.tail {
+		if oi.Head == oi.Tail {
 			t.Errorf("Expected new node to be allocated")
 		}
 
-		if oi.tail != oldHead.ID {
+		if oi.Tail != oldHead.ID {
 			t.Errorf("Expected old head to be new tail")
 		}
 
-		newHead, _ := oi.Node(oi.head)
-		if newHead.Next != oi.tail {
+		newHead, _ := oi.Node(oi.Head)
+		if newHead.Next != oi.Tail {
 			t.Errorf("New head does not reference old head")
 		}
 
-		if oldHead.Prev != oi.head {
+		if oldHead.Prev != oi.Head {
 			t.Errorf("Old head does not reference new head")
 		}
 	})
 }
 
 func TestGetOrderIndex(t *testing.T) {
+	ctx := context.Background()
 	t.Run("Desc: n < records in index", func(t *testing.T) {
 		oi := newOrderIndex(2, nil)
 
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(types.NewRecord("a"))
-		oi.Insert(types.NewRecord("b"))
-		oi.Insert(types.NewRecord("c"))
-		oi.Insert(d)
-		oi.Insert(types.NewRecord("e"))
+		oi.Insert(ctx, types.NewRecord("a"))
+		oi.Insert(ctx, types.NewRecord("b"))
+		oi.Insert(ctx, types.NewRecord("c"))
+		oi.Insert(ctx, d)
+		oi.Insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(4, false)
 
@@ -394,11 +396,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(types.NewRecord("a"))
-		oi.Insert(types.NewRecord("b"))
-		oi.Insert(types.NewRecord("c"))
-		oi.Insert(d)
-		oi.Insert(types.NewRecord("e"))
+		oi.Insert(ctx, types.NewRecord("a"))
+		oi.Insert(ctx, types.NewRecord("b"))
+		oi.Insert(ctx, types.NewRecord("c"))
+		oi.Insert(ctx, d)
+		oi.Insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(100, false)
 
@@ -426,11 +428,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(types.NewRecord("a"))
-		oi.Insert(types.NewRecord("b"))
-		oi.Insert(types.NewRecord("c"))
-		oi.Insert(d)
-		oi.Insert(types.NewRecord("e"))
+		oi.Insert(ctx, types.NewRecord("a"))
+		oi.Insert(ctx, types.NewRecord("b"))
+		oi.Insert(ctx, types.NewRecord("c"))
+		oi.Insert(ctx, d)
+		oi.Insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(4, true)
 
@@ -458,11 +460,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(types.NewRecord("a"))
-		oi.Insert(types.NewRecord("b"))
-		oi.Insert(types.NewRecord("c"))
-		oi.Insert(d)
-		oi.Insert(types.NewRecord("e"))
+		oi.Insert(ctx, types.NewRecord("a"))
+		oi.Insert(ctx, types.NewRecord("b"))
+		oi.Insert(ctx, types.NewRecord("c"))
+		oi.Insert(ctx, d)
+		oi.Insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(100, true)
 

@@ -17,6 +17,7 @@ type Collection struct {
 	Schema *types.Schema
 
 	primaryIndex *KeyIndex
+	orderIndex   *OrderIndex
 	storage      ReadWriterTo
 }
 
@@ -56,11 +57,26 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 		return err
 	}
 
+	if err := c.orderIndex.Insert(ctx, r); err != nil {
+		return err
+	}
+
 	if err := c.primaryIndex.Save(); err != nil {
 		return fmt.Errorf("Could not persist primary index: %w", err)
 	}
+	if err := c.orderIndex.Save(); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func (c *Collection) GetLast(ctx context.Context, n int) []*types.Record {
+	return c.orderIndex.Get(n, false)
+}
+
+func (c *Collection) GetFirst(ctx context.Context, n int) []*types.Record {
+	return c.orderIndex.Get(n, true)
 }
 
 func (c *Collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
@@ -84,6 +100,11 @@ func (c *Collection) Update(ctx context.Context, k string, fields map[string]int
 		wrapError(err)
 	}
 
+	err = c.orderIndex.Update(ctx, clone)
+	if err != nil {
+		wrapError(err)
+	}
+
 	return nil
 }
 
@@ -103,6 +124,11 @@ func (c *Collection) Create(s *types.Schema) error {
 		return errors.Wrap(op, errors.InternalError, err)
 	}
 
+	err = c.orderIndex.Save()
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
 	err = c.Save()
 	if err != nil {
 		return errors.Wrap(op, errors.InternalError, err)
@@ -115,6 +141,11 @@ func (c *Collection) Load() error {
 	var op errors.Op = "(*Collection).Load"
 	err := c.primaryIndex.Load()
 
+	if err != nil {
+		return errors.Wrap(op, errors.InternalError, err)
+	}
+
+	err = c.orderIndex.Load()
 	if err != nil {
 		return errors.Wrap(op, errors.InternalError, err)
 	}
@@ -194,6 +225,8 @@ func (c *Collection) Info() {
 		fmt.Println(c.Schema)
 	}
 	c.primaryIndex.Info()
+	fmt.Println()
+	c.orderIndex.Info()
 	fmt.Println()
 }
 

@@ -37,8 +37,10 @@ func newCollection(name string, s ReadWriterTo) *Collection {
 		c.storage = s.WithSegment(name)
 		c.primaryIndex =
 			newKeyIndex(2, s.WithSegment(name))
+		c.orderIndex = newOrderIndex(2, s.WithSegment(name))
 	} else {
 		c.primaryIndex = newKeyIndex(2, c.storage)
+		c.orderIndex = newOrderIndex(2, c.storage)
 	}
 
 	return c

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/namvu9/keylime/src/store"
@@ -235,18 +236,22 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			if err != nil {
 				return err
 			}
-			err = collection.Set(ctx, "a", map[string]interface{}{
+			fields := map[string]interface{}{
 				"name":   "Nam",
 				"age":    10,
 				"people": []interface{}{4},
 				"Object": map[string]interface{}{
-					"name": "BITCH",
-					"age": 99,
+					"name":  "BITCH",
+					"age":   99,
 					"email": "9319vuna@gmail.com",
 				},
-			})
-			if err != nil {
-				return err
+			}
+
+			for i := 0; i < 4; i++ {
+				err = collection.Set(ctx, fmt.Sprint(i), fields)
+				if err != nil {
+					return err
+				}
 			}
 
 			fmt.Println("Successfully created collection", args[0])
@@ -263,6 +268,32 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 		} else {
 			c.Info()
 		}
+
+	case "head":
+		if len(args) != 1 {
+			return fmt.Errorf("Syntax Error: head requires exactly 1 argument")
+		}
+
+		n, _ := strconv.ParseInt(args[0], 0, 0)
+
+		res := c.GetFirst(ctx, int(n))
+		fmt.Println(len(res), res)
+
+
+		return nil
+	case "tail":
+		if len(args) != 1 {
+			return fmt.Errorf("Syntax Error: tail requires exactly 1 argument")
+		}
+
+		n, _ := strconv.ParseInt(args[0], 0, 0)
+
+		res := c.GetLast(ctx, int(n))
+		fmt.Println(len(res), res)
+
+
+		return nil
+
 	case "info-all":
 		s.Info()
 	default:

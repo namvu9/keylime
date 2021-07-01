@@ -196,12 +196,12 @@ type NodeMap map[ID]*Node
 // OrderIndex indexes records by their order with respect to
 // some attribute
 type OrderIndex struct {
-	head ID
-	tail ID
-
-	nodes     NodeMap
+	Head      ID
+	Tail      ID
 	BlockSize int // Number of records inside each node
-	Storage   ReadWriterTo
+
+	storage ReadWriterTo
+	nodes   NodeMap
 }
 
 func (oi *OrderIndex) Node(id ID) (*Node, error) {
@@ -211,7 +211,7 @@ func (oi *OrderIndex) Node(id ID) (*Node, error) {
 
 	v, ok := oi.nodes[id]
 	if !ok {
-		n := newNodeWithID(id, oi.Storage)
+		n := newNodeWithID(id, oi.storage)
 		err := n.Load()
 		if err != nil {
 			return nil, err
@@ -231,43 +231,55 @@ type Node struct {
 
 	Capacity int
 	Records  []*record.Record
-	Storage  ReadWriterTo
+	storage  ReadWriterTo
 	loaded   bool
 }
 
 func (n *Node) Load() error {
+	data, err := io.ReadAll(n.storage)
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+
+	err = dec.Decode(n)
+	if err != nil {
+		return err
+	}
+
 	n.loaded = true
 	return nil
 }
 
 func (oi *OrderIndex) newNode() *Node {
-	oldHead, _ := oi.Node(oi.head)
+	oldHead, _ := oi.Node(oi.Head)
 
-	n := newNode(oi.BlockSize, oi.Storage)
+	n := newNode(oi.BlockSize, oi.storage)
 	n.loaded = true
 	n.Next = oldHead.ID
 	oi.nodes[n.ID] = n
 
 	oldHead.Prev = n.ID
-	oi.head = n.ID
+	oi.Head = n.ID
 
 	return n
 }
 
 func newNode(capacity int, s ReadWriterTo) *Node {
-	n := &Node{ID: ID(uuid.NewString()), Capacity: capacity, Storage: newIOReporter(), loaded: true}
+	n := &Node{ID: ID(uuid.NewString()), Capacity: capacity, storage: newIOReporter(), loaded: true}
 
 	if s != nil {
-		n.Storage = s.WithSegment(string(n.ID))
+		n.storage = s.WithSegment(string(n.ID))
 	}
 
 	return n
 }
 
 func newNodeWithID(id ID, s ReadWriterTo) *Node {
-	n := &Node{ID: id, Storage: newIOReporter()}
+	n := &Node{ID: id, storage: newIOReporter()}
 	if s != nil {
-		n.Storage = s.WithSegment(string(n.ID))
+		n.storage = s.WithSegment(string(n.ID))
 	}
 
 	return n
@@ -279,13 +291,30 @@ func (n *Node) Full() bool {
 
 func (n *Node) Insert(r *record.Record) error {
 	n.Records = append(n.Records, r)
-	return nil
+
+	return n.Save()
 }
 
-func (oi *OrderIndex) Insert(r *record.Record) error {
-	headNode, _ := oi.Node(oi.head)
+func (n *Node) Save() error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(n)
+	if err != nil {
+		return err
+	}
+
+	_, err = n.storage.Write(buf.Bytes())
+	return err
+}
+
+func (oi *OrderIndex) Insert(ctx context.Context, r *record.Record) error {
+	headNode, _ := oi.Node(oi.Head)
 	if headNode.Full() {
 		headNode = oi.newNode()
+		err := oi.Save()
+		if err != nil {
+			return err
+		}
 	}
 
 	return headNode.Insert(r)
@@ -295,16 +324,43 @@ func (oi *OrderIndex) Delete(r *record.Record) error {
 	return nil
 }
 
+func (oi *OrderIndex) Save() error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(oi)
+	if err != nil {
+		return err
+	}
+
+	_, err = oi.storage.WithSegment("order_index").Write(buf.Bytes())
+	return err
+}
+
+func (oi *OrderIndex) Load() error {
+	data, err := io.ReadAll(oi.storage.WithSegment("order_index"))
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+
+	err = dec.Decode(oi)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
 	out := []*types.Record{}
 
 	var node *Node
 	if asc {
-		node, _ = oi.Node(oi.tail)
+		node, _ = oi.Node(oi.Tail)
 	} else {
-		node, _ = oi.Node(oi.head)
+		node, _ = oi.Node(oi.Head)
 	}
-
 
 	for node != nil {
 		if asc {
@@ -320,11 +376,11 @@ func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
 			node, _ = oi.Node(node.Prev)
 		} else {
 			for i := len(node.Records) - 1; i >= 0; i-- {
-				r := node.Records[i]
-
 				if len(out) == n {
 					return out
 				}
+
+				r := node.Records[i]
 
 				if !r.Deleted {
 					out = append(out, r)
@@ -339,18 +395,55 @@ func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
 	return out
 }
 
+func (oi *OrderIndex) Update(ctx context.Context, r *types.Record) error {
+	node, _ := oi.Node(oi.Head)
+	for node != nil {
+		for i, record := range node.Records {
+			if r.Key == record.Key {
+				node.Records[i] = r
+				return node.Save()
+			}
+		}
+
+		node, _ = oi.Node(node.Next)
+	}
+
+	return fmt.Errorf("Key not found: %s", r.Key)
+}
+
+func (oi *OrderIndex) Info() {
+	records := []types.Record{}
+	nNodes := 0
+
+	node, _ := oi.Node(oi.Head)
+	for node != nil {
+		nNodes++
+		for i := len(node.Records) - 1; i >= 0; i-- {
+			records = append(records, *node.Records[i])
+		}
+
+		node, _ = oi.Node(node.Next)
+	}
+
+	fmt.Println("<OrderIndex>")
+	fmt.Println("Block size:", oi.BlockSize)
+	fmt.Println("Nodes:", nNodes)
+	fmt.Printf("Records (%d): %v\n", len(records), records)
+
+}
+
 func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
 	node := newNode(blockSize, s)
 	oi := &OrderIndex{
 		BlockSize: blockSize,
-		Storage:   newIOReporter(),
-		head:      node.ID,
-		tail:      node.ID,
+		storage:   newIOReporter(),
+		Head:      node.ID,
+		Tail:      node.ID,
 		nodes:     NodeMap{node.ID: node},
 	}
 
 	if s != nil {
-		oi.Storage = s
+		oi.storage = s
 	}
 
 	return oi
