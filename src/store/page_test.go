@@ -462,6 +462,44 @@ func TestSplitChild(t *testing.T) {
 			t.Errorf("New child not written")
 		}
 	})
+
+	t.Run("Full leaf child 2", func(t *testing.T) {
+		bs.Flush()
+
+		root := makeBufPage(2, makeRecords("1", "3"),
+			makeBufPage(2, makeRecords("0")),
+			makeBufPage(2, makeRecords("2")),
+			makeBufPage(2, makeRecords("4", "5", "6")),
+		)
+
+		root.splitChild(2)
+
+		u.with("Root", root, func(nu namedUtil) {
+			nu.hasKeys("1", "3", "5")
+			nu.hasNChildren(4)
+		})
+
+		u.with("Left-most child", root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("0")
+		})
+
+		u.with("child[1]", root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("2")
+		})
+
+		u.with("child[2]", root.children[2], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("4")
+		})
+
+		newChild := root.children[3]
+		u.with("New child", newChild, func(nu namedUtil) {
+			nu.hasKeys("6")
+			nu.hasNChildren(0)
+		})
+	})
 }
 
 func TestInsertChild(t *testing.T) {

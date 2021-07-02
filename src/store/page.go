@@ -254,10 +254,6 @@ func (p *Page) setRecord(index int, r record.Record) {
 }
 
 func (p *Page) insertChildren(index int, children ...*Page) {
-	if p.Full() {
-		panic("Cannot insert a child into a full node")
-	}
-
 	// Check whether index + len(children) leads to node
 	// overflow
 	nExistingChildren := len(p.children)

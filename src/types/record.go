@@ -255,7 +255,7 @@ func (f *Field) Validate(name string, schemaField SchemaField) []error {
 		if schemaField.ElementType != nil {
 			for _, e := range arr {
 				if got := GetDataType(e); got != *schemaField.ElementType {
-					errs = append(errs, fmt.Errorf("Expected element of type %s but got %s", schemaField.ElementType, got))
+					errs = append(errs, fmt.Errorf("Expected element of type %s but got %s", *schemaField.ElementType, got))
 				}
 			}
 		}
@@ -282,6 +282,12 @@ func (f *Field) Validate(name string, schemaField SchemaField) []error {
 
 func (f *Field) ToType(t Type) error {
 	switch t {
+	case Map:
+		err := f.ToMap()
+		if err != nil {
+			return err
+		}
+
 	case Object:
 		err := f.ToObject()
 		if err != nil {

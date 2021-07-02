@@ -9,7 +9,7 @@ func init() {
 	gob.Register([]interface{}{})
 }
 
-type Type int
+type Type string
 
 func (t Type) Is(other Type) bool {
 	return t == other
@@ -17,33 +17,14 @@ func (t Type) Is(other Type) bool {
 
 // KeyLime data types
 const (
-	Boolean Type = iota
-	Number
-	Object // Object is a Map with a schema
-	Map
-	String
-	Array
-	Unknown
+	Boolean Type = "Boolean"
+	Number       = "Number"
+	Object       = "Object" // Object is a Map with a schema
+	Map          = "Map"
+	Array        = "Array"
+	String       = "String"
+	Unknown      = "Unknown"
 )
-
-func (dt Type) String() string {
-	switch dt {
-	case String:
-		return "String"
-	case Number:
-		return "Number"
-	case Object:
-		return "Object"
-	case Map:
-		return "Map"
-	case Array:
-		return "Array"
-	case Boolean:
-		return "Boolean"
-	default:
-		return "Unknown"
-	}
-}
 
 func GetDataType(s interface{}) Type {
 	switch s.(type) {
@@ -63,4 +44,3 @@ func GetDataType(s interface{}) Type {
 		return Unknown
 	}
 }
-

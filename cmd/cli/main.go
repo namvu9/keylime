@@ -143,6 +143,11 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 
+		err = c.Commit()
+		if err != nil {
+			return err
+		}
+
 		fmt.Println("Successfully saved record with key", key)
 	case "update":
 		if len(args) < 2 {
@@ -216,8 +221,8 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 				personSchema, _ := sb.Build()
 
 				sb = types.ExtendSchema(personSchema)
-				sb.AddField("people", types.Array, types.WithElementType(types.Number), types.WithMin(1))
-				sb.AddField("Object", types.Object, types.WithSchema(personSchema))
+				sb.AddField("people", types.Array, types.WithElementType(types.Number), types.WithMin(1), types.Optional)
+				sb.AddField("Object", types.Object, types.WithSchema(personSchema), types.Optional)
 
 				userSchema, errs := sb.Build()
 				if errs != nil {
@@ -245,12 +250,20 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 					},
 				}
 
-				for i := 0; i < 4; i++ {
+				n := 1000000
+				for i := 0; i < n; i++ {
 					err = collection.Set(ctx, fmt.Sprint(i), fields)
 					if err != nil {
 						return err
 					}
+
+					if i%100000 == 0 {
+						collection.Commit()
+						fmt.Printf("%d / %d written to disk\n", i, n)
+					}
 				}
+
+				collection.Commit()
 			}
 
 			fmt.Println("Successfully created collection", args[0])

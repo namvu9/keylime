@@ -170,7 +170,7 @@ func (info *Info) validate(p *Page, root bool) {
 
 	if !p.leaf {
 		if len(p.children) != len(p.records)+1 {
-			panic("Constraint violation: number of records should be len(children) - 1")
+			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.ID, len(p.children)-1, len(p.records))
 		}
 		for i, child := range p.children {
 			if !child.loaded {

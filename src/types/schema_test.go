@@ -262,6 +262,17 @@ func TestImplicitTypeConversion(t *testing.T) {
 			opts:         []SchemaFieldOption{WithSchema(&Schema{})},
 		},
 		{
+			input:        "{\"age\":4}",
+			inferredType: String,
+			fieldType:    Map,
+		},
+		{
+			input:        "{}",
+			inferredType: String,
+			fieldType:    Object,
+			opts:         []SchemaFieldOption{WithSchema(&Schema{})},
+		},
+		{
 			input:        []interface{}{4},
 			inferredType: Array,
 			fieldType:    Array,

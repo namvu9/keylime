@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/types"
@@ -42,6 +43,8 @@ type Fields = map[string]interface{}
 // If a record with that key already exists in the
 // collection, an error is returned.
 func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
+	var wg sync.WaitGroup
+
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
 	r := types.NewRecord(k)
 	r.SetFields(fields)
@@ -53,22 +56,48 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 		}
 	}
 
-	if err := c.primaryIndex.Insert(ctx, *r); err != nil {
-		return err
-	}
+	wg.Add(2)
+	ctx, cancelFn := context.WithCancel(ctx)
+	errChan := make(chan error, 2)
+	go func() {
+		defer wg.Done()
+		// TODO: use ctx cancelFunc
+		if err := c.primaryIndex.Insert(ctx, *r); err != nil {
+			errChan <- err
+			cancelFn()
+			return
+		}
+	}()
 
-	if err := c.orderIndex.Insert(ctx, r); err != nil {
-		return err
-	}
+	go func() {
+		defer wg.Done()
 
+		if err := c.orderIndex.Insert(ctx, r); err != nil {
+			errChan <- err
+			return
+		}
+
+	}()
+
+	wg.Wait()
+
+	select {
+	case e := <-errChan:
+		return e
+	default:
+		return nil
+	}
+}
+
+func (c *Collection) Commit() error {
 	if err := c.primaryIndex.Save(); err != nil {
-		return fmt.Errorf("Could not persist primary index: %w", err)
+		return err
 	}
 	if err := c.orderIndex.Save(); err != nil {
-		return err
+		errChan <- err
+		return
 	}
-
-	return nil
+	return c.primaryIndex.bufWriter.Flush()
 }
 
 func (c *Collection) GetLast(ctx context.Context, n int) []*types.Record {

@@ -28,6 +28,7 @@ func New(cfg *Config, opts ...Option) *Store {
 }
 
 func newCollection(name string, s ReadWriterTo) *Collection {
+	t := 200
 	c := &Collection{
 		Name:    name,
 		storage: newIOReporter(),
@@ -36,11 +37,11 @@ func newCollection(name string, s ReadWriterTo) *Collection {
 	if s != nil {
 		c.storage = s.WithSegment(name)
 		c.primaryIndex =
-			newKeyIndex(2, s.WithSegment(name))
-		c.orderIndex = newOrderIndex(2, s.WithSegment(name))
+			newKeyIndex(t, s.WithSegment(name))
+		c.orderIndex = newOrderIndex(t*2, s.WithSegment(name))
 	} else {
-		c.primaryIndex = newKeyIndex(2, c.storage)
-		c.orderIndex = newOrderIndex(2, c.storage)
+		c.primaryIndex = newKeyIndex(t, c.storage)
+		c.orderIndex = newOrderIndex(t*2, c.storage)
 	}
 
 	return c

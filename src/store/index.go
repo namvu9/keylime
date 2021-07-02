@@ -48,7 +48,8 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 
 	page.insert(r)
 
-	return ki.bufWriter.Flush()
+	//return ki.bufWriter.Flush()
+	return nil
 }
 
 func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
@@ -187,7 +188,13 @@ func (ki *KeyIndex) Info() {
 	fmt.Println("Height:", ki.Height)
 	fmt.Println("T:", ki.T)
 	fmt.Println("Pages:", len(in.pages))
-	fmt.Printf("Records (%d): %v\n", len(in.records), in.records)
+
+	keys := []string{}
+	for _, r := range in.records {
+		keys = append(keys, r.Key)
+	}
+
+	fmt.Printf("Records: %d\n", len(in.records))
 }
 
 type ID string
@@ -412,14 +419,14 @@ func (oi *OrderIndex) Update(ctx context.Context, r *types.Record) error {
 }
 
 func (oi *OrderIndex) Info() {
-	records := []types.Record{}
+	nRecords := 0
 	nNodes := 0
 
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		nNodes++
-		for i := len(node.Records) - 1; i >= 0; i-- {
-			records = append(records, *node.Records[i])
+		for range node.Records {
+			nRecords++
 		}
 
 		node, _ = oi.Node(node.Next)
@@ -428,7 +435,7 @@ func (oi *OrderIndex) Info() {
 	fmt.Println("<OrderIndex>")
 	fmt.Println("Block size:", oi.BlockSize)
 	fmt.Println("Nodes:", nNodes)
-	fmt.Printf("Records (%d): %v\n", len(records), records)
+	fmt.Printf("Records: %d\n", nRecords)
 
 }
 
