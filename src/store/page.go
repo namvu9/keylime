@@ -474,6 +474,10 @@ func (p *Page) deletePage() error {
 	return nil
 }
 
+func (p *Page) Name() string {
+	return p.ID
+}
+
 type PageSerialized struct {
 	ID string
 

@@ -28,7 +28,7 @@ func New(cfg *Config, opts ...Option) *Store {
 }
 
 func newCollection(name string, s ReadWriterTo) *Collection {
-	t := 200
+	t := 50
 	c := &Collection{
 		Name:    name,
 		storage: newIOReporter(),
@@ -45,6 +45,25 @@ func newCollection(name string, s ReadWriterTo) *Collection {
 	}
 
 	return c
+}
+
+func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
+	wb := newWriteBuffer(s)
+	node := newNode(blockSize, s, wb)
+	oi := &OrderIndex{
+		BlockSize: blockSize,
+		storage:   newIOReporter(),
+		Head:      node.ID,
+		Tail:      node.ID,
+		nodes:     NodeMap{node.ID: node},
+		writer:    wb,
+	}
+
+	if s != nil {
+		oi.storage = s
+	}
+
+	return oi
 }
 
 func newKeyIndex(t int, s ReadWriterTo) *KeyIndex {

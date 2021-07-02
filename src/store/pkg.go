@@ -26,6 +26,10 @@ type Store struct {
 	storage ReadWriterTo
 }
 
+//func (s *Store) Run(op queries.Operation) error {
+
+//}
+
 func (s Store) Collection(name string) (*Collection, error) {
 	//var op errors.Op = "(Store).Collection"
 

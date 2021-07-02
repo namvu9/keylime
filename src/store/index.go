@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/types"
-	record "github.com/namvu9/keylime/src/types"
 )
 
 // KeyIndex represents a B-tree that indexes records by key
@@ -24,7 +23,7 @@ type KeyIndex struct {
 	storage   ReadWriterTo
 }
 
-func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
+func (ki *KeyIndex) Insert(ctx context.Context, r types.Record) error {
 	const op errors.Op = "(*KeyIndex).Insert"
 
 	if ki.root.Full() {
@@ -48,7 +47,6 @@ func (ki *KeyIndex) Insert(ctx context.Context, r record.Record) error {
 
 	page.insert(r)
 
-	//return ki.bufWriter.Flush()
 	return nil
 }
 
@@ -84,7 +82,7 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 	return ki.bufWriter.Flush()
 }
 
-func (ki *KeyIndex) Get(ctx context.Context, key string) (*record.Record, error) {
+func (ki *KeyIndex) Get(ctx context.Context, key string) (*types.Record, error) {
 	const op errors.Op = "(*KeyIndex).Get"
 
 	node, err := ki.root.iter(byKey(key)).Get()
@@ -209,6 +207,7 @@ type OrderIndex struct {
 
 	storage ReadWriterTo
 	nodes   NodeMap
+	writer  *WriteBuffer
 }
 
 func (oi *OrderIndex) Node(id ID) (*Node, error) {
@@ -218,7 +217,7 @@ func (oi *OrderIndex) Node(id ID) (*Node, error) {
 
 	v, ok := oi.nodes[id]
 	if !ok {
-		n := newNodeWithID(id, oi.storage)
+		n := newNodeWithID(id, oi.storage, oi.writer)
 		err := n.Load()
 		if err != nil {
 			return nil, err
@@ -237,8 +236,9 @@ type Node struct {
 	Next ID
 
 	Capacity int
-	Records  []*record.Record
+	Records  []*types.Record
 	storage  ReadWriterTo
+	writer   *WriteBuffer
 	loaded   bool
 }
 
@@ -262,7 +262,7 @@ func (n *Node) Load() error {
 func (oi *OrderIndex) newNode() *Node {
 	oldHead, _ := oi.Node(oi.Head)
 
-	n := newNode(oi.BlockSize, oi.storage)
+	n := newNode(oi.BlockSize, oi.storage, oi.writer)
 	n.loaded = true
 	n.Next = oldHead.ID
 	oi.nodes[n.ID] = n
@@ -273,8 +273,14 @@ func (oi *OrderIndex) newNode() *Node {
 	return n
 }
 
-func newNode(capacity int, s ReadWriterTo) *Node {
-	n := &Node{ID: ID(uuid.NewString()), Capacity: capacity, storage: newIOReporter(), loaded: true}
+func newNode(capacity int, s ReadWriterTo, w *WriteBuffer) *Node {
+	n := &Node{
+		ID:       ID(uuid.NewString()),
+		Capacity: capacity,
+		storage:  newIOReporter(),
+		loaded:   true,
+		writer:   w,
+	}
 
 	if s != nil {
 		n.storage = s.WithSegment(string(n.ID))
@@ -283,7 +289,7 @@ func newNode(capacity int, s ReadWriterTo) *Node {
 	return n
 }
 
-func newNodeWithID(id ID, s ReadWriterTo) *Node {
+func newNodeWithID(id ID, s ReadWriterTo, w *WriteBuffer) *Node {
 	n := &Node{ID: id, storage: newIOReporter()}
 	if s != nil {
 		n.storage = s.WithSegment(string(n.ID))
@@ -296,25 +302,21 @@ func (n *Node) Full() bool {
 	return len(n.Records) >= n.Capacity
 }
 
-func (n *Node) Insert(r *record.Record) error {
+func (n *Node) Insert(r *types.Record) error {
 	n.Records = append(n.Records, r)
 
 	return n.Save()
 }
 
 func (n *Node) Save() error {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(n)
-	if err != nil {
-		return err
-	}
-
-	_, err = n.storage.Write(buf.Bytes())
-	return err
+	return n.writer.Write(n)
 }
 
-func (oi *OrderIndex) Insert(ctx context.Context, r *record.Record) error {
+func (n *Node) Name() string {
+	return string(n.ID)
+}
+
+func (oi *OrderIndex) Insert(ctx context.Context, r *types.Record) error {
 	headNode, _ := oi.Node(oi.Head)
 	if headNode.Full() {
 		headNode = oi.newNode()
@@ -327,7 +329,7 @@ func (oi *OrderIndex) Insert(ctx context.Context, r *record.Record) error {
 	return headNode.Insert(r)
 }
 
-func (oi *OrderIndex) Delete(r *record.Record) error {
+func (oi *OrderIndex) Delete(r *types.Record) error {
 	return nil
 }
 
@@ -437,21 +439,4 @@ func (oi *OrderIndex) Info() {
 	fmt.Println("Nodes:", nNodes)
 	fmt.Printf("Records: %d\n", nRecords)
 
-}
-
-func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
-	node := newNode(blockSize, s)
-	oi := &OrderIndex{
-		BlockSize: blockSize,
-		storage:   newIOReporter(),
-		Head:      node.ID,
-		Tail:      node.ID,
-		nodes:     NodeMap{node.ID: node},
-	}
-
-	if s != nil {
-		oi.storage = s
-	}
-
-	return oi
 }

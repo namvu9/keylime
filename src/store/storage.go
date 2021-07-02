@@ -8,23 +8,27 @@ import (
 
 type WriteBuffer struct {
 	ReadWriterTo
-	writeBuf  map[string]*Page
-	deleteBuf map[string]*Page
+	writeBuf  map[string]Named
+	deleteBuf map[string]Named
+}
+
+type Named interface {
+	Name() string
 }
 
 // Write schedules a page for being written to storage. If a
 // page has already been scheduled for a write or delete,
 // Write is a no-op.
-func (wb *WriteBuffer) Write(p *Page) error {
-	if _, ok := wb.deleteBuf[p.ID]; !ok {
-		wb.writeBuf[p.ID] = p
+func (wb *WriteBuffer) Write(p Named) error {
+	if _, ok := wb.deleteBuf[p.Name()]; !ok {
+		wb.writeBuf[p.Name()] = p
 	}
 	return nil
 }
 
-func (wb *WriteBuffer) Delete(p *Page) error {
-	wb.deleteBuf[p.ID] = p
-	delete(wb.writeBuf, p.ID)
+func (wb *WriteBuffer) Delete(p Named) error {
+	wb.deleteBuf[p.Name()] = p
+	delete(wb.writeBuf, p.Name())
 	return nil
 }
 
@@ -43,12 +47,25 @@ func (wb *WriteBuffer) Flush() error {
 		buf := new(bytes.Buffer)
 		enc := gob.NewEncoder(buf)
 
-		if err := enc.Encode(p.ToSerialized()); err != nil {
-			return err
-		}
-		_, err := wb.WithSegment(id).Write(buf.Bytes())
-		if err != nil {
-			return err
+		switch v := p.(type) {
+		case *Page:
+			if err := enc.Encode(v.ToSerialized()); err != nil {
+				return err
+			}
+			_, err := wb.WithSegment(id).Write(buf.Bytes())
+			if err != nil {
+				return err
+			}
+		case *Node:
+			if err := enc.Encode(v); err != nil {
+				return err
+			}
+			_, err := wb.WithSegment(id).Write(buf.Bytes())
+			if err != nil {
+				return err
+
+			}
+
 		}
 	}
 
@@ -62,8 +79,8 @@ func (wb *WriteBuffer) Flush() error {
 func newWriteBuffer(rw ReadWriterTo) *WriteBuffer {
 	bs := &WriteBuffer{
 		newIOReporter(),
-		make(map[string]*Page),
-		make(map[string]*Page),
+		make(map[string]Named),
+		make(map[string]Named),
 	}
 
 	if rw != nil {
@@ -118,4 +135,3 @@ func newIOReporter() *ioReporter {
 
 	return mrw
 }
-

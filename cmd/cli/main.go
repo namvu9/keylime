@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -130,15 +131,12 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 		key := args[0]
 		fields := make(map[string]interface{})
 
-		for _, kv := range args[1:] {
-			data := strings.Split(kv, "=")
-			if len(data) != 2 {
-				return fmt.Errorf("Syntax error: Set <key> key1=value1 key2=value2 ...")
-			}
-
-			fields[data[0]] = data[1]
+		err := json.Unmarshal([]byte(strings.Join(args[1:], " ")), &fields)
+		if err != nil {
+			return err
 		}
-		err := c.Set(ctx, key, fields)
+
+		err = c.Set(ctx, key, fields)
 		if err != nil {
 			return err
 		}
@@ -156,17 +154,12 @@ func handleCmd(ctx context.Context, cmd string, args []string) error {
 
 		key := args[0]
 		fields := make(map[string]interface{})
-
-		for _, kv := range args[1:] {
-			data := strings.Split(kv, "=")
-			if len(data) != 2 {
-				return fmt.Errorf("Syntax error: Set <key> key1=value1 key2=value2 ...")
-			}
-
-			fields[data[0]] = data[1]
+		err := json.Unmarshal([]byte(strings.Join(args[1:], " ")), &fields)
+		if err != nil {
+			return err
 		}
 
-		err := c.Update(ctx, key, fields)
+		err = c.Update(ctx, key, fields)
 		if err != nil {
 			return err
 		}

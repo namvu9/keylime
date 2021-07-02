@@ -90,14 +90,38 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 }
 
 func (c *Collection) Commit() error {
-	if err := c.primaryIndex.Save(); err != nil {
-		return err
-	}
-	if err := c.orderIndex.Save(); err != nil {
-		errChan <- err
-		return
-	}
-	return c.primaryIndex.bufWriter.Flush()
+	errChan := make(chan error, 2)
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if err := c.primaryIndex.Save(); err != nil {
+			errChan <- err
+			return
+		}
+		if err := c.primaryIndex.bufWriter.Flush(); err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if err := c.orderIndex.Save(); err != nil {
+			errChan <- err
+			return
+		}
+
+		if err := c.orderIndex.writer.Flush(); err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	wg.Wait()
+
+	return nil
 }
 
 func (c *Collection) GetLast(ctx context.Context, n int) []*types.Record {

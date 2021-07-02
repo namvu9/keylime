@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -64,6 +65,7 @@ func TestInsert(t *testing.T) {
 		ki.root.records = makeRecords("k", "o", "s")
 
 		ki.Insert(context.Background(), types.New("q", nil))
+		ki.bufWriter.Flush()
 
 		u.with("Root", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(2)
@@ -250,63 +252,78 @@ func TestDelete(t *testing.T) {
 	})
 }
 
+func BenchmarkInsertKeyIndex(b *testing.B) {
+	for _, t := range []int{2, 20, 50, 100, 200, 500, 1000, 2000} {
+		b.Run(fmt.Sprintf("t=%d, b.N=%d", t, b.N), func(b *testing.B) {
+			ki := newKeyIndex(t, nil)
+			ctx := context.Background()
+
+			for i := 0; i < b.N; i++ {
+				ki.Insert(ctx, *types.NewRecord(fmt.Sprint(i)))
+			}
+		})
+	}
+}
+
 func TestBuildKeyIndex(t *testing.T) {
-	u := util{t}
+	t.Run("Short", func(t *testing.T) {
+		u := util{t}
 
-	ki := newKeyIndex(2, nil)
-	ctx := context.Background()
+		ki := newKeyIndex(2, nil)
+		ctx := context.Background()
 
-	var (
-		recordA = types.New("a", nil)
-		recordB = types.New("b", nil)
-		recordC = types.New("c", nil)
+		var (
+			recordA = types.New("a", nil)
+			recordB = types.New("b", nil)
+			recordC = types.New("c", nil)
 
-		recordD = types.New("d", nil)
-		recordE = types.New("e", nil)
-	)
+			recordD = types.New("d", nil)
+			recordE = types.New("e", nil)
+		)
 
-	ki.Insert(ctx, recordA)
-	ki.Insert(ctx, recordB)
-	ki.Insert(ctx, recordC)
+		ki.Insert(ctx, recordA)
+		ki.Insert(ctx, recordB)
+		ki.Insert(ctx, recordC)
 
-	u.with("Root after 3 insertions, t=2", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("a", "b", "c")
-	})
+		u.with("Root after 3 insertions, t=2", ki.root, func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("a", "b", "c")
+		})
 
-	ki.Insert(ctx, recordD)
-	ki.Insert(ctx, recordE)
+		ki.Insert(ctx, recordD)
+		ki.Insert(ctx, recordE)
 
-	u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(2)
-		nu.hasKeys("b")
-	})
+		u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
+			nu.hasNChildren(2)
+			nu.hasKeys("b")
+		})
 
-	u.with("Left child after 5 insertions", ki.root.children[0], func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("a")
-	})
+		u.with("Left child after 5 insertions", ki.root.children[0], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("a")
+		})
 
-	u.with("Right child after 5 insertions", ki.root.children[1], func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("c", "d", "e")
-	})
+		u.with("Right child after 5 insertions", ki.root.children[1], func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("c", "d", "e")
+		})
 
-	ki.Delete(ctx, "e")
-	ki.Delete(ctx, "d")
-	ki.Delete(ctx, "c")
+		ki.Delete(ctx, "e")
+		ki.Delete(ctx, "d")
+		ki.Delete(ctx, "c")
 
-	u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasKeys("a", "b")
-	})
+		u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasKeys("a", "b")
+		})
 
-	ki.Delete(ctx, "a")
-	ki.Delete(ctx, "b")
+		ki.Delete(ctx, "a")
+		ki.Delete(ctx, "b")
 
-	u.with("Root should be empty", ki.root, func(nu namedUtil) {
-		nu.hasNChildren(0)
-		nu.hasNRecords(0)
+		u.with("Root should be empty", ki.root, func(nu namedUtil) {
+			nu.hasNChildren(0)
+			nu.hasNRecords(0)
+		})
 	})
 }
 
