@@ -3,7 +3,10 @@ package queries
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/namvu9/keylime/src/types"
 )
 
 type Command string
@@ -12,6 +15,8 @@ const (
 	Set    Command = "Set"
 	Get            = "Get"
 	Update         = "Update"
+	Info           = "Info"
+	Create         = "Create"
 )
 
 // Operation is an intermediate representation of the
@@ -33,131 +38,274 @@ type Operation struct {
 	}
 }
 
-type Mode func(*Parser)
 type Parser struct {
 	op     *Operation
 	index  int
-	mode   Mode
-	modes  map[string]Mode
 	Err    error
 	input  string
 	buffer strings.Builder
+
+	tokens []Token
 }
 
-func parseCollection(p *Parser) {
-	for !p.Done() {
-		c := p.input[p.index]
-		p.index++
-		switch {
-		case c == ' ':
-			break
-		default:
-			p.buffer.WriteByte(c)
-		}
+func parseSchema(p *Parser) (*types.Schema, error) {
+	sb := types.NewSchemaBuilder()
+
+	if p.CurrentToken().Value != LBRACE {
+		return nil, fmt.Errorf("Schema syntax error: Could not find starting LBRACE (Got %v)", p.CurrentToken())
 	}
 
-	if p.op.Collection != "" {
-		p.Err = fmt.Errorf("syntax error: collection already set for this statement")
-		return
-	}
-	s := p.buffer.String()
-	p.op.Collection = s
-	p.buffer = strings.Builder{}
-}
-
-func parseSetArguments(p *Parser) {
-	for !p.Done() {
-		c := p.input[p.index]
-		p.index++
-
-		if c == ' ' {
-			s := p.buffer.String()
-			p.op.Arguments["key"] = s
-			return
+	p.Next()
+	for p.CurrentToken().Value != RBRACE {
+		if p.CurrentToken().Value == COMMA {
+			p.Next()
 		}
 
-		p.buffer.WriteByte(c)
-	}
-}
+		if p.CurrentToken().Type != Identifier {
+			return nil, fmt.Errorf("Schema syntax error: %v Expected Identifier got %v", p.CurrentToken(), p.Peek())
+		}
+		nameToken := p.CurrentToken()
 
-func parsePayload(p *Parser) {
-	var done bool
+		var fieldType types.Type
+		var schemaOptions []types.SchemaFieldOption
 
-	leftBrackets := 0
 
-	for !p.Done() {
-		c := p.input[p.index]
-		p.index++
+		tok := p.Next()
+		if tok.Value == QUESTIONMARK {
+			schemaOptions = append(schemaOptions, types.Optional)
+			tok = p.Next()
+		}
 
-		switch c {
-		case '{':
-			leftBrackets++
-		case '}':
-			leftBrackets--
-			if leftBrackets == 0 {
-				done = true
+		if tok.Value != COLON {
+			return nil, fmt.Errorf("Schema syntax error: Expected Colon token got %s", tok.Value)
+		}
+
+		tok = p.Next()
+		if tok.Value == LBRACE {
+			s, err := parseSchema(p)
+			if err != nil {
+				return nil, fmt.Errorf("%v", err)
 			}
-		case ' ':
-			if done {
-				s := p.buffer.String()
-				d := map[string]interface{}{}
-				err := json.Unmarshal([]byte(s), &d)
-				p.Err = err
+			schemaOptions = append(schemaOptions, types.WithSchema(s))
+			fieldType = types.Object
+			// ...
+		} else if tok.Value == LBRACKET {
+			fieldType = types.Array
 
-				p.op.Payload.Data = d
-				p.op.Payload.Format = "json"
-				return
+		} else if tok.Type != Keyword {
+			return nil, fmt.Errorf("Schem syntax error: Expected Keyword token got %s", tok.Type)
+		} else {
+			switch tok.Value {
+			case "Number":
+				fieldType = types.Number
+			case "Map":
+				fieldType = types.Map
+			case "Boolean":
+				fieldType = types.Boolean
+			case "String":
+				fieldType = types.String
 			}
 		}
 
-		p.buffer.WriteByte(c)
+		tok = p.Next()
+		if tok.Value == EQUALS {
+			tok = p.Next()
+			if !tok.IsValueType() {
+				return nil, fmt.Errorf("Schema syntax error: Expected value type, got %s", tok.Type)
+			}
+			p.Next()
 
+			if tok.Type != StringValue {
+				switch tok.Type {
+				case NumberValue:
+					val, err := strconv.ParseFloat(tok.Value, 64)
+					if err != nil {
+						return nil, err
+					}
+					schemaOptions = append(schemaOptions, types.WithDefault(val))
+				case BooleanValue:
+					val, err := strconv.ParseBool(tok.Value)
+					if err != nil {
+						return nil, err
+					}
+					schemaOptions = append(schemaOptions, types.WithDefault(val))
+				case ArrayValue:
+					var v []interface{}
+					err := json.Unmarshal([]byte(tok.Value), &v)
+					if err != nil {
+						return nil, err
+					}
+
+					schemaOptions = append(schemaOptions, types.WithDefault(v))
+				case ObjectValue, MapValue:
+					var v map[string]interface{}
+					err := json.Unmarshal([]byte(tok.Value), &v)
+					if err != nil {
+						return nil, err
+					}
+
+					schemaOptions = append(schemaOptions, types.WithDefault(v))
+
+				}
+			} else {
+				schemaOptions = append(schemaOptions, types.WithDefault(tok.Value))
+			}
+		}
+
+		sb.AddField(nameToken.Value, fieldType, schemaOptions...)
 	}
 
-}
+	schema, err := sb.Build()
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+	fmt.Println("AFTER PARSING SCHEMA", p.CurrentToken())
 
-func NewParser(input string) *Parser {
-	p := &Parser{input: input, op: &Operation{
-		Arguments: make(map[string]string),
-	}}
-
-	return p
+	return schema, nil
 }
 
 func (p *Parser) Parse() (Operation, error) {
-	for !p.Done() {
-		c := p.input[p.index]
-		p.index++
-
-		if c == ' ' {
-			s := p.buffer.String()
-			p.buffer = strings.Builder{}
-
-			switch s {
-			case "IN":
-				parseCollection(p)
-				p.buffer = strings.Builder{}
-			case "SET":
-				p.op.Command = Set
-				parseSetArguments(p)
-				p.buffer = strings.Builder{}
-			case "WITH":
-				parsePayload(p)
-				fmt.Println(p.op.Payload)
-				p.buffer = strings.Builder{}
+	for token := p.tokens[p.index]; token.Type != "EOF"; token = p.Next() {
+		switch token.Value {
+		case "SEMICOLON":
+			break
+		case "DELETE":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Argument token after DELETE, but got =%v", p.Peek())
 			}
-		} else {
-			p.buffer.WriteByte(c)
+
+			p.op.Command = commands[token.Value]
+			next := p.Next()
+
+			p.op.Arguments["key"] = next.Value
+
+		case "WITH":
+			if p.Peek().Type != StringValue && p.Peek().Value != "SCHEMA" {
+				return *p.op, fmt.Errorf("Parsing error: Expected StringValue token after WITH, but got %s", p.Peek().Type)
+			}
+
+			if p.Peek().Type == Keyword && p.Peek().Value == "SCHEMA" {
+				p.Next()
+				p.Next()
+				schema, err := parseSchema(p)
+				if err != nil {
+					return *p.op, err
+				}
+
+				p.op.Payload.Data = make(map[string]interface{})
+				p.op.Payload.Data["schema"] = schema
+
+			} else {
+				next := p.Next()
+				data, err := parseData(next)
+				if err != nil {
+					return *p.op, err
+				}
+
+				p.op.Payload.Data = data
+			}
+		case "CREATE":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after CREATE, but got =%v", p.Peek())
+			}
+
+			p.op.Command = Create
+			next := p.Next()
+			p.op.Collection = next.Value
+			fmt.Println("CREATING", next)
+
+		case "INFO":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after INFO, but got =%v", p.Peek())
+			}
+
+			p.op.Command = commands[token.Value]
+			next := p.Next()
+			p.op.Collection = next.Value
+
+		case "SET", "UPDATE":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after SET, but got =%v", p.Peek())
+			}
+
+			if len(p.op.Payload.Data) == 0 {
+				return *p.op, fmt.Errorf("Parsing error: The %s command requires a payload", token.Value)
+			}
+
+			p.op.Command = commands[token.Value]
+			next := p.Next()
+
+			p.op.Arguments["key"] = next.Value
+
+		case "GET":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after GET, but got =%v", p.Peek().Type)
+			}
+
+			p.op.Command = commands[token.Value]
+			next := p.Next()
+
+			argString := next.Value
+			if p.Peek().Value == "FROM" {
+				p.op.Arguments["selectors"] = argString
+				p.Next()
+				if p.Peek().Type != Identifier {
+					return *p.op, fmt.Errorf("Parsing error: Expected Argument token after SET, but got =%v", p.Peek())
+				}
+				next := p.Next()
+				p.op.Arguments["key"] = next.Value
+			} else {
+				p.op.Arguments["key"] = argString
+			}
+
+		case "IN":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after IN, but got =%v", p.Peek())
+			}
+
+			next := p.Next()
+			p.op.Collection = next.Value
+
 		}
 
 	}
-	return *p.op, p.Err
+
+	return *p.op, nil
 }
 
-func (p *Parser) Done() bool {
-	return p.index >= len(p.input) || p.Err != nil
+func (p *Parser) CurrentToken() Token {
+	if p.index >= len(p.tokens) {
+		return EOFToken
+	}
+	return p.tokens[p.index]
 }
 
-func (p *Parser) setMode(m string) {
-	p.mode = p.modes[m]
+func (p *Parser) Next() Token {
+	p.index++
+	if p.index >= len(p.tokens) {
+		return EOFToken
+	}
+	token := p.tokens[p.index]
+	return token
+}
+
+func (p *Parser) Peek() Token {
+	if p.index+1 >= len(p.tokens) {
+		return EOFToken
+	}
+	t := p.tokens[p.index+1]
+
+	return t
+}
+
+func NewParser(input string) *Parser {
+	tokens := tokenize(input)
+	p := &Parser{
+		input:  input,
+		tokens: tokens,
+		op: &Operation{
+			Arguments: make(map[string]string),
+		}}
+
+	return p
 }

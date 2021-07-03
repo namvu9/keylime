@@ -14,8 +14,9 @@ import (
 
 // A Collection is a named container for a group of records
 type Collection struct {
-	Name   string
-	Schema *types.Schema
+	Name      string
+	HasSchema bool
+	Schema    *types.Schema
 
 	primaryIndex *KeyIndex
 	orderIndex   *OrderIndex
@@ -81,12 +82,11 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 
 	wg.Wait()
 
-	select {
-	case e := <-errChan:
-		return e
-	default:
-		return nil
+	if len(errChan) != 0 {
+		return <-errChan
 	}
+
+	return nil
 }
 
 func (c *Collection) Commit() error {
@@ -97,10 +97,12 @@ func (c *Collection) Commit() error {
 	go func() {
 		defer wg.Done()
 		if err := c.primaryIndex.Save(); err != nil {
+			fmt.Println("COULD NOT FLUSH PRIMARY")
 			errChan <- err
 			return
 		}
 		if err := c.primaryIndex.bufWriter.Flush(); err != nil {
+			fmt.Println("COULD NOT FLUSH PRIMARY")
 			errChan <- err
 			return
 		}
@@ -109,17 +111,23 @@ func (c *Collection) Commit() error {
 	go func() {
 		defer wg.Done()
 		if err := c.orderIndex.Save(); err != nil {
+			fmt.Println("COULD NOT FLUSH PRIMARY")
 			errChan <- err
 			return
 		}
 
 		if err := c.orderIndex.writer.Flush(); err != nil {
+			fmt.Println("COULD NOT FLUSH ORDER")
 			errChan <- err
 			return
 		}
 	}()
 
 	wg.Wait()
+
+	if len(errChan) != 0 {
+		return <-errChan
+	}
 
 	return nil
 }
@@ -171,6 +179,9 @@ func (c *Collection) Create(s *types.Schema) error {
 	}
 
 	c.Schema = s
+	if s != nil {
+		c.HasSchema = true
+	}
 
 	err = c.primaryIndex.Create()
 	if err != nil {
@@ -208,7 +219,9 @@ func (c *Collection) Load() error {
 	if err != nil {
 		return errors.Wrap(op, errors.EIO, err)
 	}
+
 	if ok {
+		fmt.Println("OK")
 		data, err := io.ReadAll(schemaReader)
 		if err != nil {
 			return errors.Wrap(op, errors.EIO, err)

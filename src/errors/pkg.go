@@ -36,10 +36,12 @@ func GetKind(e interface{}) Code {
 }
 
 type Error struct {
-	Op    Op     // Operation 
+	Op    Op     // Operation
 	Code  Code   // Category
-	Err   error  // The wrapped error 
+	Err   error  // The wrapped error
 	ReqID string // The ID for the current request
+
+	Collection string
 }
 
 func GetRequestID(e Error) string {

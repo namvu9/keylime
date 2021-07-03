@@ -21,6 +21,7 @@ func TestTokenizer(t *testing.T) {
 			LBRACKET,
 			RBRACKET,
 			QUESTIONMARK,
+			"EOF",
 		}
 
 		if want, got := len(expTokens), len(tokens); want != got {
@@ -28,7 +29,7 @@ func TestTokenizer(t *testing.T) {
 		}
 
 		for i, token := range tokens {
-			if token.Type != Delimiter {
+			if token.Type != Delimiter && token.Type != "EOF" {
 				t.Errorf("Expected token type Delimiter got=%v", token.Type)
 			}
 			if token.Value != expTokens[i] {
@@ -58,6 +59,7 @@ func TestTokenizer(t *testing.T) {
 			"Object",
 			"Map",
 			"Boolean",
+			"EOF",
 		}
 
 		if want, got := len(expTokens), len(tokens); want != got {
@@ -65,7 +67,7 @@ func TestTokenizer(t *testing.T) {
 		}
 
 		for i, token := range tokens {
-			if token.Type != Keyword {
+			if token.Type != Keyword && token.Type != EOF {
 				t.Errorf("Expected token type Keyword got=%v", token.Type)
 			}
 			if token.Value != expTokens[i] {
@@ -120,6 +122,7 @@ func TestTokenizer(t *testing.T) {
 				Type:  StringValue,
 				Value: "\"This\" is a string",
 			},
+			EOFToken,
 		}
 
 		if want, got := len(expTokens), len(tokens); want != got {
@@ -167,6 +170,7 @@ func TestTokenizer(t *testing.T) {
 				Type:  Delimiter,
 				Value: SEMICOLON,
 			},
+			EOFToken,
 		}
 
 		if want, got := len(expTokens), len(tokens); want != got {
@@ -335,6 +339,7 @@ func TestTokenizer(t *testing.T) {
 				Type:  Delimiter,
 				Value: RBRACE,
 			},
+			EOFToken,
 		}
 
 		if want, got := len(expTokens), len(tokens); want != got {

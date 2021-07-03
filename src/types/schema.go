@@ -107,6 +107,10 @@ func (s *Schema) String() string {
 			sb.WriteString(fmt.Sprintf("* Default: %v\n", field.DefaultValue))
 		}
 
+		if field.Schema != nil {
+			sb.WriteString(fmt.Sprintf("* Schema: %v\n", field.Schema))
+		}
+
 	}
 
 	return sb.String()

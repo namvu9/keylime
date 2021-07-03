@@ -15,8 +15,20 @@ const (
 	StringValue  TokenType = "String"
 	BooleanValue TokenType = "Boolean"
 	NumberValue  TokenType = "Number"
+	ArrayValue   TokenType = "Array"
+	ObjectValue  TokenType = "Object"
+	MapValue     TokenType = "Map"
 	EOF          TokenType = "EOF"
 )
+
+func (t Token) IsValueType() bool {
+	switch t.Type {
+	case StringValue, BooleanValue, NumberValue, ArrayValue, ObjectValue, MapValue:
+		return true
+	default:
+		return false
+	}
+}
 
 var EOFToken = Token{
 	Type:  EOF,
@@ -113,8 +125,6 @@ func tokenize(s string) []Token {
 
 		} else {
 			switch c {
-			case ' ':
-				// What's in the buffer?
 			case '{':
 				newTokens = append(newTokens, Token{
 					Type:  Delimiter,
@@ -205,6 +215,8 @@ func tokenize(s string) []Token {
 		}
 
 	}
+
+	newTokens = append(newTokens, EOFToken)
 
 	return newTokens
 }

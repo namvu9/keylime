@@ -290,7 +290,7 @@ func newNode(capacity int, s ReadWriterTo, w *WriteBuffer) *Node {
 }
 
 func newNodeWithID(id ID, s ReadWriterTo, w *WriteBuffer) *Node {
-	n := &Node{ID: id, storage: newIOReporter()}
+	n := &Node{ID: id, storage: newIOReporter(), writer: w}
 	if s != nil {
 		n.storage = s.WithSegment(string(n.ID))
 	}
