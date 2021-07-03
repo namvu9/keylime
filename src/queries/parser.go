@@ -17,6 +17,9 @@ const (
 	Update         = "Update"
 	Info           = "Info"
 	Create         = "Create"
+	Last           = "Last"
+	First          = "First"
+	Delete         = "Delete"
 )
 
 // Operation is an intermediate representation of the
@@ -68,7 +71,6 @@ func parseSchema(p *Parser) (*types.Schema, error) {
 
 		var fieldType types.Type
 		var schemaOptions []types.SchemaFieldOption
-
 
 		tok := p.Next()
 		if tok.Value == QUESTIONMARK {
@@ -159,7 +161,6 @@ func parseSchema(p *Parser) (*types.Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%v", err)
 	}
-	fmt.Println("AFTER PARSING SCHEMA", p.CurrentToken())
 
 	return schema, nil
 }
@@ -169,12 +170,26 @@ func (p *Parser) Parse() (Operation, error) {
 		switch token.Value {
 		case "SEMICOLON":
 			break
+		case "FIRST":
+			if p.Peek().Type != NumberValue {
+				return *p.op, fmt.Errorf("Parsing error: Expected Number token after FIRST but got %v", p.Peek())
+			}
+			n := p.Next()
+			p.op.Command = First
+			p.op.Arguments["n"] = n.Value
+		case "LAST":
+			if p.Peek().Type != NumberValue {
+				return *p.op, fmt.Errorf("Parsing error: Expected Number token after LAST but got %v", p.Peek())
+			}
+			n := p.Next()
+			p.op.Command = Last
+			p.op.Arguments["n"] = n.Value
 		case "DELETE":
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Argument token after DELETE, but got =%v", p.Peek())
 			}
 
-			p.op.Command = commands[token.Value]
+			p.op.Command = Delete
 			next := p.Next()
 
 			p.op.Arguments["key"] = next.Value
@@ -212,7 +227,6 @@ func (p *Parser) Parse() (Operation, error) {
 			p.op.Command = Create
 			next := p.Next()
 			p.op.Collection = next.Value
-			fmt.Println("CREATING", next)
 
 		case "INFO":
 			if p.Peek().Type != Identifier {

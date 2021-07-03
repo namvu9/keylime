@@ -2,7 +2,6 @@ package queries
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -224,9 +223,6 @@ func tokenize(s string) []Token {
 func isLetter(c byte) bool {
 	for _, letter := range []byte("abcdefghijklmnoprqstuvwxyzABCDEFGHIJKLMNOPRQSTUVWXYZ") {
 		if letter == c {
-			if c == ' ' {
-				fmt.Println("LETTER SPACE")
-			}
 			return true
 		}
 	}
@@ -237,9 +233,6 @@ func isLetter(c byte) bool {
 func isNumeric(c byte) bool {
 	for _, i := range []byte("0123456789") {
 		if i == c {
-			if c == ' ' {
-				fmt.Println("NUMBER SPACE")
-			}
 			return true
 		}
 	}
@@ -255,6 +248,8 @@ func parseData(tok Token) (map[string]interface{}, error) {
 
 var keywords = map[string]bool{
 	"SELECT":  true,
+	"LAST":    true,
+	"FIRST":   true,
 	"SET":     true,
 	"DELETE":  true,
 	"UPDATE":  true,
@@ -277,18 +272,6 @@ var commands = map[string]Command{
 	"UPDATE": Update,
 	"INFO":   Info,
 	"CREATE": Create,
-}
-
-type clause string
-
-const (
-	From clause = "From"
-	In          = "In"
-	With        = "With"
-)
-
-var clauses = map[string]clause{
-	"IN":   In,
-	"FROM": From,
-	"WITH": With,
+	"LAST":   Last,
+	"FIRST":  First,
 }

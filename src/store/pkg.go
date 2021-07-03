@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strconv"
 
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/queries"
@@ -32,22 +33,23 @@ type Store struct {
 	storage ReadWriterTo
 }
 
-func (s *Store) Run(ctx context.Context, op queries.Operation) (*types.Record, error) {
+func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, error) {
 	c, err := s.Collection(op.Collection)
 	if err != nil {
 		return nil, err
 	}
 
 	if op.Command == queries.Create {
-		// has schema?
-		if op.Payload.Data != nil {
-			fmt.Println(op.Payload.Data["schema"])
-			return nil, nil
-		}
-
-		err := c.Create(nil)
-		if err != nil {
-			return nil, err
+		if schema := op.Payload.Data["schema"]; schema != nil {
+			err := c.Create(schema.(*types.Schema))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err := c.Create(nil)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		fmt.Printf("Successfully created collection %s\n", op.Collection)
@@ -63,6 +65,37 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (*types.Record, e
 	}
 
 	switch op.Command {
+	case queries.Delete:
+		key := op.Arguments["key"]
+
+		err = c.Delete(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+
+		err = c.Commit()
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println("Successfully deleted record with key", key, "in collection", op.Collection)
+		return nil, nil
+
+	case queries.First:
+		n, err := strconv.ParseInt(op.Arguments["n"], 0, 0) 
+		if err != nil {
+			return nil, err
+		}
+
+		records := c.GetFirst(ctx, int(n))
+		return records, nil
+	case queries.Last:
+		n, err := strconv.ParseInt(op.Arguments["n"], 0, 0) 
+		if err != nil {
+			return nil, err
+		}
+
+		records := c.GetLast(ctx, int(n))
+		return records, nil
 	case queries.Info:
 		c.Info()
 		return nil, err

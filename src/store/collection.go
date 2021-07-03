@@ -97,12 +97,12 @@ func (c *Collection) Commit() error {
 	go func() {
 		defer wg.Done()
 		if err := c.primaryIndex.Save(); err != nil {
-			fmt.Println("COULD NOT FLUSH PRIMARY")
+			
 			errChan <- err
 			return
 		}
 		if err := c.primaryIndex.bufWriter.Flush(); err != nil {
-			fmt.Println("COULD NOT FLUSH PRIMARY")
+			
 			errChan <- err
 			return
 		}
@@ -111,13 +111,13 @@ func (c *Collection) Commit() error {
 	go func() {
 		defer wg.Done()
 		if err := c.orderIndex.Save(); err != nil {
-			fmt.Println("COULD NOT FLUSH PRIMARY")
+		
 			errChan <- err
 			return
 		}
 
 		if err := c.orderIndex.writer.Flush(); err != nil {
-			fmt.Println("COULD NOT FLUSH ORDER")
+			
 			errChan <- err
 			return
 		}
@@ -221,7 +221,7 @@ func (c *Collection) Load() error {
 	}
 
 	if ok {
-		fmt.Println("OK")
+		
 		data, err := io.ReadAll(schemaReader)
 		if err != nil {
 			return errors.Wrap(op, errors.EIO, err)
@@ -253,6 +253,16 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 	}
 
 	err = c.primaryIndex.Save()
+	if err != nil {
+		return errors.Wrap(op, errors.EInternal, err)
+	}
+
+	err = c.orderIndex.Delete(ctx, k)
+	if err != nil {
+		return errors.Wrap(op, errors.EInternal, err)
+	}
+
+	err = c.orderIndex.Save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}

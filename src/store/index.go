@@ -317,7 +317,10 @@ func (n *Node) Name() string {
 }
 
 func (oi *OrderIndex) Insert(ctx context.Context, r *types.Record) error {
-	headNode, _ := oi.Node(oi.Head)
+	headNode, err := oi.Node(oi.Head)
+	if err != nil {
+		return err
+	}
 	if headNode.Full() {
 		headNode = oi.newNode()
 		err := oi.Save()
@@ -329,8 +332,20 @@ func (oi *OrderIndex) Insert(ctx context.Context, r *types.Record) error {
 	return headNode.Insert(r)
 }
 
-func (oi *OrderIndex) Delete(r *types.Record) error {
-	return nil
+func (oi *OrderIndex) Delete(ctx context.Context, k string) error {
+	node, _ := oi.Node(oi.Head)
+	for node != nil {
+		for i, record := range node.Records {
+			if record.Key == k{
+				node.Records[i].Deleted = true
+				return node.Save()
+			}
+		}
+
+		node, _ = oi.Node(node.Next)
+	}
+
+	return fmt.Errorf("Key not found: %s", k)
 }
 
 func (oi *OrderIndex) Save() error {
@@ -427,8 +442,10 @@ func (oi *OrderIndex) Info() {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		nNodes++
-		for range node.Records {
-			nRecords++
+		for _, r := range node.Records {
+			if !r.Deleted {
+				nRecords++
+			}
 		}
 
 		node, _ = oi.Node(node.Next)
