@@ -12,7 +12,7 @@ func New(cfg *Config, opts ...Option) *Store {
 	s := &Store{
 		baseDir:     cfg.BaseDir,
 		t:           cfg.T,
-		collections: make(map[string]*Collection),
+		collections: make(map[string]*collection),
 	}
 
 	for _, opt := range opts {
@@ -27,9 +27,9 @@ func New(cfg *Config, opts ...Option) *Store {
 	return s
 }
 
-func newCollection(name string, s ReadWriterTo) *Collection {
+func newCollection(name string, s ReadWriterTo) *collection {
 	t := 50
-	c := &Collection{
+	c := &collection{
 		Name:    name,
 		storage: newIOReporter(),
 	}

@@ -44,8 +44,6 @@ type Operation struct {
 type Parser struct {
 	op     *Operation
 	index  int
-	Err    error
-	input  string
 	buffer strings.Builder
 
 	tokens []Token

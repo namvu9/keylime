@@ -1,8 +1,8 @@
 all: one two three
 
-cli:
+repl:
 	KEYLIME_HOME=/home/nam/go/src/github.com/namvu9/keylime/testdata \
-	go run ./cmd/cli/main.go
+	go run ./cmd/repl
 lint:
 	go vet ./...
 test_watch: 

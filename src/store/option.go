@@ -8,3 +8,12 @@ type Config struct {
 	T       int
 	Storage ReadWriterTo
 }
+
+type Option func(*Store)
+
+func WithStorage(rw ReadWriterTo) Option {
+	return func(s *Store) {
+		s.storage = rw
+	}
+}
+

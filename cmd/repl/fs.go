@@ -1,15 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
 
-	"github.com/namvu9/keylime/src/queries"
 	"github.com/namvu9/keylime/src/store"
 )
 
@@ -61,40 +57,3 @@ func (fs *FStorage) WithSegment(name string) store.ReadWriterTo {
 	}
 }
 
-var fs = &FStorage{"./testdata", 0}
-var (
-	cfg = &store.Config{
-		T:       200,
-		BaseDir: "./testdata",
-	}
-
-	s      = store.New(cfg, store.WithStorage(fs))
-	reader = bufio.NewReader(os.Stdin)
-)
-
-func main() {
-	for {
-		fmt.Print("KL> ")
-
-		var (
-			ctx     = context.Background()
-			text, _ = reader.ReadString(';')
-		)
-
-		op, err := queries.Parse(text)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		res, err := s.Run(ctx, *op)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		if res != nil {
-			fmt.Println(res)
-		}
-	}
-}

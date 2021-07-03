@@ -12,8 +12,8 @@ import (
 	"github.com/namvu9/keylime/src/types"
 )
 
-// A Collection is a named container for a group of records
-type Collection struct {
+// A collection is a named container for a group of records
+type collection struct {
 	Name      string
 	HasSchema bool
 	Schema    *types.Schema
@@ -21,11 +21,17 @@ type Collection struct {
 	primaryIndex *KeyIndex
 	orderIndex   *OrderIndex
 	storage      ReadWriterTo
+	loaded       bool
 }
 
-// get the value associated with the key `k`, if a record
+// Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *Collection) get(ctx context.Context, k string) (*types.Record, error) {
+func (c *collection) Get(ctx context.Context, k string) (*types.Record, error) {
+	err := c.load()
+	if err != nil {
+		return nil, err
+	}
+
 	r, err := c.primaryIndex.get(ctx, k)
 	if err != nil {
 		return nil, err
@@ -40,10 +46,25 @@ func (c *Collection) get(ctx context.Context, k string) (*types.Record, error) {
 
 type Fields = map[string]interface{}
 
-// set the value associated with key `k` in collection `c`.
+// Set the value associated with key `k` in collection `c`.
 // If a record with that key already exists in the
 // collection, an error is returned.
-func (c *Collection) set(ctx context.Context, k string, fields Fields) error {
+func (c *collection) Set(ctx context.Context, k string, fields Fields) error {
+	err := c.load()
+	if err != nil {
+		return err
+	}
+
+	err = c.set(ctx, k, fields)
+	if err != nil {
+		return err
+	}
+
+	return c.commit()
+}
+
+
+func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	var wg sync.WaitGroup
 
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
@@ -89,7 +110,7 @@ func (c *Collection) set(ctx context.Context, k string, fields Fields) error {
 	return nil
 }
 
-func (c *Collection) commit() error {
+func (c *collection) commit() error {
 	errChan := make(chan error, 2)
 	var wg sync.WaitGroup
 
@@ -132,15 +153,41 @@ func (c *Collection) commit() error {
 	return nil
 }
 
-func (c *Collection) getLast(ctx context.Context, n int) []*types.Record {
-	return c.orderIndex.Get(n, false)
+func (c *collection) GetLast(ctx context.Context, n int) ([]*types.Record, error){
+	err := c.load()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: return error from oi
+	return c.orderIndex.Get(n, false), nil
 }
 
-func (c *Collection) getFirst(ctx context.Context, n int) []*types.Record {
-	return c.orderIndex.Get(n, true)
+func (c *collection) GetFirst(ctx context.Context, n int) ([]*types.Record, error){
+	err := c.load()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: return error from oi
+	return c.orderIndex.Get(n, true), nil
 }
 
-func (c *Collection) update(ctx context.Context, k string, fields map[string]interface{}) error {
+func (c *collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
+	err := c.load()
+	if err != nil {
+		return err
+	}
+
+	err = c.update(ctx, k, fields)
+	if err != nil {
+		return err
+	}
+
+	return c.commit()
+}
+
+func (c *collection) update(ctx context.Context, k string, fields map[string]interface{}) error {
 	// Retrieve record
 	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
 	r, err := c.primaryIndex.get(ctx, k)
@@ -170,7 +217,7 @@ func (c *Collection) update(ctx context.Context, k string, fields map[string]int
 }
 
 // TODO: If this fails, clean up
-func (c *Collection) create(s *types.Schema) error {
+func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 	var op errors.Op = "(*Collection).Create"
 
 	_, err := c.storage.Write(nil)
@@ -201,7 +248,15 @@ func (c *Collection) create(s *types.Schema) error {
 	return nil
 }
 
-func (c *Collection) load() error {
+func (c *collection) load() error {
+	if c.loaded {
+		return nil
+	}
+
+	if !c.exists() {
+		return fmt.Errorf("Collection %s does not exist", c.Name)
+	}
+
 	var op errors.Op = "(*Collection).Load"
 	err := c.primaryIndex.Load()
 
@@ -239,12 +294,28 @@ func (c *Collection) load() error {
 		c.Schema = s
 	}
 
+	c.loaded = true
+
 	return nil
 }
 
-// remove record with key `k`. An error is returned of no
+// Delete record with key `k`. An error is returned of no
 // such record exists
-func (c *Collection) remove(ctx context.Context, k string) error {
+func (c *collection) Delete(ctx context.Context, k string) error {
+	err := c.load()
+	if err != nil {
+		return err
+	}
+
+	err = c.remove(ctx, k)
+	if err != nil {
+		return err
+	}
+	
+	return c.commit()
+}
+
+func (c *collection) remove(ctx context.Context, k string) error {
 	var op errors.Op = "(*Collection).Delete"
 
 	err := c.primaryIndex.remove(ctx, k)
@@ -268,9 +339,9 @@ func (c *Collection) remove(ctx context.Context, k string) error {
 	}
 
 	return err
-}
+	}
 
-func (c *Collection) save() error {
+func (c *collection) save() error {
 	wrapError := errors.WrapWith("(*Collection).Save", errors.EIO)
 
 	if c.Schema != nil {
@@ -291,7 +362,7 @@ func (c *Collection) save() error {
 	return nil
 }
 
-func (c *Collection) info() {
+func (c *collection) Info(ctx context.Context) {
 	fmt.Println()
 	fmt.Println("---------------")
 	fmt.Println("Collection:", c.Name)
@@ -306,7 +377,7 @@ func (c *Collection) info() {
 	fmt.Println()
 }
 
-func (c *Collection) exists() bool {
+func (c *collection) exists() bool {
 	if ok, err := c.storage.Exists(); !ok || err != nil {
 		return false
 	}
