@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"strconv"
+	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/queries"
@@ -34,19 +35,19 @@ type Store struct {
 }
 
 func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, error) {
-	c, err := s.Collection(op.Collection)
+	c, err := s.collection(op.Collection)
 	if err != nil {
 		return nil, err
 	}
 
 	if op.Command == queries.Create {
 		if schema := op.Payload.Data["schema"]; schema != nil {
-			err := c.Create(schema.(*types.Schema))
+			err := c.create(schema.(*types.Schema))
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			err := c.Create(nil)
+			err := c.create(nil)
 			if err != nil {
 				return nil, err
 			}
@@ -55,10 +56,10 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 		fmt.Printf("Successfully created collection %s\n", op.Collection)
 		return nil, nil
 
-	} else if !c.Exists() {
+	} else if !c.exists() {
 		return nil, fmt.Errorf("Collection %s does not exist", op.Collection)
 	} else {
-		err := c.Load()
+		err := c.load()
 		if err != nil {
 			return nil, err
 		}
@@ -68,12 +69,12 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 	case queries.Delete:
 		key := op.Arguments["key"]
 
-		err = c.Delete(ctx, key)
+		err = c.remove(ctx, key)
 		if err != nil {
 			return nil, err
 		}
 
-		err = c.Commit()
+		err = c.commit()
 		if err != nil {
 			return nil, err
 		}
@@ -81,34 +82,34 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 		return nil, nil
 
 	case queries.First:
-		n, err := strconv.ParseInt(op.Arguments["n"], 0, 0) 
+		n, err := strconv.ParseInt(op.Arguments["n"], 0, 0)
 		if err != nil {
 			return nil, err
 		}
 
-		records := c.GetFirst(ctx, int(n))
+		records := c.getFirst(ctx, int(n))
 		return records, nil
 	case queries.Last:
-		n, err := strconv.ParseInt(op.Arguments["n"], 0, 0) 
+		n, err := strconv.ParseInt(op.Arguments["n"], 0, 0)
 		if err != nil {
 			return nil, err
 		}
 
-		records := c.GetLast(ctx, int(n))
+		records := c.getLast(ctx, int(n))
 		return records, nil
 	case queries.Info:
-		c.Info()
+		c.info()
 		return nil, err
 	case queries.Set:
 		key := op.Arguments["key"]
 		fields := op.Payload.Data
 
-		err = c.Set(ctx, key, fields)
+		err = c.set(ctx, key, fields)
 		if err != nil {
 			return nil, err
 		}
 
-		err = c.Commit()
+		err = c.commit()
 		if err != nil {
 			return nil, err
 		}
@@ -117,12 +118,12 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 	case queries.Update:
 		key := op.Arguments["key"]
 		fields := op.Payload.Data
-		err = c.Update(ctx, key, fields)
+		err = c.update(ctx, key, fields)
 		if err != nil {
 			return nil, err
 		}
 
-		err = c.Commit()
+		err = c.commit()
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +132,7 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 
 	case queries.Get:
 		key := op.Arguments["key"]
-		rec, err := c.Get(ctx, key)
+		rec, err := c.get(ctx, key)
 		if err != nil {
 			werr := errors.Wrap("(*Store).Run", errors.ENotFound, fmt.Errorf("%w in %s", err, op.Collection))
 			werr.Collection = op.Collection
@@ -140,11 +141,9 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 		}
 
 		if selectors, ok := op.Arguments["selectors"]; ok {
-			fmt.Println("TODO", selectors)
-			//selectors := types.MakeFieldSelectors(args[1:]...)
-			//res := rec.Select(selectors...)
-			//s, _ := types.Prettify(res)
-			//fmt.Printf("%s=%s\n", key, s)
+			selectors := types.MakeFieldSelectors(strings.Split(selectors, " ")...)
+			res := rec.Select(selectors...)
+			return res, nil
 		} else {
 			return rec, err
 		}
@@ -153,7 +152,7 @@ func (s *Store) Run(ctx context.Context, op queries.Operation) (interface{}, err
 	return nil, fmt.Errorf("Unknown command: %s", op.Command)
 }
 
-func (s Store) Collection(name string) (*Collection, error) {
+func (s Store) collection(name string) (*Collection, error) {
 	if name == "" {
 		return nil, fmt.Errorf("collection names cannot be empty")
 	}
@@ -189,8 +188,8 @@ func (s *Store) Info() {
 	files, _ := ioutil.ReadDir(s.baseDir)
 	for _, f := range files {
 		if f.IsDir() {
-			c, _ := s.Collection(f.Name())
-			c.Info()
+			c, _ := s.collection(f.Name())
+			c.info()
 		}
 	}
 }

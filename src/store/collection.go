@@ -23,10 +23,10 @@ type Collection struct {
 	storage      ReadWriterTo
 }
 
-// Get the value associated with the key `k`, if a record
+// get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *Collection) Get(ctx context.Context, k string) (*types.Record, error) {
-	r, err := c.primaryIndex.Get(ctx, k)
+func (c *Collection) get(ctx context.Context, k string) (*types.Record, error) {
+	r, err := c.primaryIndex.get(ctx, k)
 	if err != nil {
 		return nil, err
 	}
@@ -40,10 +40,10 @@ func (c *Collection) Get(ctx context.Context, k string) (*types.Record, error) {
 
 type Fields = map[string]interface{}
 
-// Set the value associated with key `k` in collection `c`.
+// set the value associated with key `k` in collection `c`.
 // If a record with that key already exists in the
 // collection, an error is returned.
-func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
+func (c *Collection) set(ctx context.Context, k string, fields Fields) error {
 	var wg sync.WaitGroup
 
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
@@ -63,7 +63,7 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 	go func() {
 		defer wg.Done()
 		// TODO: use ctx cancelFunc
-		if err := c.primaryIndex.Insert(ctx, *r); err != nil {
+		if err := c.primaryIndex.insert(ctx, *r); err != nil {
 			errChan <- err
 			cancelFn()
 			return
@@ -73,7 +73,7 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 	go func() {
 		defer wg.Done()
 
-		if err := c.orderIndex.Insert(ctx, r); err != nil {
+		if err := c.orderIndex.insert(ctx, r); err != nil {
 			errChan <- err
 			return
 		}
@@ -89,20 +89,20 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 	return nil
 }
 
-func (c *Collection) Commit() error {
+func (c *Collection) commit() error {
 	errChan := make(chan error, 2)
 	var wg sync.WaitGroup
 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		if err := c.primaryIndex.Save(); err != nil {
-			
+		if err := c.primaryIndex.save(); err != nil {
+
 			errChan <- err
 			return
 		}
-		if err := c.primaryIndex.bufWriter.Flush(); err != nil {
-			
+		if err := c.primaryIndex.bufWriter.flush(); err != nil {
+
 			errChan <- err
 			return
 		}
@@ -110,14 +110,14 @@ func (c *Collection) Commit() error {
 
 	go func() {
 		defer wg.Done()
-		if err := c.orderIndex.Save(); err != nil {
-		
+		if err := c.orderIndex.save(); err != nil {
+
 			errChan <- err
 			return
 		}
 
-		if err := c.orderIndex.writer.Flush(); err != nil {
-			
+		if err := c.orderIndex.writer.flush(); err != nil {
+
 			errChan <- err
 			return
 		}
@@ -132,18 +132,18 @@ func (c *Collection) Commit() error {
 	return nil
 }
 
-func (c *Collection) GetLast(ctx context.Context, n int) []*types.Record {
+func (c *Collection) getLast(ctx context.Context, n int) []*types.Record {
 	return c.orderIndex.Get(n, false)
 }
 
-func (c *Collection) GetFirst(ctx context.Context, n int) []*types.Record {
+func (c *Collection) getFirst(ctx context.Context, n int) []*types.Record {
 	return c.orderIndex.Get(n, true)
 }
 
-func (c *Collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
+func (c *Collection) update(ctx context.Context, k string, fields map[string]interface{}) error {
 	// Retrieve record
 	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
-	r, err := c.primaryIndex.Get(ctx, k)
+	r, err := c.primaryIndex.get(ctx, k)
 	if err != nil {
 		return wrapError(err)
 	}
@@ -156,12 +156,12 @@ func (c *Collection) Update(ctx context.Context, k string, fields map[string]int
 		}
 	}
 
-	err = c.primaryIndex.Insert(ctx, *clone)
+	err = c.primaryIndex.insert(ctx, *clone)
 	if err != nil {
 		wrapError(err)
 	}
 
-	err = c.orderIndex.Update(ctx, clone)
+	err = c.orderIndex.update(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
@@ -170,7 +170,7 @@ func (c *Collection) Update(ctx context.Context, k string, fields map[string]int
 }
 
 // TODO: If this fails, clean up
-func (c *Collection) Create(s *types.Schema) error {
+func (c *Collection) create(s *types.Schema) error {
 	var op errors.Op = "(*Collection).Create"
 
 	_, err := c.storage.Write(nil)
@@ -183,17 +183,17 @@ func (c *Collection) Create(s *types.Schema) error {
 		c.HasSchema = true
 	}
 
-	err = c.primaryIndex.Create()
+	err = c.primaryIndex.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.Save()
+	err = c.orderIndex.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.Save()
+	err = c.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -201,7 +201,7 @@ func (c *Collection) Create(s *types.Schema) error {
 	return nil
 }
 
-func (c *Collection) Load() error {
+func (c *Collection) load() error {
 	var op errors.Op = "(*Collection).Load"
 	err := c.primaryIndex.Load()
 
@@ -209,7 +209,7 @@ func (c *Collection) Load() error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.Load()
+	err = c.orderIndex.load()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -221,7 +221,7 @@ func (c *Collection) Load() error {
 	}
 
 	if ok {
-		
+
 		data, err := io.ReadAll(schemaReader)
 		if err != nil {
 			return errors.Wrap(op, errors.EIO, err)
@@ -242,27 +242,27 @@ func (c *Collection) Load() error {
 	return nil
 }
 
-// Delete record with key `k`. An error is returned of no
+// remove record with key `k`. An error is returned of no
 // such record exists
-func (c *Collection) Delete(ctx context.Context, k string) error {
+func (c *Collection) remove(ctx context.Context, k string) error {
 	var op errors.Op = "(*Collection).Delete"
 
-	err := c.primaryIndex.Delete(ctx, k)
+	err := c.primaryIndex.remove(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.primaryIndex.Save()
+	err = c.primaryIndex.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.Delete(ctx, k)
+	err = c.orderIndex.remove(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.Save()
+	err = c.orderIndex.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -270,7 +270,7 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 	return err
 }
 
-func (c *Collection) Save() error {
+func (c *Collection) save() error {
 	wrapError := errors.WrapWith("(*Collection).Save", errors.EIO)
 
 	if c.Schema != nil {
@@ -291,7 +291,7 @@ func (c *Collection) Save() error {
 	return nil
 }
 
-func (c *Collection) Info() {
+func (c *Collection) info() {
 	fmt.Println()
 	fmt.Println("---------------")
 	fmt.Println("Collection:", c.Name)
@@ -306,7 +306,7 @@ func (c *Collection) Info() {
 	fmt.Println()
 }
 
-func (c *Collection) Exists() bool {
+func (c *Collection) exists() bool {
 	if ok, err := c.storage.Exists(); !ok || err != nil {
 		return false
 	}

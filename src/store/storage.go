@@ -32,7 +32,7 @@ func (wb *WriteBuffer) Delete(p Named) error {
 	return nil
 }
 
-func (wb *WriteBuffer) Flush() error {
+func (wb *WriteBuffer) flush() error {
 	defer func() {
 		for k := range wb.writeBuf {
 			delete(wb.writeBuf, k)

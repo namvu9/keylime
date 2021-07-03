@@ -40,7 +40,7 @@ func TestGet(t *testing.T) {
 		{"c", []byte{100, 100, 100}},
 		{"i", []byte{99, 99, 99}},
 	} {
-		got, _ := ki.Get(ctx, test.k)
+		got, _ := ki.get(ctx, test.k)
 
 		if test.want == nil && got != nil {
 			t.Errorf("Expected nil, got=%v", got)
@@ -64,8 +64,8 @@ func TestInsert(t *testing.T) {
 		ki := newKeyIndex(2, reporter)
 		ki.root.records = makeRecords("k", "o", "s")
 
-		ki.Insert(context.Background(), types.New("q", nil))
-		ki.bufWriter.Flush()
+		ki.insert(context.Background(), types.New("q", nil))
+		ki.bufWriter.flush()
 
 		u.with("Root", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(2)
@@ -114,9 +114,9 @@ func TestInsert(t *testing.T) {
 
 		ctx := context.Background()
 
-		ki.Insert(ctx, recordA)
-		ki.Insert(ctx, recordB)
-		ki.Insert(ctx, recordC)
+		ki.insert(ctx, recordA)
+		ki.insert(ctx, recordB)
+		ki.insert(ctx, recordC)
 
 		if ki.root == root {
 			t.Errorf("[TestTreeInsert]: Expected new root")
@@ -168,7 +168,7 @@ func TestDelete(t *testing.T) {
 
 		ki.root = oldRoot
 
-		ki.Delete(ctx, "5")
+		ki.remove(ctx, "5")
 
 		u.with("Root", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(0)
@@ -201,7 +201,7 @@ func TestDelete(t *testing.T) {
 		ki := newKeyIndex(2, nil)
 		ki.root = makePage(2, makeRecords("5"))
 
-		err := ki.Delete(ctx, "10")
+		err := ki.remove(ctx, "10")
 		if err == nil {
 			t.Errorf("Deleting a missing key should return an error. Got=<nil>")
 		}
@@ -212,7 +212,7 @@ func TestDelete(t *testing.T) {
 		ki := newKeyIndex(2, nil)
 		ki.root = makePage(2, makeRecords("5"))
 
-		ki.Delete(ctx, "5")
+		ki.remove(ctx, "5")
 		u.hasNRecords("Root", 0, ki.root)
 		u.hasNChildren("Root", 0, ki.root)
 	})
@@ -227,7 +227,7 @@ func TestDelete(t *testing.T) {
 			makePage(2, makeRecords("8")),
 		)
 
-		ki.Delete(ctx, "5")
+		ki.remove(ctx, "5")
 
 		u.with("Root", ki.root, func(nu namedUtil) {
 			nu.hasKeys("2", "8")
@@ -241,7 +241,7 @@ func TestDelete(t *testing.T) {
 		root := makePage(2, makeRecords("1", "2", "3"))
 		ki.root = root
 
-		ki.Delete(ctx, "2")
+		ki.remove(ctx, "2")
 
 		u := util{t}
 		u.with("leaf", root, func(nu namedUtil) {
@@ -259,7 +259,7 @@ func BenchmarkInsertKeyIndex(b *testing.B) {
 			ctx := context.Background()
 
 			for i := 0; i < b.N; i++ {
-				ki.Insert(ctx, *types.NewRecord(fmt.Sprint(i)))
+				ki.insert(ctx, *types.NewRecord(fmt.Sprint(i)))
 			}
 		})
 	}
@@ -281,17 +281,17 @@ func TestBuildKeyIndex(t *testing.T) {
 			recordE = types.New("e", nil)
 		)
 
-		ki.Insert(ctx, recordA)
-		ki.Insert(ctx, recordB)
-		ki.Insert(ctx, recordC)
+		ki.insert(ctx, recordA)
+		ki.insert(ctx, recordB)
+		ki.insert(ctx, recordC)
 
 		u.with("Root after 3 insertions, t=2", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(0)
 			nu.hasKeys("a", "b", "c")
 		})
 
-		ki.Insert(ctx, recordD)
-		ki.Insert(ctx, recordE)
+		ki.insert(ctx, recordD)
+		ki.insert(ctx, recordE)
 
 		u.with("Root after 5 insertions", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(2)
@@ -308,17 +308,17 @@ func TestBuildKeyIndex(t *testing.T) {
 			nu.hasKeys("c", "d", "e")
 		})
 
-		ki.Delete(ctx, "e")
-		ki.Delete(ctx, "d")
-		ki.Delete(ctx, "c")
+		ki.remove(ctx, "e")
+		ki.remove(ctx, "d")
+		ki.remove(ctx, "c")
 
 		u.with("Root after deleting 3 times", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(0)
 			nu.hasKeys("a", "b")
 		})
 
-		ki.Delete(ctx, "a")
-		ki.Delete(ctx, "b")
+		ki.remove(ctx, "a")
+		ki.remove(ctx, "b")
 
 		u.with("Root should be empty", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(0)
@@ -333,7 +333,7 @@ func TestInsertOrderIndex(t *testing.T) {
 		oi := newOrderIndex(2, nil)
 		r := types.NewRecord("k")
 
-		oi.Insert(ctx, r)
+		oi.insert(ctx, r)
 
 		headNode, _ := oi.Node(oi.Head)
 
@@ -352,7 +352,7 @@ func TestInsertOrderIndex(t *testing.T) {
 		oldHead.Records = []*types.Record{nil, nil}
 
 		r := types.NewRecord("o")
-		oi.Insert(ctx, r)
+		oi.insert(ctx, r)
 
 		if oi.Head == oi.Tail {
 			t.Errorf("Expected new node to be allocated")
@@ -381,11 +381,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(ctx, types.NewRecord("a"))
-		oi.Insert(ctx, types.NewRecord("b"))
-		oi.Insert(ctx, types.NewRecord("c"))
-		oi.Insert(ctx, d)
-		oi.Insert(ctx, types.NewRecord("e"))
+		oi.insert(ctx, types.NewRecord("a"))
+		oi.insert(ctx, types.NewRecord("b"))
+		oi.insert(ctx, types.NewRecord("c"))
+		oi.insert(ctx, d)
+		oi.insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(4, false)
 
@@ -413,11 +413,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(ctx, types.NewRecord("a"))
-		oi.Insert(ctx, types.NewRecord("b"))
-		oi.Insert(ctx, types.NewRecord("c"))
-		oi.Insert(ctx, d)
-		oi.Insert(ctx, types.NewRecord("e"))
+		oi.insert(ctx, types.NewRecord("a"))
+		oi.insert(ctx, types.NewRecord("b"))
+		oi.insert(ctx, types.NewRecord("c"))
+		oi.insert(ctx, d)
+		oi.insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(100, false)
 
@@ -445,11 +445,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(ctx, types.NewRecord("a"))
-		oi.Insert(ctx, types.NewRecord("b"))
-		oi.Insert(ctx, types.NewRecord("c"))
-		oi.Insert(ctx, d)
-		oi.Insert(ctx, types.NewRecord("e"))
+		oi.insert(ctx, types.NewRecord("a"))
+		oi.insert(ctx, types.NewRecord("b"))
+		oi.insert(ctx, types.NewRecord("c"))
+		oi.insert(ctx, d)
+		oi.insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(4, true)
 
@@ -477,11 +477,11 @@ func TestGetOrderIndex(t *testing.T) {
 		d := types.NewRecord("d")
 		d.Deleted = true
 
-		oi.Insert(ctx, types.NewRecord("a"))
-		oi.Insert(ctx, types.NewRecord("b"))
-		oi.Insert(ctx, types.NewRecord("c"))
-		oi.Insert(ctx, d)
-		oi.Insert(ctx, types.NewRecord("e"))
+		oi.insert(ctx, types.NewRecord("a"))
+		oi.insert(ctx, types.NewRecord("b"))
+		oi.insert(ctx, types.NewRecord("c"))
+		oi.insert(ctx, d)
+		oi.insert(ctx, types.NewRecord("e"))
 
 		res := oi.Get(100, true)
 

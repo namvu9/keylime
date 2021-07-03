@@ -1,7 +1,6 @@
 package types
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -73,13 +72,13 @@ func TestSchemaBuilder(t *testing.T) {
 			_, err := sb.Build()
 
 			if len(err) != len(test.Errors) {
-				
+
 				t.Errorf("%d: Expected %d error, Got %d", i, len(test.Errors), len(err))
 			}
 
 			for i, e := range test.Errors {
 				if kind := errors.GetKind(err[i]); kind != e {
-					
+
 					t.Errorf("Want error kind %s, got %s", e, kind)
 				}
 			}
@@ -125,7 +124,7 @@ func TestSchemaBuilder(t *testing.T) {
 			_, err := sb.Build()
 
 			if len(err) != 0 {
-				
+
 				t.Errorf("%d: Expected 0 errors, Got %d", i, len(err))
 			}
 		}

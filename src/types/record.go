@@ -16,6 +16,7 @@ func Prettify(v interface{}) (string, error) {
 	return string(b), nil
 }
 
+// TODO: Comment
 type Record struct {
 	Key     string
 	Value   []byte // Deprecated
@@ -31,6 +32,7 @@ func (r *Record) Set(name string, value interface{}) {
 	r.Fields[name] = NewField(value)
 }
 
+// TODO: test
 func (r *Record) Get(fieldPath ...string) (Field, bool) {
 	f, ok := r.Fields[fieldPath[0]]
 	if !ok {
@@ -126,6 +128,7 @@ func (r *Record) UpdateFields(fields map[string]interface{}) *Record {
 	return c
 }
 
+// TODO: implement
 func byKey(this, that Record) int {
 	return strings.Compare(this.Key, that.Key)
 }
@@ -153,6 +156,7 @@ type Field struct {
 	Value interface{}
 }
 
+// TODO: Test
 func (f *Field) ToMap() error {
 	var (
 		v       = make(map[string]interface{})
@@ -190,6 +194,7 @@ func (f *Field) ToObject() error {
 	return nil
 }
 
+// TODO: Test
 func (f *Field) ToNumber() error {
 	v, err := strconv.ParseFloat(f.Value.(string), 64)
 	if err != nil {
@@ -202,6 +207,7 @@ func (f *Field) ToNumber() error {
 	return nil
 }
 
+// TODO: Test
 func (f *Field) ToBoolean() error {
 	v, err := strconv.ParseBool(f.Value.(string))
 	if err != nil {
@@ -213,6 +219,12 @@ func (f *Field) ToBoolean() error {
 	return nil
 }
 
+// TODO: implement
+func (f *Field) ToArray() error {
+	return nil
+}
+
+// TODO: test
 func (f *Field) Validate(name string, schemaField SchemaField) []error {
 	var (
 		errs = []error{}
@@ -310,6 +322,10 @@ func (f *Field) ToType(t Type) error {
 			return err
 		}
 
+	case Array:
+		// TODO: Implmement
+
+
 	default:
 		return fmt.Errorf("TypeConversionError: Cannot convert %s to %s", f.Type, t)
 	}
@@ -332,6 +348,7 @@ func (f *Field) IsOneOf(ts ...Type) bool {
 
 type FieldSelector func(Record) (string, Field, bool)
 
+// TODO: test
 func MakeFieldSelectors(selectors ...string) []FieldSelector {
 	out := []FieldSelector{}
 

@@ -23,7 +23,7 @@ type KeyIndex struct {
 	storage   ReadWriterTo
 }
 
-func (ki *KeyIndex) Insert(ctx context.Context, r types.Record) error {
+func (ki *KeyIndex) insert(ctx context.Context, r types.Record) error {
 	const op errors.Op = "(*KeyIndex).Insert"
 
 	if ki.root.Full() {
@@ -37,7 +37,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r types.Record) error {
 		ki.Height++
 
 		newRoot.save()
-		ki.Save()
+		ki.save()
 	}
 
 	page, err := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
@@ -50,7 +50,7 @@ func (ki *KeyIndex) Insert(ctx context.Context, r types.Record) error {
 	return nil
 }
 
-func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
+func (ki *KeyIndex) remove(ctx context.Context, key string) error {
 	const op errors.Op = "(*KeyIndex).Delete"
 
 	page, err := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
@@ -76,13 +76,13 @@ func (ki *KeyIndex) Delete(ctx context.Context, key string) error {
 
 		oldRoot.deletePage()
 		newRoot.save()
-		ki.Save()
+		ki.save()
 	}
 
-	return ki.bufWriter.Flush()
+	return ki.bufWriter.flush()
 }
 
-func (ki *KeyIndex) Get(ctx context.Context, key string) (*types.Record, error) {
+func (ki *KeyIndex) get(ctx context.Context, key string) (*types.Record, error) {
 	const op errors.Op = "(*KeyIndex).Get"
 
 	node, err := ki.root.iter(byKey(key)).Get()
@@ -104,7 +104,7 @@ type KeyIndexSerialized struct {
 	Height   int
 }
 
-func (ki *KeyIndex) Save() error {
+func (ki *KeyIndex) save() error {
 	var op errors.Op = "(*KeyIndex).Save"
 
 	buf := new(bytes.Buffer)
@@ -119,7 +119,7 @@ func (ki *KeyIndex) Save() error {
 	return nil
 }
 
-func (ki *KeyIndex) Create() error {
+func (ki *KeyIndex) create() error {
 	var op errors.Op = "(*KeyIndex).Create"
 
 	buf := new(bytes.Buffer)
@@ -136,7 +136,7 @@ func (ki *KeyIndex) Create() error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	return ki.bufWriter.Flush()
+	return ki.bufWriter.flush()
 }
 func (ki *KeyIndex) read() error {
 	const op errors.Op = "(*KeyIndex).read"
@@ -316,14 +316,14 @@ func (n *Node) Name() string {
 	return string(n.ID)
 }
 
-func (oi *OrderIndex) Insert(ctx context.Context, r *types.Record) error {
+func (oi *OrderIndex) insert(ctx context.Context, r *types.Record) error {
 	headNode, err := oi.Node(oi.Head)
 	if err != nil {
 		return err
 	}
 	if headNode.Full() {
 		headNode = oi.newNode()
-		err := oi.Save()
+		err := oi.save()
 		if err != nil {
 			return err
 		}
@@ -332,7 +332,7 @@ func (oi *OrderIndex) Insert(ctx context.Context, r *types.Record) error {
 	return headNode.Insert(r)
 }
 
-func (oi *OrderIndex) Delete(ctx context.Context, k string) error {
+func (oi *OrderIndex) remove(ctx context.Context, k string) error {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		for i, record := range node.Records {
@@ -348,7 +348,7 @@ func (oi *OrderIndex) Delete(ctx context.Context, k string) error {
 	return fmt.Errorf("Key not found: %s", k)
 }
 
-func (oi *OrderIndex) Save() error {
+func (oi *OrderIndex) save() error {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(oi)
@@ -360,7 +360,7 @@ func (oi *OrderIndex) Save() error {
 	return err
 }
 
-func (oi *OrderIndex) Load() error {
+func (oi *OrderIndex) load() error {
 	data, err := io.ReadAll(oi.storage.WithSegment("order_index"))
 	if err != nil {
 		return err
@@ -419,7 +419,7 @@ func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
 	return out
 }
 
-func (oi *OrderIndex) Update(ctx context.Context, r *types.Record) error {
+func (oi *OrderIndex) update(ctx context.Context, r *types.Record) error {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		for i, record := range node.Records {

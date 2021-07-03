@@ -37,7 +37,7 @@ func TestDeletePage(t *testing.T) {
 	makeBufPage := makePageWithBufferedStorage(bs)
 
 	t.Run("Missing key", func(t *testing.T) {
-		bs.Flush()
+		bs.flush()
 
 		page := newPageWithKeys(2, []string{"a", "c"})
 		page.writer = bs
@@ -62,7 +62,7 @@ func TestDeletePage(t *testing.T) {
 			{"b", []string{"a", "c"}},
 			{"c", []string{"a", "b"}},
 		} {
-			bs.Flush()
+			bs.flush()
 			var (
 				node = makeBufPage(2, makeRecords("a", "b", "c"))
 			)
@@ -86,7 +86,7 @@ func TestDeletePage(t *testing.T) {
 
 	t.Run("Internal node, predecessor has t keys", func(t *testing.T) {
 		u := &util{t}
-		bs.Flush()
+		bs.flush()
 
 		root := makeBufPage(2, makeRecords("5"),
 			makeBufPage(2, makeRecords("2", "3")),
@@ -126,7 +126,7 @@ func TestDeletePage(t *testing.T) {
 
 	t.Run("Deep internal node, predecessor has t keys", func(t *testing.T) {
 		u := &util{t}
-		bs.Flush()
+		bs.flush()
 
 		predPage := makeBufPage(2, makeRecords("6"))
 		mergePage := makeBufPage(2, makeRecords("4"))
@@ -186,7 +186,7 @@ func TestDeletePage(t *testing.T) {
 
 	t.Run("Internal node, successor has t keys", func(t *testing.T) {
 		u := &util{t}
-		bs.Flush()
+		bs.flush()
 
 		root := makeBufPage(2, makeRecords("5"),
 			makeBufPage(2, makeRecords("2")),
@@ -225,7 +225,7 @@ func TestDeletePage(t *testing.T) {
 
 	t.Run("Deep internal node, successor has t keys", func(t *testing.T) {
 		u := &util{t}
-		bs.Flush()
+		bs.flush()
 
 		mergedNode := makeBufPage(2, makeRecords("4"))
 		deleteNode := makeBufPage(2, makeRecords("7"))
@@ -288,7 +288,7 @@ func TestDeletePage(t *testing.T) {
 
 	t.Run("Internal node, predecessor and successor have t-1 keys", func(t *testing.T) {
 		u := &util{t}
-		bs.Flush()
+		bs.flush()
 
 		deletePage := makeBufPage(2, makeRecords("6"))
 		root := makeBufPage(2, makeRecords("5"),
@@ -342,7 +342,7 @@ func TestInsertRecord(t *testing.T) {
 		{"6", []string{"1", "3", "5"}, []string{"1", "3", "5", "6"}},
 		{"10", []string{"1", "3", "5"}, []string{"1", "10", "3", "5"}},
 	} {
-		bs.Flush()
+		bs.flush()
 
 		root := makeBufPage(3, makeRecords(test.keys...))
 
@@ -408,7 +408,7 @@ func TestSplitChild(t *testing.T) {
 	})
 
 	t.Run("Full internal node", func(t *testing.T) {
-		bs.Flush()
+		bs.flush()
 
 		l2a_child := makeBufPage(2, makeRecords("6", "7"))
 		l2b_child := makeBufPage(2, makeRecords("9", "10"))
@@ -464,7 +464,7 @@ func TestSplitChild(t *testing.T) {
 	})
 
 	t.Run("Full leaf child 2", func(t *testing.T) {
-		bs.Flush()
+		bs.flush()
 
 		root := makeBufPage(2, makeRecords("1", "3"),
 			makeBufPage(2, makeRecords("0")),
@@ -827,7 +827,7 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Left sibling has t keys", func(t *testing.T) {
 		u := util{t}
-		bs.Flush()
+		bs.flush()
 
 		root := makeBufPage(2, makeRecords("c"),
 			makeBufPage(2, makeRecords("a", "b")),
@@ -897,7 +897,7 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Right sibling has t keys", func(t *testing.T) {
 		u := util{t}
-		bs.Flush()
+		bs.flush()
 		root := makeBufPage(2, makeRecords("c"),
 			makeBufPage(2, makeRecords("a")),
 			makeBufPage(2, makeRecords("d", "e")),
@@ -966,7 +966,7 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Both siblings are sparse", func(t *testing.T) {
 		u := util{t}
-		bs.Flush()
+		bs.flush()
 
 		mergedPage := makeBufPage(2, makeRecords("a"))
 		deletedPage := makeBufPage(2, makeRecords("c"))

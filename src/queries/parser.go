@@ -24,7 +24,7 @@ const (
 
 // Operation is an intermediate representation of the
 // KeyLime query "language" and is interpretable by the
-// KeyLime store
+// KeyLime Store
 type Operation struct {
 	// The target collection of the operation
 	Collection string
@@ -51,6 +51,7 @@ type Parser struct {
 	tokens []Token
 }
 
+// TODO: Test
 func parseSchema(p *Parser) (*types.Schema, error) {
 	sb := types.NewSchemaBuilder()
 
@@ -165,6 +166,7 @@ func parseSchema(p *Parser) (*types.Schema, error) {
 	return schema, nil
 }
 
+// TODO: TEST
 func (p *Parser) Parse() (Operation, error) {
 	for token := p.tokens[p.index]; token.Type != "EOF"; token = p.Next() {
 		switch token.Value {
@@ -251,6 +253,14 @@ func (p *Parser) Parse() (Operation, error) {
 
 			p.op.Arguments["key"] = next.Value
 
+		case "FROM":
+			if p.Peek().Type != Identifier {
+				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after FROM, but got =%v", p.Peek().Type)
+			}
+
+			next := p.Next()
+			p.op.Arguments["key"] = next.Value
+
 		case "GET":
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after GET, but got =%v", p.Peek().Type)
@@ -259,17 +269,23 @@ func (p *Parser) Parse() (Operation, error) {
 			p.op.Command = commands[token.Value]
 			next := p.Next()
 
-			argString := next.Value
-			if p.Peek().Value == "FROM" {
-				p.op.Arguments["selectors"] = argString
-				p.Next()
-				if p.Peek().Type != Identifier {
-					return *p.op, fmt.Errorf("Parsing error: Expected Argument token after SET, but got =%v", p.Peek())
-				}
-				next := p.Next()
+			if _, ok := p.op.Arguments["key"]; !ok {
 				p.op.Arguments["key"] = next.Value
 			} else {
-				p.op.Arguments["key"] = argString
+				selectors := []string{p.CurrentToken().Value}
+
+				for p.Peek().Type == Identifier {
+					next := p.Next()
+					selectors = append(selectors, next.Value)
+				}
+
+				fmt.Println("SELECTORS", selectors)
+
+				if p.Peek().Value != "IN" {
+					return *p.op, fmt.Errorf("Parsing error: Expected Keyword IN, but got =%v", p.CurrentToken())
+				}
+
+				p.op.Arguments["selectors"] = strings.Join(selectors, " ")
 			}
 
 		case "IN":
@@ -312,14 +328,22 @@ func (p *Parser) Peek() Token {
 	return t
 }
 
-func NewParser(input string) *Parser {
-	tokens := tokenize(input)
+func parseTokens(tokens []Token) (*Operation, error) {
 	p := &Parser{
-		input:  input,
 		tokens: tokens,
 		op: &Operation{
 			Arguments: make(map[string]string),
 		}}
+	op, err := p.Parse()
 
-	return p
+	if err != nil {
+		return nil, err
+	}
+
+	return &op, err
+}
+
+func Parse(input string) (*Operation, error) {
+	tokens := tokenize(input)
+	return parseTokens(tokens)
 }

@@ -79,16 +79,15 @@ func main() {
 		var (
 			ctx     = context.Background()
 			text, _ = reader.ReadString(';')
-			p       = queries.NewParser(text)
 		)
 
-		op, err := p.Parse()
+		op, err := queries.Parse(text)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
-		res, err := s.Run(ctx, op)
+		res, err := s.Run(ctx, *op)
 		if err != nil {
 			fmt.Println(err)
 			continue

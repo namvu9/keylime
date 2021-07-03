@@ -69,9 +69,7 @@ func TestParse(t *testing.T) {
 			},
 		},
 	} {
-		p := NewParser("")
-		p.tokens = test.tokens
-		op, err := p.Parse()
+		op, err := parseTokens(test.tokens)
 
 		if err != nil {
 			t.Errorf("%d: Unexpected parsing error: %s", i, err)
