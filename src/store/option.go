@@ -16,4 +16,3 @@ func WithStorage(rw ReadWriterTo) Option {
 		s.storage = rw
 	}
 }
-

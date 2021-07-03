@@ -32,4 +32,3 @@ func (ki KeyIndex) String() string {
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
 }
-

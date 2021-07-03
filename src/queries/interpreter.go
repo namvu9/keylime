@@ -27,14 +27,14 @@ func Interpret(ctx context.Context, s types.Store, input string) (interface{}, e
 type cmdHandler func(context.Context, types.Store, Operation) (interface{}, error)
 
 var handlers = map[Command]cmdHandler{
-	Get: handleGet,
-	Set: handleSet,
+	Get:    handleGet,
+	Set:    handleSet,
 	Update: handleUpdate,
 	Create: handleCreate,
 	Delete: handleDelete,
-	First: handleFirst,
-	Last: handleLast,
-	Info: handleInfo,
+	First:  handleFirst,
+	Last:   handleLast,
+	Info:   handleInfo,
 }
 
 func handleGet(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
@@ -100,7 +100,6 @@ func handleCreate(ctx context.Context, s types.Store, op Operation) (interface{}
 	return nil, nil
 }
 
-
 func handleDelete(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
 	var (
 		c   = s.Collection(op.Collection)
@@ -140,4 +139,3 @@ func handleInfo(ctx context.Context, s types.Store, op Operation) (interface{}, 
 	c.Info(ctx)
 	return nil, nil
 }
-

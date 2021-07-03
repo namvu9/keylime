@@ -336,7 +336,7 @@ func (oi *OrderIndex) remove(ctx context.Context, k string) error {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		for i, record := range node.Records {
-			if record.Key == k{
+			if record.Key == k {
 				node.Records[i].Deleted = true
 				return node.Save()
 			}

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
-	record "github.com/namvu9/keylime/src/types"
+	"github.com/namvu9/keylime/src/types"
 )
 
 // A Page is an implementation of a node in a B-tree.
@@ -16,7 +16,7 @@ type Page struct {
 	ID string
 
 	children []*Page
-	records  []record.Record
+	records  []types.Record
 	loaded   bool
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -120,8 +120,8 @@ func (p *Page) Delete(k string) error {
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *Page) insert(r record.Record) int {
-	out := []record.Record{}
+func (p *Page) insert(r types.Record) int {
+	out := []types.Record{}
 
 	for i, key := range p.records {
 		if r.Key == key.Key {
@@ -249,7 +249,7 @@ func (p *Page) splitChild(index int) error {
 	return nil
 }
 
-func (p *Page) setRecord(index int, r record.Record) {
+func (p *Page) setRecord(index int, r types.Record) {
 	p.records[index] = r
 }
 
@@ -326,7 +326,7 @@ func (p *Page) nextChildSibling(index int) *Page {
 }
 
 // TODO: TEST
-func (p *Page) mergeWith(median record.Record, other *Page) {
+func (p *Page) mergeWith(median types.Record, other *Page) {
 	p.records = append(p.records, median)
 	p.records = append(p.records, other.records...)
 	p.children = append(p.children, other.children...)
@@ -358,7 +358,7 @@ func (p *Page) mergeChildren(i int) {
 }
 
 // TODO: return error
-func partitionMedian(nums []record.Record) (record.Record, []record.Record, []record.Record) {
+func partitionMedian(nums []types.Record) (types.Record, []types.Record, []types.Record) {
 	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
 		panic("Cannot partition an even number of records")
 	}
@@ -482,7 +482,7 @@ type PageSerialized struct {
 	ID string
 
 	Children []string
-	Records  []record.Record
+	Records  []types.Record
 	loaded   bool
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).

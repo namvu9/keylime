@@ -56,4 +56,3 @@ func (fs *FStorage) WithSegment(name string) store.ReadWriterTo {
 		location: path.Join(fs.location, name),
 	}
 }
-

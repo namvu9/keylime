@@ -63,7 +63,6 @@ func (c *collection) Set(ctx context.Context, k string, fields Fields) error {
 	return c.commit()
 }
 
-
 func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	var wg sync.WaitGroup
 
@@ -79,15 +78,11 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	}
 
 	wg.Add(2)
-	ctx, cancelFn := context.WithCancel(ctx)
 	errChan := make(chan error, 2)
 	go func() {
 		defer wg.Done()
-		// TODO: use ctx cancelFunc
 		if err := c.primaryIndex.insert(ctx, *r); err != nil {
 			errChan <- err
-			cancelFn()
-			return
 		}
 	}()
 
@@ -96,9 +91,7 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 
 		if err := c.orderIndex.insert(ctx, r); err != nil {
 			errChan <- err
-			return
 		}
-
 	}()
 
 	wg.Wait()
@@ -118,29 +111,24 @@ func (c *collection) commit() error {
 	go func() {
 		defer wg.Done()
 		if err := c.primaryIndex.save(); err != nil {
-
 			errChan <- err
 			return
 		}
-		if err := c.primaryIndex.bufWriter.flush(); err != nil {
 
+		if err := c.primaryIndex.bufWriter.flush(); err != nil {
 			errChan <- err
-			return
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
 		if err := c.orderIndex.save(); err != nil {
-
 			errChan <- err
 			return
 		}
 
 		if err := c.orderIndex.writer.flush(); err != nil {
-
 			errChan <- err
-			return
 		}
 	}()
 
@@ -153,7 +141,7 @@ func (c *collection) commit() error {
 	return nil
 }
 
-func (c *collection) GetLast(ctx context.Context, n int) ([]*types.Record, error){
+func (c *collection) GetLast(ctx context.Context, n int) ([]*types.Record, error) {
 	err := c.load()
 	if err != nil {
 		return nil, err
@@ -163,7 +151,7 @@ func (c *collection) GetLast(ctx context.Context, n int) ([]*types.Record, error
 	return c.orderIndex.Get(n, false), nil
 }
 
-func (c *collection) GetFirst(ctx context.Context, n int) ([]*types.Record, error){
+func (c *collection) GetFirst(ctx context.Context, n int) ([]*types.Record, error) {
 	err := c.load()
 	if err != nil {
 		return nil, err
@@ -276,7 +264,6 @@ func (c *collection) load() error {
 	}
 
 	if ok {
-
 		data, err := io.ReadAll(schemaReader)
 		if err != nil {
 			return errors.Wrap(op, errors.EIO, err)
@@ -311,7 +298,7 @@ func (c *collection) Delete(ctx context.Context, k string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	return c.commit()
 }
 
@@ -339,7 +326,7 @@ func (c *collection) remove(ctx context.Context, k string) error {
 	}
 
 	return err
-	}
+}
 
 func (c *collection) save() error {
 	wrapError := errors.WrapWith("(*Collection).Save", errors.EIO)

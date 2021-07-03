@@ -325,7 +325,6 @@ func (f *Field) ToType(t Type) error {
 	case Array:
 		// TODO: Implmement
 
-
 	default:
 		return fmt.Errorf("TypeConversionError: Cannot convert %s to %s", f.Type, t)
 	}
@@ -354,7 +353,7 @@ func MakeFieldSelectors(selectors ...string) []FieldSelector {
 
 	for _, selector := range selectors {
 		name := selector
-		
+
 		out = append(out, func(r Record) (string, Field, bool) {
 			fieldPath := strings.Split(name, ".")
 			f, ok := r.Fields[fieldPath[0]]

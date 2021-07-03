@@ -11,7 +11,6 @@ type Collection interface {
 	GetFirst(ctx context.Context, n int) ([]*Record, error)
 	GetLast(ctx context.Context, n int) ([]*Record, error)
 
-
 	Set(ctx context.Context, k string, fields map[string]interface{}) error
 	Delete(ctx context.Context, k string) error
 	Update(ctx context.Context, k string, fields map[string]interface{}) error
