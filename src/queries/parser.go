@@ -171,25 +171,30 @@ func (p *Parser) Parse() (Operation, error) {
 		case "SEMICOLON":
 			break
 		case "FIRST":
+			p.op.Command = First
+
 			if p.Peek().Type != NumberValue {
 				return *p.op, fmt.Errorf("Parsing error: Expected Number token after FIRST but got %v", p.Peek())
 			}
+
 			n := p.Next()
-			p.op.Command = First
 			p.op.Arguments["n"] = n.Value
 		case "LAST":
+			p.op.Command = Last
+
 			if p.Peek().Type != NumberValue {
 				return *p.op, fmt.Errorf("Parsing error: Expected Number token after LAST but got %v", p.Peek())
 			}
 			n := p.Next()
-			p.op.Command = Last
 			p.op.Arguments["n"] = n.Value
+
 		case "DELETE":
+			p.op.Command = Delete
+
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Argument token after DELETE, but got =%v", p.Peek())
 			}
 
-			p.op.Command = Delete
 			next := p.Next()
 
 			p.op.Arguments["key"] = next.Value
@@ -220,24 +225,28 @@ func (p *Parser) Parse() (Operation, error) {
 				p.op.Payload.Data = data
 			}
 		case "CREATE":
+			p.op.Command = Create
+
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after CREATE, but got =%v", p.Peek())
 			}
 
-			p.op.Command = Create
 			next := p.Next()
 			p.op.Collection = next.Value
 
 		case "INFO":
+			p.op.Command = Info
+
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after INFO, but got =%v", p.Peek())
 			}
 
-			p.op.Command = commands[token.Value]
 			next := p.Next()
 			p.op.Collection = next.Value
 
 		case "SET", "UPDATE":
+			p.op.Command = commands[token.Value]
+
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after SET, but got =%v", p.Peek())
 			}
@@ -246,7 +255,6 @@ func (p *Parser) Parse() (Operation, error) {
 				return *p.op, fmt.Errorf("Parsing error: The %s command requires a payload", token.Value)
 			}
 
-			p.op.Command = commands[token.Value]
 			next := p.Next()
 
 			p.op.Arguments["key"] = next.Value
@@ -260,11 +268,12 @@ func (p *Parser) Parse() (Operation, error) {
 			p.op.Arguments["key"] = next.Value
 
 		case "GET":
+			p.op.Command = Get
+
 			if p.Peek().Type != Identifier {
 				return *p.op, fmt.Errorf("Parsing error: Expected Identifier token after GET, but got =%v", p.Peek().Type)
 			}
 
-			p.op.Command = commands[token.Value]
 			next := p.Next()
 
 			if _, ok := p.op.Arguments["key"]; !ok {
@@ -276,8 +285,6 @@ func (p *Parser) Parse() (Operation, error) {
 					next := p.Next()
 					selectors = append(selectors, next.Value)
 				}
-
-				fmt.Println("SELECTORS", selectors)
 
 				if p.Peek().Value != "IN" {
 					return *p.op, fmt.Errorf("Parsing error: Expected Keyword IN, but got =%v", p.CurrentToken())

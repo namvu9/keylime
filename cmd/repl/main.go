@@ -61,7 +61,9 @@ func main() {
 
 		select {
 		case <-ctx.Done():
-			fmt.Println("Error:", ctx.Err())
+			if ctx.Err() == context.DeadlineExceeded {
+				fmt.Println("Error: request timed out")
+			}
 
 		case v := <-done:
 			if v != nil {
