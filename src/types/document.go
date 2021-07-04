@@ -245,21 +245,33 @@ func (f *Field) Validate(name string, schemaField SchemaField) []error {
 		if schemaField.ElementType != nil {
 			for _, e := range arr {
 				if got := GetDataType(e); got != *schemaField.ElementType {
-					errs = append(errs, fmt.Errorf("Expected element of type %s but got %s", *schemaField.ElementType, got))
+					errs = append(errs, fmt.Errorf("Expected array element of type %s but got %s", *schemaField.ElementType, got))
 				}
 			}
 		}
 
-		if schemaField.Min != nil {
-			if len(arr) < *schemaField.Min {
-				errs = append(errs, fmt.Errorf("Expected at least %d elements, Got %d", *schemaField.Min, len(arr)))
-			}
+		if schemaField.Min != nil && !IsGreaterThan(len(arr), *schemaField.Min) {
+			errs = append(errs, fmt.Errorf("Expected at least %d elements, Got %d", *schemaField.Min, len(arr)))
 		}
 
-		if schemaField.Max != nil {
-			if len(arr) < *schemaField.Min {
-				errs = append(errs, fmt.Errorf("Expected at most %d elements, Got %d", *schemaField.Max, len(arr)))
-			}
+		if schemaField.Max != nil && !IsLessThan(len(arr), *schemaField.Max) {
+			errs = append(errs, fmt.Errorf("Expected at most %d elements, Got %d", *schemaField.Max, len(arr)))
+		}
+	}
+
+	if f.IsType(String) {
+		s, ok := f.Value.(string)
+		if !ok {
+			errs = append(errs, fmt.Errorf("Could not convert field value to string"))
+			return errs
+		}
+
+		if schemaField.Min != nil && !IsGreaterThan(len(s), *schemaField.Min) {
+			errs = append(errs, fmt.Errorf("Expected at least %d elements, Got %d", *schemaField.Min, len(s)))
+		}
+
+		if schemaField.Max != nil && !IsLessThan(len(s), *schemaField.Max) {
+			errs = append(errs, fmt.Errorf("Expected at most %d elements, Got %d", *schemaField.Max, len(s)))
 		}
 	}
 
@@ -268,6 +280,18 @@ func (f *Field) Validate(name string, schemaField SchemaField) []error {
 	}
 
 	return nil
+}
+
+func IsWithinRange(n int, min, max int) bool {
+	return n >= min && n <= max
+}
+
+func IsGreaterThan(n int, min int) bool {
+	return n >= min
+}
+
+func IsLessThan(n int, max int) bool {
+	return n <= max
 }
 
 func (f *Field) ToType(t Type) error {

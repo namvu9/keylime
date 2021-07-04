@@ -12,7 +12,7 @@ import (
 func TestGet(t *testing.T) {
 	ctx := context.Background()
 	var (
-		root = makePage(2, makeRecords("g"),
+		root = makePage(2, makeDocs("g"),
 			makePage(2, []types.Document{
 				types.NewDoc("a"),
 				types.NewDoc("b"),
@@ -61,7 +61,7 @@ func TestInsert(t *testing.T) {
 	t.Run("KI is saved if root changes", func(t *testing.T) {
 		reporter := newIOReporter()
 		ki := newKeyIndex(2, reporter)
-		ki.root.records = makeRecords("k", "o", "s")
+		ki.root.docs = makeDocs("k", "o", "s")
 
 		ki.insert(context.Background(), types.NewDoc("q"))
 		ki.bufWriter.flush()
@@ -94,11 +94,11 @@ func TestInsert(t *testing.T) {
 
 	t.Run("Insertion into tree with full root and full target leaf", func(t *testing.T) {
 		var (
-			root = makePage(2, makeRecords("k", "o", "s"),
-				makePage(2, makeRecords("a", "b", "c")),
-				makePage(2, makeRecords("l", "m")),
-				makePage(2, makeRecords("p", "q")),
-				makePage(2, makeRecords("x", "y")),
+			root = makePage(2, makeDocs("k", "o", "s"),
+				makePage(2, makeDocs("a", "b", "c")),
+				makePage(2, makeDocs("l", "m")),
+				makePage(2, makeDocs("p", "q")),
+				makePage(2, makeDocs("x", "y")),
 			)
 			ki = newKeyIndex(2, nil)
 		)
@@ -156,14 +156,14 @@ func TestDelete(t *testing.T) {
 		deleteMe := ki.newPage(true)
 
 		oldRoot := ki.newPage(false)
-		oldRoot.records = append(oldRoot.records, types.NewDoc("5"))
+		oldRoot.docs = append(oldRoot.docs, types.NewDoc("5"))
 		oldRoot.children = []*Page{
 			ki.newPage(true),
 			deleteMe,
 		}
 
-		oldRoot.children[0].records = append(oldRoot.children[0].records, types.NewDoc("2"))
-		oldRoot.children[1].records = append(oldRoot.children[1].records, types.NewDoc("8"))
+		oldRoot.children[0].docs = append(oldRoot.children[0].docs, types.NewDoc("2"))
+		oldRoot.children[1].docs = append(oldRoot.children[1].docs, types.NewDoc("8"))
 
 		ki.root = oldRoot
 
@@ -198,7 +198,7 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete missing key", func(t *testing.T) {
 		ki := newKeyIndex(2, nil)
-		ki.root = makePage(2, makeRecords("5"))
+		ki.root = makePage(2, makeDocs("5"))
 
 		err := ki.remove(ctx, "10")
 		if err == nil {
@@ -209,10 +209,10 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
 		u := util{t}
 		ki := newKeyIndex(2, nil)
-		ki.root = makePage(2, makeRecords("5"))
+		ki.root = makePage(2, makeDocs("5"))
 
 		ki.remove(ctx, "5")
-		u.hasNRecords("Root", 0, ki.root)
+		u.hasNDocs("Root", 0, ki.root)
 		u.hasNChildren("Root", 0, ki.root)
 	})
 
@@ -221,9 +221,9 @@ func TestDelete(t *testing.T) {
 	t.Run("Delete from root with 1 key", func(t2 *testing.T) {
 		u := util{t2}
 		ki := newKeyIndex(2, nil)
-		ki.root = makePage(2, makeRecords("5"),
-			makePage(2, makeRecords("2")),
-			makePage(2, makeRecords("8")),
+		ki.root = makePage(2, makeDocs("5"),
+			makePage(2, makeDocs("2")),
+			makePage(2, makeDocs("8")),
 		)
 
 		ki.remove(ctx, "5")
@@ -237,14 +237,14 @@ func TestDelete(t *testing.T) {
 	// Case 1: Delete From Leaf
 	t.Run("Delete from leaf", func(t *testing.T) {
 		ki := newKeyIndex(2, nil)
-		root := makePage(2, makeRecords("1", "2", "3"))
+		root := makePage(2, makeDocs("1", "2", "3"))
 		ki.root = root
 
 		ki.remove(ctx, "2")
 
 		u := util{t}
 		u.with("leaf", root, func(nu namedUtil) {
-			nu.hasNRecords(2)
+			nu.hasNDocs(2)
 			nu.hasKeys("1", "3")
 			nu.hasNChildren(0)
 		})
@@ -321,7 +321,7 @@ func TestBuildKeyIndex(t *testing.T) {
 
 		u.with("Root should be empty", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(0)
-			nu.hasNRecords(0)
+			nu.hasNDocs(0)
 		})
 	})
 }
@@ -329,29 +329,41 @@ func TestBuildKeyIndex(t *testing.T) {
 func TestInsertOrderIndex(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Normal insert", func(t *testing.T) {
-		oi := newOrderIndex(2, nil)
-		r := types.NewDoc("k")
+		reporter := newIOReporter()
+		oi := newOrderIndex(2, reporter)
+		doc := types.NewDoc("k")
 
-		oi.insert(ctx, r)
+		oi.insert(ctx, doc)
+		oi.writer.flush()
 
 		headNode, _ := oi.Node(oi.Head)
 
-		if got := len(headNode.Records); got != 1 {
+		if got := len(headNode.Docs); got != 1 {
 			t.Errorf("n records, want %d got %d", 1, got)
 		}
 
-		//if first := headNode.Records[0]; first != r || first.Key != "k" {
-		//t.Errorf("Expected first record to have key k, got %s", first.Key)
-		//}
+		if headNode.ID != oi.Head {
+			t.Errorf("Want %s Got %s", headNode.ID, oi.Head)
+		}
+
+		if _, ok := reporter.writes[string(headNode.ID)]; !ok {
+			t.Errorf("Head node was not written")
+		}
+
+		if first := headNode.Docs[0]; first.Key != doc.Key || first.Key != "k" {
+			t.Errorf("Expected first record to have key k, got %s", first.Key)
+		}
 	})
 
 	t.Run("Insertion into full node", func(t *testing.T) {
-		oi := newOrderIndex(2, nil)
+		reporter := newIOReporter()
+		oi := newOrderIndex(2, reporter)
 		oldHead, _ := oi.Node(oi.Head)
-		oldHead.Records = []types.Document{types.NewDoc("nil"), types.NewDoc("HAHA")}
+		oldHead.Docs = []types.Document{types.NewDoc("nil"), types.NewDoc("HAHA")}
 
 		r := types.NewDoc("o")
 		oi.insert(ctx, r)
+		oi.writer.flush()
 
 		if oi.Head == oi.Tail {
 			t.Errorf("Expected new node to be allocated")
@@ -369,7 +381,67 @@ func TestInsertOrderIndex(t *testing.T) {
 		if oldHead.Prev != oi.Head {
 			t.Errorf("Old head does not reference new head")
 		}
+
+		if _, ok := reporter.writes[string(oldHead.ID)]; !ok {
+			t.Errorf("Old head was not written")
+		}
+
+		if _, ok := reporter.writes[string(oi.Head)]; !ok {
+			t.Errorf("New head was not written")
+		}
 	})
+}
+
+func TestDeleteOrderIndex(t *testing.T) {
+	reporter := newIOReporter()
+	oi := newOrderIndex(2, reporter)
+	doc := types.NewDoc("k")
+
+	headNode, err := oi.Node(oi.Head)
+	oi.insert(context.Background(), doc)
+
+	if headNode.Docs[0].Deleted {
+		t.Errorf("Newly inserted documents should not be deleted")
+	}
+
+	oi.remove(context.Background(), doc.Key)
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	if !headNode.Docs[0].Deleted {
+		t.Errorf("Expected document with key k to be deleted")
+	}
+
+	oi.writer.flush()
+	if _, ok := reporter.writes[headNode.Name()]; !ok {
+		t.Errorf("Node was not written")
+	}
+}
+
+func TestUpdateOrderIndex(t *testing.T) {
+	reporter := newIOReporter()
+	oi := newOrderIndex(2, reporter)
+	doc := types.NewDoc("k")
+
+	headNode, err := oi.Node(oi.Head)
+	if err != nil {
+		t.Error(err)
+	}
+	oi.insert(context.Background(), doc)
+
+	doc.Set(map[string]interface{}{
+		"LOL": 4,
+	})
+
+	oi.update(context.Background(), doc)
+
+	oi.writer.flush()
+	if _, ok := reporter.writes[headNode.Name()]; !ok {
+		t.Errorf("Node was not written")
+	}
+
 }
 
 func TestGetOrderIndex(t *testing.T) {
@@ -499,6 +571,54 @@ func TestGetOrderIndex(t *testing.T) {
 		}
 		if got := res[3].Key; got != "e" {
 			t.Errorf("3: Want key e, got %s", got)
+		}
+	})
+}
+
+// Make sure both the indexes and the root nodes are saved
+func TestCreateIndex(t *testing.T) {
+	t.Run("Key Index", func(t *testing.T) {
+		reporter := newIOReporter()
+		ki := newKeyIndex(10, reporter)
+
+		err := ki.create()
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		}
+
+		if _, ok := reporter.writes["key_index"]; !ok {
+			t.Errorf("Did not write key_index")
+		}
+
+		if ki.RootPage != ki.root.ID {
+			t.Errorf("Expected RootPage (%s) and root ID (%s) to be equal", ki.RootPage, ki.root.ID)
+		}
+
+		if _, ok := reporter.writes[ki.root.ID]; !ok {
+			t.Errorf("Did not write root node")
+		}
+
+	})
+
+	t.Run("Order index", func(t *testing.T) {
+		reporter := newIOReporter()
+		oi := newOrderIndex(10, reporter)
+
+		err := oi.create()
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		}
+
+		if oi.Head != oi.Tail {
+			t.Errorf("Expected head (%s) and tail (%s) to be equal", oi.Head, oi.Tail)
+		}
+
+		if _, ok := reporter.writes["order_index"]; !ok {
+			t.Errorf("Did not write order_index")
+		}
+
+		if _, ok := reporter.writes[string(oi.Head)]; !ok {
+			t.Errorf("Did not write Head/Tail node")
 		}
 	})
 }

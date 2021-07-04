@@ -29,7 +29,7 @@ func TestTokenizer(t *testing.T) {
 		}
 
 		for i, token := range tokens {
-			if token.Type != Delimiter && token.Type != "EOF" {
+			if token.Type != DelimiterToken && token.Type != "EOF" {
 				t.Errorf("Expected token type Delimiter got=%v", token.Type)
 			}
 			if token.Value != expTokens[i] {
@@ -67,7 +67,7 @@ func TestTokenizer(t *testing.T) {
 		}
 
 		for i, token := range tokens {
-			if token.Type != Keyword && token.Type != EOF {
+			if token.Type != KeywordToken && token.Type != EOF {
 				t.Errorf("Expected token type Keyword got=%v", token.Type)
 			}
 			if token.Value != expTokens[i] {
@@ -82,46 +82,16 @@ func TestTokenizer(t *testing.T) {
 		tokens := tokenize(input)
 
 		expTokens := []Token{
-			{
-				Type:  Identifier,
-				Value: "afalseprophet",
-			},
-			{
-				Type:  BooleanValue,
-				Value: "false",
-			},
-			{
-				Type:  BooleanValue,
-				Value: "true",
-			},
-			{
-				Type:  Identifier,
-				Value: "nam",
-			},
-			{
-				Type:  NumberValue,
-				Value: "90490",
-			},
-			{
-				Type:  Identifier,
-				Value: "a980",
-			},
-			{
-				Type:  Identifier,
-				Value: "x",
-			},
-			{
-				Type:  Identifier,
-				Value: "lol",
-			},
-			{
-				Type:  StringValue,
-				Value: "dude",
-			},
-			{
-				Type:  StringValue,
-				Value: "\"This\" is a string",
-			},
+			Identifier("afalseprophet"),
+			Boolean("false"),
+			Boolean("true"),
+			Identifier("nam"),
+			Number("90490"),
+			Identifier("a980"),
+			Identifier("x"),
+			Identifier("lol"),
+			String("dude"),
+			String( "\"This\" is a string"),
 			EOFToken,
 		}
 
@@ -142,34 +112,13 @@ func TestTokenizer(t *testing.T) {
 		tokens := tokenize(input)
 
 		expTokens := []Token{
-			{
-				Type:  Keyword,
-				Value: "WITH",
-			},
-			{
-				Type:  StringValue,
-				Value: "{\"age\": 4}",
-			},
-			{
-				Type:  Keyword,
-				Value: "SET",
-			},
-			{
-				Type:  Identifier,
-				Value: "doc",
-			},
-			{
-				Type:  Keyword,
-				Value: "IN",
-			},
-			{
-				Type:  Identifier,
-				Value: "testcollection",
-			},
-			{
-				Type:  Delimiter,
-				Value: SEMICOLON,
-			},
+			Keyword("WITH"),
+			String("{\"age\": 4}"),
+			Keyword("SET"),
+			Identifier("doc"),
+			Keyword("IN"),
+			Identifier("testcollection"),
+			Delimiter(SEMICOLON),
 			EOFToken,
 		}
 
@@ -189,7 +138,7 @@ func TestTokenizer(t *testing.T) {
 	{
 		age?: Number,
 		name: String(0,10),
-		longName: []Number,
+		longName: []Number(,10),
 		map: Map,
 		object: {
 			age: Number = 4
@@ -199,146 +148,45 @@ func TestTokenizer(t *testing.T) {
 		tokens := tokenize(input)
 
 		expTokens := []Token{
-			{
-				Type:  Delimiter,
-				Value: LBRACE,
-			},
-			{
-				Type:  Identifier,
-				Value: "age",
-			},
-			{
-				Type:  Delimiter,
-				Value: QUESTIONMARK,
-			},
-			{
-				Type:  Delimiter,
-				Value: COLON,
-			},
-			{
-				Type:  Keyword,
-				Value: "Number",
-			},
-			{
-				Type:  Delimiter,
-				Value: COMMA,
-			},
-			{
-				Type:  Identifier,
-				Value: "name",
-			},
-			{
-				Type:  Delimiter,
-				Value: COLON,
-			},
-			{
-				Type:  Keyword,
-				Value: "String",
-			},
-			{
-				Type:  Delimiter,
-				Value: LPAREN,
-			},
-			{
-				Type:  NumberValue,
-				Value: "0",
-			},
-			{
-				Type:  Delimiter,
-				Value: COMMA,
-			},
-			{
-				Type:  NumberValue,
-				Value: "10",
-			},
-			{
-				Type:  Delimiter,
-				Value: RPAREN,
-			},
-			{
-				Type:  Delimiter,
-				Value: COMMA,
-			},
-			{
-				Type:  Identifier,
-				Value: "longName",
-			},
-			{
-				Type:  Delimiter,
-				Value: COLON,
-			},
-			{
-				Type:  Delimiter,
-				Value: LBRACKET,
-			},
-			{
-				Type:  Delimiter,
-				Value: RBRACKET,
-			},
-			{
-				Type:  Keyword,
-				Value: "Number",
-			},
-			{
-				Type:  Delimiter,
-				Value: COMMA,
-			},
-			{
-				Type:  Identifier,
-				Value: "map",
-			},
-			{
-				Type:  Delimiter,
-				Value: COLON,
-			},
-			{
-				Type:  Keyword,
-				Value: "Map",
-			},
-			{
-				Type:  Delimiter,
-				Value: COMMA,
-			},
-			{
-				Type:  Identifier,
-				Value: "object",
-			},
-			{
-				Type:  Delimiter,
-				Value: COLON,
-			},
-			{
-				Type:  Delimiter,
-				Value: LBRACE,
-			},
-			{
-				Type:  Identifier,
-				Value: "age",
-			},
-			{
-				Type:  Delimiter,
-				Value: COLON,
-			},
-			{
-				Type:  Keyword,
-				Value: "Number",
-			},
-			{
-				Type:  Delimiter,
-				Value: EQUALS,
-			},
-			{
-				Type:  NumberValue,
-				Value: "4",
-			},
-			{
-				Type:  Delimiter,
-				Value: RBRACE,
-			},
-			{
-				Type:  Delimiter,
-				Value: RBRACE,
-			},
+			Delimiter(LBRACE),
+			Identifier("age"),
+			Delimiter(QUESTIONMARK),
+			Delimiter(COLON),
+			Keyword("Number"),
+			Delimiter(COMMA),
+			Identifier("name"),
+			Delimiter(COLON),
+			Keyword("String"),
+			Delimiter(LPAREN),
+			Number("0"),
+			Delimiter(COMMA),
+			Number("10"),
+			Delimiter(RPAREN),
+			Delimiter(COMMA),
+			Identifier("longName"),
+			Delimiter(COLON),
+			Delimiter(LBRACKET),
+			Delimiter(RBRACKET),
+			Keyword("Number"),
+			Delimiter(LPAREN),
+			Delimiter(COMMA),
+			Number("10"),
+			Delimiter(RPAREN),
+			Delimiter(COMMA),
+			Identifier("map"),
+			Delimiter(COLON),
+			Keyword("Map"),
+			Delimiter(COMMA),
+			Identifier("object"),
+			Delimiter(COLON),
+			Delimiter(LBRACE),
+			Identifier("age"),
+			Delimiter(COLON),
+			Keyword("Number"),
+			Delimiter(EQUALS),
+			Number("4"),
+			Delimiter(RBRACE),
+			Delimiter(RBRACE),
 			EOFToken,
 		}
 

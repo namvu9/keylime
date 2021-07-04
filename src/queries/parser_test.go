@@ -1,8 +1,11 @@
 package queries
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/namvu9/keylime/src/types"
 )
 
 func TestParse(t *testing.T) {
@@ -15,13 +18,13 @@ func TestParse(t *testing.T) {
 	}{
 		{
 			tokens: []Token{
-				{Type: Keyword, Value: "WITH"},
-				{Type: StringValue, Value: "{\"age\": \"lol\", \"obj\": {\"number\": [1,2,3]}}"},
-				{Type: Keyword, Value: "SET"},
-				{Type: Identifier, Value: "1"},
-				{Type: Keyword, Value: "IN"},
-				{Type: Identifier, Value: "test"},
-				{Type: Delimiter, Value: SEMICOLON},
+				Keyword("WITH"),
+				String("{\"age\": \"lol\", \"obj\": {\"number\": [1,2,3]}}"),
+				Keyword("SET"),
+				Identifier("1"),
+				Keyword("IN"),
+				Identifier("test"),
+				Delimiter(SEMICOLON),
 				EOFToken,
 			},
 			Collection: "test",
@@ -36,30 +39,30 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
-		//{
-		//tokens: []Token{
-		//{Type: "Command", Value: "GET"},
-		//{Type: "Argument", Value: "a,b,c,d,e[0],f[0:]"},
-		//{Type: "Clause", Value: "FROM"},
-		//{Type: "Argument", Value: "a"},
-		//{Type: "Clause", Value: "IN"},
-		//{Type: "Argument", Value: "test"},
-		//{Type: "EOF", Value: "EOF"},
-		//},
-		//Collection: "test",
-		//Command:    Get,
-		//Arguments: map[string]string{
-		//"key":       "a",
-		//"selectors": "a,b,c,d,e[0],f[0:]",
-		//},
-		//},
 		{
 			tokens: []Token{
-				{Type: Keyword, Value: "GET"},
-				{Type: Identifier, Value: "a"},
-				{Type: Keyword, Value: "IN"},
-				{Type: Identifier, Value: "test"},
-				{Type: Delimiter, Value: SEMICOLON},
+				Keyword("FROM"),
+				Identifier("a"),
+				Keyword("GET"),
+				Identifier("a b c d e[0] f[0:]"),
+				Keyword("IN"),
+				Identifier("test"),
+				EOFToken,
+			},
+			Collection: "test",
+			Command:    Get,
+			Arguments: map[string]string{
+				"key":       "a",
+				"selectors": "a b c d e[0] f[0:]",
+			},
+		},
+		{
+			tokens: []Token{
+				{Type: KeywordToken, Value: "GET"},
+				{Type: IdentifierToken, Value: "a"},
+				{Type: KeywordToken, Value: "IN"},
+				{Type: IdentifierToken, Value: "test"},
+				{Type: DelimiterToken, Value: SEMICOLON},
 				EOFToken,
 			},
 			Collection: "test",
@@ -100,6 +103,91 @@ func TestParse(t *testing.T) {
 				t.Errorf("Data[%s]: Want=%v Got=%v", k, v, got)
 			}
 		}
+	}
+
+}
+
+func TestParseSchema(t *testing.T) {
+	input := []Token{
+		Keyword("WITH"),
+		Keyword("SCHEMA"),
+		Delimiter(LBRACE),
+		Identifier("age"),
+		Delimiter(COLON),
+		Keyword("Number"),
+		Delimiter(QUESTIONMARK),
+		Delimiter(COMMA),
+		Identifier("name"),
+		Delimiter(COLON),
+		Keyword("String"),
+		Delimiter(LPAREN),
+		Number("1"),
+		Delimiter(COMMA),
+		Number("10"),
+		Delimiter(RPAREN),
+		Delimiter(COMMA),
+		Identifier("longName"),
+		Delimiter(COLON),
+		Delimiter(LBRACKET),
+		Delimiter(RBRACKET),
+		Keyword("Number"),
+		Delimiter(LPAREN),
+		Delimiter(COMMA),
+		Number("10"),
+		Delimiter(RPAREN),
+		Delimiter(COMMA),
+		Identifier("map"),
+		Delimiter(COLON),
+		Keyword("Map"),
+		Delimiter(COMMA),
+		Identifier("object"),
+		Delimiter(COLON),
+		Delimiter(LBRACE),
+		Identifier("age"),
+		Delimiter(COLON),
+		Keyword("Number"),
+		Delimiter(QUESTIONMARK),
+		Delimiter(EQUALS),
+		Number("4"),
+		Delimiter(RBRACE),
+		Identifier("aja"),
+		Delimiter(COLON),
+		Delimiter(LBRACKET),
+		Delimiter(RBRACKET),
+		Delimiter(LBRACE),
+		Identifier("dufus"),
+		Delimiter(COLON),
+		Keyword("String"),
+		Delimiter(RBRACE),
+		Delimiter(RBRACE),
+	}
+
+	op, err := parseTokens(input)
+	if err != nil {
+		t.Error(err)
+	}
+
+	schema, ok := op.Payload.Data["schema"]
+	if !ok {
+		t.Errorf("Did not get schema")
+	}
+
+	s, ok := schema.(*types.Schema)
+	if !ok {
+		t.Errorf("NO SCHEMA")
+	}
+
+	err = s.Validate(types.NewDoc("k").Set(map[string]interface{}{
+		"name":     "asdf",
+		"longName": []interface{}{4},
+		"map":      map[string]interface{}{},
+		"object":   map[string]interface{}{},
+		"aja":      []interface{}{},
+	}))
+
+	if err != nil {
+		fmt.Println(s)
+		t.Error(err)
 	}
 
 }

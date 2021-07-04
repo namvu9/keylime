@@ -8,21 +8,77 @@ import (
 type TokenType string
 
 const (
-	Delimiter    TokenType = "Delimiter"
-	Keyword                = "Keyword"
-	Identifier             = "Identifier"
-	StringValue            = "String"
-	BooleanValue           = "Boolean"
-	NumberValue            = "Number"
-	ArrayValue             = "Array"
-	ObjectValue            = "Object"
-	MapValue               = "Map"
-	EOF                    = "EOF"
+	DelimiterToken  TokenType = "Delimiter"
+	KeywordToken              = "Keyword"
+	IdentifierToken           = "Identifier"
+	StringValue               = "String"
+	BooleanValue              = "Boolean"
+	NumberValue               = "Number"
+	ArrayValue                = "Array"
+	ObjectValue               = "Object"
+	MapValue                  = "Map"
+	EOF                       = "EOF"
 )
+
+func Boolean(v string) Token {
+	return Token{
+		Type:  BooleanValue,
+		Value: v,
+	}
+}
+
+func Number(v string) Token {
+	return Token{
+		Type:  NumberValue,
+		Value: v,
+	}
+}
+
+func Delimiter(v string) Token {
+	return Token{
+		Type:  DelimiterToken,
+		Value: v,
+	}
+}
+
+func Keyword(v string) Token {
+	return Token{
+		Type:  KeywordToken,
+		Value: v,
+	}
+}
+
+func Identifier(v string) Token {
+	return Token{
+		Type:  IdentifierToken,
+		Value: v,
+	}
+}
+
+func String(v string) Token {
+	return Token{
+		Type:  StringValue,
+		Value: v,
+	}
+}
 
 func (t Token) IsValueType() bool {
 	switch t.Type {
 	case StringValue, BooleanValue, NumberValue, ArrayValue, ObjectValue, MapValue:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t Token) IsDataType() bool {
+	if t.Type != KeywordToken {
+		return false
+	}
+
+	switch t.Value {
+	// Use c onstants
+	case "String", "Boolean", "Number", "Array", "Object", "Map":
 		return true
 	default:
 		return false
@@ -64,160 +120,141 @@ var booleans = map[string]bool{
 	"true":  true,
 }
 
-func tokenize(s string) []Token {
-	newTokens := []Token{}
+var delimiters = map[byte]Token{
+	'{': Delimiter(LBRACE),
+	'}': Delimiter(RBRACE),
+	'[': Delimiter(LBRACKET),
+	']': Delimiter(RBRACKET),
+	'(': Delimiter(LPAREN),
+	')': Delimiter(RPAREN),
+	':': Delimiter(COLON),
+	';': Delimiter(SEMICOLON),
+	'?': Delimiter(QUESTIONMARK),
+	',': Delimiter(COMMA),
+	'.': Delimiter(PERIOD),
+	'=': Delimiter(EQUALS),
+}
 
-	i := 0
-	for i < len(s) {
-		c := s[i]
+type tokenizer struct {
+	s      string
+	i      int
+	tokens []Token
+}
 
-		if isLetter(c) {
-			var sb strings.Builder
-			l := c
+func parseLetters(t *tokenizer) {
+	l := t.s[t.i]
+	var sb strings.Builder
 
-			for isLetter(l) || isNumeric(l) {
-				sb.WriteByte(l)
-				i++
+	for isLetter(l) || isNumeric(l) {
+		sb.WriteByte(l)
+		t.i++
 
-				if i >= len(s) {
-					break
-				}
-				l = s[i]
-			}
+		if t.i >= len(t.s) {
+			break
+		}
+		l = t.s[t.i]
+	}
 
-			word := sb.String()
-			if _, ok := keywords[word]; ok {
-				newTokens = append(newTokens, Token{
-					Type:  Keyword,
-					Value: word,
-				})
-			} else if _, ok := booleans[word]; ok {
-				newTokens = append(newTokens, Token{
-					Type:  BooleanValue,
-					Value: word,
-				})
-			} else {
-				newTokens = append(newTokens, Token{
-					Type:  Identifier,
-					Value: word,
-				})
-			}
-		} else if isNumeric(c) {
-			var sb strings.Builder
-			l := c
+	word := sb.String()
+	if _, ok := keywords[word]; ok {
+		t.tokens = append(t.tokens, Keyword(word))
+	} else if _, ok := booleans[word]; ok {
+		t.tokens = append(t.tokens, Token{
+			Type:  BooleanValue,
+			Value: word,
+		})
+	} else {
+		t.tokens = append(t.tokens, Identifier(word))
+	}
+}
 
-			for isNumeric(l) {
-				sb.WriteByte(l)
-				i++
+func parseNumber(t *tokenizer) {
+	var sb strings.Builder
+	l := t.s[t.i]
 
-				if i >= len(s) {
-					break
-				}
-				l = s[i]
-			}
+	for isNumeric(l) {
+		sb.WriteByte(l)
+		t.i++
 
-			word := sb.String()
-			newTokens = append(newTokens, Token{
-				Type:  NumberValue,
-				Value: word,
+		if t.i >= len(t.s) {
+			break
+		}
+		l = t.s[t.i]
+	}
+
+	word := sb.String()
+	t.tokens = append(t.tokens, Token{
+		Type:  NumberValue,
+		Value: word,
+	})
+}
+
+func parseString(t *tokenizer) {
+	c := t.s[t.i]
+
+	t.i++
+	l := t.s[t.i]
+
+	var sb strings.Builder
+
+	for t.i < len(t.s) {
+		if l == c {
+			t.tokens = append(t.tokens, Token{
+				Type:  StringValue,
+				Value: sb.String(),
 			})
-
+			break
+		} else if t.i >= len(t.s) {
+			t.tokens = append(t.tokens, EOFToken)
+			break
 		} else {
-			switch c {
-			case '{':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: LBRACE,
-				})
-			case '}':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: RBRACE,
-				})
-			case '[':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: LBRACKET,
-				})
-			case ']':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: RBRACKET,
-				})
-			case '(':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: LPAREN,
-				})
-			case ')':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: RPAREN,
-				})
-			case ':':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: COLON,
-				})
-			case ';':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: SEMICOLON,
-				})
-			case '?':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: QUESTIONMARK,
-				})
-			case ',':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: COMMA,
-				})
-			case '.':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: PERIOD,
-				})
-			case '=':
-				newTokens = append(newTokens, Token{
-					Type:  Delimiter,
-					Value: EQUALS,
-				})
-			case '\'', '"':
-				i++
-				l := s[i]
+			sb.WriteByte(l)
+		}
 
-				var sb strings.Builder
+		t.i++
+		l = t.s[t.i]
+	}
 
-				for i < len(s) {
-					if l == c {
-						newTokens = append(newTokens, Token{
-							Type:  StringValue,
-							Value: sb.String(),
-						})
-						break
-					} else if i >= len(s) {
-						newTokens = append(newTokens, EOFToken)
-						break
-					} else {
-						sb.WriteByte(l)
-					}
+	t.i++
+}
 
-					i++
-					l = s[i]
-				}
+func isString(c byte) bool {
+	return c == '\'' || c == '"'
+}
 
-			}
+func isDelimiter(c byte) bool {
+	_, ok := delimiters[c]
+	return ok
+}
 
-			i++
+func (t *tokenizer) tokenize() []Token {
+	for t.i < len(t.s) {
+		c := t.s[t.i]
+
+		switch {
+		case isLetter(c):
+			parseLetters(t)
+		case isNumeric(c):
+			parseNumber(t)
+		case isDelimiter(c):
+			t.tokens = append(t.tokens, delimiters[c])
+			t.i++
+		case isString(c):
+			parseString(t)
+		default:
+			t.i++
 		}
 
 	}
 
-	newTokens = append(newTokens, EOFToken)
+	t.tokens = append(t.tokens, EOFToken)
 
-	return newTokens
+	return t.tokens
+}
+
+func tokenize(s string) []Token {
+	t := tokenizer{s: s}
+	return t.tokenize()
 }
 
 func isLetter(c byte) bool {

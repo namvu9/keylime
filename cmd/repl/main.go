@@ -3,8 +3,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/namvu9/keylime/src/fs"
@@ -34,6 +37,29 @@ func main() {
 	)
 
 	timeout := time.Minute
+
+	script := flag.String("script", "", "Location of script to run")
+	flag.Parse()
+	if *script != "" {
+		data, err := ioutil.ReadFile(*script)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		statements := strings.Split(string(data), ";")
+		for _, input := range statements {
+			fmt.Println("Running", input)
+			res, err := queries.Interpret(context.Background(), s, input)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			if res != nil {
+				fmt.Println(res)
+			}
+		}
+	}
 
 	for {
 		fmt.Print("KL> ")

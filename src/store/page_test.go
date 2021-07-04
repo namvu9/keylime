@@ -39,7 +39,7 @@ func TestDeletePage(t *testing.T) {
 		} {
 			bs.flush()
 			var (
-				node = makeBufPage(2, makeRecords("a", "b", "c"))
+				node = makeBufPage(2, makeDocs("a", "b", "c"))
 			)
 
 			err := node.remove(test.targetKey)
@@ -63,9 +63,9 @@ func TestDeletePage(t *testing.T) {
 		u := &util{t}
 		bs.flush()
 
-		root := makeBufPage(2, makeRecords("5"),
-			makeBufPage(2, makeRecords("2", "3")),
-			makeBufPage(2, makeRecords("6")),
+		root := makeBufPage(2, makeDocs("5"),
+			makeBufPage(2, makeDocs("2", "3")),
+			makeBufPage(2, makeDocs("6")),
 		)
 		root.writer = bs
 
@@ -103,15 +103,15 @@ func TestDeletePage(t *testing.T) {
 		u := &util{t}
 		bs.flush()
 
-		predPage := makeBufPage(2, makeRecords("6"))
-		mergePage := makeBufPage(2, makeRecords("4"))
-		root := makeBufPage(2, makeRecords("9"),
-			makeBufPage(2, makeRecords("3", "5"),
-				makeBufPage(2, makeRecords("2")),
+		predPage := makeBufPage(2, makeDocs("6"))
+		mergePage := makeBufPage(2, makeDocs("4"))
+		root := makeBufPage(2, makeDocs("9"),
+			makeBufPage(2, makeDocs("3", "5"),
+				makeBufPage(2, makeDocs("2")),
 				mergePage,
 				predPage,
 			),
-			makeBufPage(2, makeRecords("10000")),
+			makeBufPage(2, makeDocs("10000")),
 		)
 
 		root.remove("9")
@@ -163,9 +163,9 @@ func TestDeletePage(t *testing.T) {
 		u := &util{t}
 		bs.flush()
 
-		root := makeBufPage(2, makeRecords("5"),
-			makeBufPage(2, makeRecords("2")),
-			makeBufPage(2, makeRecords("6", "7")),
+		root := makeBufPage(2, makeDocs("5"),
+			makeBufPage(2, makeDocs("2")),
+			makeBufPage(2, makeDocs("6", "7")),
 		)
 
 		root.remove("5")
@@ -202,15 +202,15 @@ func TestDeletePage(t *testing.T) {
 		u := &util{t}
 		bs.flush()
 
-		mergedNode := makeBufPage(2, makeRecords("4"))
-		deleteNode := makeBufPage(2, makeRecords("7"))
+		mergedNode := makeBufPage(2, makeDocs("4"))
+		deleteNode := makeBufPage(2, makeDocs("7"))
 
-		root := makeBufPage(2, makeRecords("3"),
-			makeBufPage(2, makeRecords("10000")),
-			makeBufPage(2, makeRecords("5", "8"),
+		root := makeBufPage(2, makeDocs("3"),
+			makeBufPage(2, makeDocs("10000")),
+			makeBufPage(2, makeDocs("5", "8"),
 				mergedNode,
 				deleteNode,
-				makeBufPage(2, makeRecords("9")),
+				makeBufPage(2, makeDocs("9")),
 			),
 		)
 
@@ -265,16 +265,16 @@ func TestDeletePage(t *testing.T) {
 		u := &util{t}
 		bs.flush()
 
-		deletePage := makeBufPage(2, makeRecords("6"))
-		root := makeBufPage(2, makeRecords("5"),
-			makeBufPage(2, makeRecords("2")),
+		deletePage := makeBufPage(2, makeDocs("6"))
+		root := makeBufPage(2, makeDocs("5"),
+			makeBufPage(2, makeDocs("2")),
 			deletePage,
 		)
 
 		root.remove("5")
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(0)
+			nu.hasNDocs(0)
 			nu.hasNChildren(1)
 
 			nu.withChild(0, func(nu namedUtil) {
@@ -319,7 +319,7 @@ func TestInsertRecord(t *testing.T) {
 	} {
 		bs.flush()
 
-		root := makeBufPage(3, makeRecords(test.keys...))
+		root := makeBufPage(3, makeDocs(test.keys...))
 
 		root.insert(types.NewDoc(test.k))
 
@@ -337,10 +337,10 @@ func TestSplitChild(t *testing.T) {
 	makeBufPage := makePageWithBufferedStorage(bs)
 
 	t.Run("Full leaf child", func(t *testing.T) {
-		fullChild := makeBufPage(2, makeRecords("12", "14", "20"))
+		fullChild := makeBufPage(2, makeDocs("12", "14", "20"))
 		var (
-			root = makeBufPage(2, makeRecords("10"),
-				makeBufPage(2, makeRecords("1", "4", "8")),
+			root = makeBufPage(2, makeDocs("10"),
+				makeBufPage(2, makeDocs("1", "4", "8")),
 				fullChild,
 			)
 		)
@@ -385,18 +385,18 @@ func TestSplitChild(t *testing.T) {
 	t.Run("Full internal node", func(t *testing.T) {
 		bs.flush()
 
-		l2a_child := makeBufPage(2, makeRecords("6", "7"))
-		l2b_child := makeBufPage(2, makeRecords("9", "10"))
-		l2c_child := makeBufPage(2, makeRecords("16", "17"))
-		l2d_child := makeBufPage(2, makeRecords("19", "20"))
-		root := makeBufPage(2, makeRecords("21"),
-			makeBufPage(2, makeRecords("8", "15", "18"),
+		l2a_child := makeBufPage(2, makeDocs("6", "7"))
+		l2b_child := makeBufPage(2, makeDocs("9", "10"))
+		l2c_child := makeBufPage(2, makeDocs("16", "17"))
+		l2d_child := makeBufPage(2, makeDocs("19", "20"))
+		root := makeBufPage(2, makeDocs("21"),
+			makeBufPage(2, makeDocs("8", "15", "18"),
 				l2a_child,
 				l2b_child,
 				l2c_child,
 				l2d_child,
 			),
-			makeBufPage(2, makeRecords()),
+			makeBufPage(2, makeDocs()),
 		)
 
 		root.splitChild(0)
@@ -441,10 +441,10 @@ func TestSplitChild(t *testing.T) {
 	t.Run("Full leaf child 2", func(t *testing.T) {
 		bs.flush()
 
-		root := makeBufPage(2, makeRecords("1", "3"),
-			makeBufPage(2, makeRecords("0")),
-			makeBufPage(2, makeRecords("2")),
-			makeBufPage(2, makeRecords("4", "5", "6")),
+		root := makeBufPage(2, makeDocs("1", "3"),
+			makeBufPage(2, makeDocs("0")),
+			makeBufPage(2, makeDocs("2")),
+			makeBufPage(2, makeDocs("4", "5", "6")),
 		)
 
 		root.splitChild(2)
@@ -484,7 +484,7 @@ func TestInsertChild(t *testing.T) {
 			childA   = newPageWithKeys(2, []string{"2"})
 			childC   = newPageWithKeys(2, []string{"8"})
 			newChild = newPageWithKeys(2, []string{"10"})
-			root     = makePage(2, makeRecords("5"),
+			root     = makePage(2, makeDocs("5"),
 				childA,
 				childC,
 			)
@@ -564,7 +564,7 @@ func TestInsertChild(t *testing.T) {
 			newChildA = newPageWithKeys(2, []string{"8"})
 			newChildB = newPageWithKeys(2, []string{"8"})
 
-			root = makePage(2, makeRecords("5"),
+			root = makePage(2, makeDocs("5"),
 				childA,
 				childB,
 				childC,
@@ -593,7 +593,7 @@ func TestPageIndex(t *testing.T) {
 		{"10", []string{"10", "5"}, 0, true},
 	} {
 		root := newPage(100, true, nil)
-		root.records = makeRecords(test.keys...)
+		root.docs = makeDocs(test.keys...)
 		gotIndex, gotExists := root.keyIndex(test.k)
 
 		if gotIndex != test.wantIndex || gotExists != test.wantExists {
@@ -604,23 +604,23 @@ func TestPageIndex(t *testing.T) {
 
 func TestMergeChildren(t *testing.T) {
 	u := util{t}
-	root := makePage(2, makeRecords("5", "10", "15"),
-		makePage(2, makeRecords("2"),
-			makePage(2, makeRecords()),
-			makePage(2, makeRecords()),
+	root := makePage(2, makeDocs("5", "10", "15"),
+		makePage(2, makeDocs("2"),
+			makePage(2, makeDocs()),
+			makePage(2, makeDocs()),
 		),
-		makePage(2, makeRecords("7", "8"),
-			makePage(2, makeRecords()),
-			makePage(2, makeRecords()),
-			makePage(2, makeRecords()),
+		makePage(2, makeDocs("7", "8"),
+			makePage(2, makeDocs()),
+			makePage(2, makeDocs()),
+			makePage(2, makeDocs()),
 		),
-		makePage(2, makeRecords("11"),
-			makePage(2, makeRecords()),
-			makePage(2, makeRecords()),
+		makePage(2, makeDocs("11"),
+			makePage(2, makeDocs()),
+			makePage(2, makeDocs()),
 		),
-		makePage(2, makeRecords("16"),
-			makePage(2, makeRecords()),
-			makePage(2, makeRecords()),
+		makePage(2, makeDocs("16"),
+			makePage(2, makeDocs()),
+			makePage(2, makeDocs()),
 		),
 	)
 
@@ -648,11 +648,11 @@ func TestMergeChildren(t *testing.T) {
 }
 
 func TestPredecessorSuccessorPage(t *testing.T) {
-	target := makePage(2, makeRecords("99"))
-	root := makePage(2, makeRecords("a", "c"),
-		makePage(2, makeRecords()),
+	target := makePage(2, makeDocs("99"))
+	root := makePage(2, makeDocs("a", "c"),
+		makePage(2, makeDocs()),
 		target,
-		makePage(2, makeRecords()),
+		makePage(2, makeDocs()),
 	)
 
 	if pred, _ := root.predecessorPage("c"); pred != target {
@@ -673,7 +673,7 @@ func TestFull(t *testing.T) {
 		t.Errorf("New(2).IsFull() = %v; want false", got)
 	}
 
-	root.records = makeRecords("1", "2", "3")
+	root.docs = makeDocs("1", "2", "3")
 
 	if got := root.full(); !got {
 		t.Errorf("Want root.IsFull() = true, got %v", got)
@@ -701,13 +701,13 @@ func TestSparse(t *testing.T) {
 
 func TestChildSibling(t *testing.T) {
 	var (
-		child   = makePage(2, makeRecords())
-		sibling = makePage(2, makeRecords())
-		root    = makePage(2, makeRecords("c", "e", "f"),
-			makePage(2, makeRecords()),
+		child   = makePage(2, makeDocs())
+		sibling = makePage(2, makeDocs())
+		root    = makePage(2, makeDocs("c", "e", "f"),
+			makePage(2, makeDocs()),
 			child,
 			sibling,
-			makePage(2, makeRecords()),
+			makePage(2, makeDocs()),
 		)
 	)
 
@@ -736,7 +736,7 @@ func TestSplitFullPage(t *testing.T) {
 	u := util{t}
 
 	t.Run("1", func(t *testing.T) {
-		root := makePage(2, makeRecords("3"), makePage(2, makeRecords("a")), makePage(2, makeRecords("5", "7", "9")))
+		root := makePage(2, makeDocs("3"), makePage(2, makeDocs("a")), makePage(2, makeDocs("5", "7", "9")))
 
 		splitFullPage(root, root.children[1])
 
@@ -757,7 +757,7 @@ func TestSplitFullPage(t *testing.T) {
 	})
 
 	t.Run("2", func(t *testing.T) {
-		root := makePage(2, makeRecords("9"), makePage(2, makeRecords("3", "5", "8")), makePage(2, makeRecords("a")))
+		root := makePage(2, makeDocs("9"), makePage(2, makeDocs("3", "5", "8")), makePage(2, makeDocs("a")))
 
 		splitFullPage(root, root.children[0])
 
@@ -778,7 +778,7 @@ func TestSplitFullPage(t *testing.T) {
 	})
 
 	t.Run("3", func(t *testing.T) {
-		root := makePage(2, makeRecords("9"), makePage(2, makeRecords("3", "8")), makePage(2, makeRecords("a")))
+		root := makePage(2, makeDocs("9"), makePage(2, makeDocs("3", "8")), makePage(2, makeDocs("a")))
 
 		splitFullPage(root, root.children[0])
 
@@ -804,9 +804,9 @@ func TestHandleSparsePage(t *testing.T) {
 		u := util{t}
 		bs.flush()
 
-		root := makeBufPage(2, makeRecords("c"),
-			makeBufPage(2, makeRecords("a", "b")),
-			makeBufPage(2, makeRecords("d")),
+		root := makeBufPage(2, makeDocs("c"),
+			makeBufPage(2, makeDocs("a", "b")),
+			makeBufPage(2, makeDocs("d")),
 		)
 
 		handleSparsePage(root, root.children[1])
@@ -840,23 +840,23 @@ func TestHandleSparsePage(t *testing.T) {
 	t.Run("Left internal node sibling has t keys", func(t *testing.T) {
 		u := util{t}
 
-		movedChild := makeBufPage(2, makeRecords())
-		root := makeBufPage(2, makeRecords("c"),
-			makeBufPage(2, makeRecords("a", "b"),
-				makeBufPage(2, makeRecords()),
-				makeBufPage(2, makeRecords()),
+		movedChild := makeBufPage(2, makeDocs())
+		root := makeBufPage(2, makeDocs("c"),
+			makeBufPage(2, makeDocs("a", "b"),
+				makeBufPage(2, makeDocs()),
+				makeBufPage(2, makeDocs()),
 				movedChild,
 			),
-			makeBufPage(2, makeRecords("d"),
-				makeBufPage(2, makeRecords()),
-				makeBufPage(2, makeRecords()),
+			makeBufPage(2, makeDocs("d"),
+				makeBufPage(2, makeDocs()),
+				makeBufPage(2, makeDocs()),
 			),
 		)
 
 		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(1)
+			nu.hasNDocs(1)
 			nu.hasKeys("b")
 			nu.hasNChildren(2)
 		})
@@ -873,15 +873,15 @@ func TestHandleSparsePage(t *testing.T) {
 	t.Run("Right sibling has t keys", func(t *testing.T) {
 		u := util{t}
 		bs.flush()
-		root := makeBufPage(2, makeRecords("c"),
-			makeBufPage(2, makeRecords("a")),
-			makeBufPage(2, makeRecords("d", "e")),
+		root := makeBufPage(2, makeDocs("c"),
+			makeBufPage(2, makeDocs("a")),
+			makeBufPage(2, makeDocs("d", "e")),
 		)
 
 		handleSparsePage(root, root.children[0])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(1)
+			nu.hasNDocs(1)
 			nu.hasKeys("d")
 			nu.hasNChildren(2)
 		})
@@ -909,23 +909,23 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Right internal node sibling has t keys", func(t *testing.T) {
 		u := util{t}
-		movedChild := makePage(2, makeRecords())
-		root := makePage(2, makeRecords("c"),
-			makePage(2, makeRecords("a"),
-				makePage(2, makeRecords()),
-				makePage(2, makeRecords()),
+		movedChild := makePage(2, makeDocs())
+		root := makePage(2, makeDocs("c"),
+			makePage(2, makeDocs("a"),
+				makePage(2, makeDocs()),
+				makePage(2, makeDocs()),
 			),
-			makePage(2, makeRecords("d", "e"),
+			makePage(2, makeDocs("d", "e"),
 				movedChild,
-				makePage(2, makeRecords()),
-				makePage(2, makeRecords()),
+				makePage(2, makeDocs()),
+				makePage(2, makeDocs()),
 			),
 		)
 
 		handleSparsePage(root, root.children[0])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(1)
+			nu.hasNDocs(1)
 			nu.hasKeys("d")
 			nu.hasNChildren(2)
 		})
@@ -943,19 +943,19 @@ func TestHandleSparsePage(t *testing.T) {
 		u := util{t}
 		bs.flush()
 
-		mergedPage := makeBufPage(2, makeRecords("a"))
-		deletedPage := makeBufPage(2, makeRecords("c"))
+		mergedPage := makeBufPage(2, makeDocs("a"))
+		deletedPage := makeBufPage(2, makeDocs("c"))
 
-		root := makeBufPage(2, makeRecords("b", "d"),
+		root := makeBufPage(2, makeDocs("b", "d"),
 			mergedPage,
 			deletedPage,
-			makeBufPage(2, makeRecords("e")),
+			makeBufPage(2, makeDocs("e")),
 		)
 
 		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(1)
+			nu.hasNDocs(1)
 			nu.hasNChildren(2)
 		})
 
@@ -985,16 +985,16 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Both siblings are sparse; no right sibling", func(t *testing.T) {
 		u := util{t}
-		root := makePage(2, makeRecords("b", "d"),
-			makePage(2, makeRecords("a")),
-			makePage(2, makeRecords("c")),
-			makePage(2, makeRecords("e")),
+		root := makePage(2, makeDocs("b", "d"),
+			makePage(2, makeDocs("a")),
+			makePage(2, makeDocs("c")),
+			makePage(2, makeDocs("e")),
 		)
 
 		handleSparsePage(root, root.children[2])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(1)
+			nu.hasNDocs(1)
 			nu.hasNChildren(2)
 		})
 
@@ -1005,16 +1005,16 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Both siblings are sparse; no left sibling", func(t *testing.T) {
 		u := util{t}
-		root := makePage(2, makeRecords("b", "d"),
-			makePage(2, makeRecords("a")),
-			makePage(2, makeRecords("c")),
-			makePage(2, makeRecords("e")),
+		root := makePage(2, makeDocs("b", "d"),
+			makePage(2, makeDocs("a")),
+			makePage(2, makeDocs("c")),
+			makePage(2, makeDocs("e")),
 		)
 
 		handleSparsePage(root, root.children[0])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(1)
+			nu.hasNDocs(1)
 			nu.hasNChildren(2)
 		})
 
@@ -1025,15 +1025,15 @@ func TestHandleSparsePage(t *testing.T) {
 
 	t.Run("Target key is moved from child to parent", func(t *testing.T) {
 		u := util{t}
-		root := makePage(2, makeRecords("b"),
-			makePage(2, makeRecords("a")),
-			makePage(2, makeRecords("c")),
+		root := makePage(2, makeDocs("b"),
+			makePage(2, makeDocs("a")),
+			makePage(2, makeDocs("c")),
 		)
 
 		handleSparsePage(root, root.children[1])
 
 		u.with("Root", root, func(nu namedUtil) {
-			nu.hasNRecords(0)
+			nu.hasNDocs(0)
 			nu.hasNChildren(1)
 		})
 

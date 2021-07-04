@@ -17,7 +17,7 @@ type Page struct {
 	ID string
 
 	children []*Page
-	records  []types.Document
+	docs     []types.Document
 	loaded   bool
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -51,7 +51,7 @@ func (p *Page) remove(k string) error {
 	}
 
 	if p.leaf {
-		p.records = append(p.records[:index], p.records[index+1:]...)
+		p.docs = append(p.docs[:index], p.docs[index+1:]...)
 		p.save()
 		return nil
 	}
@@ -68,9 +68,9 @@ func (p *Page) remove(k string) error {
 			return errors.Wrap(op, errors.EInternal, err)
 		}
 
-		predRec := maxPredPage.records[len(maxPredPage.records)-1]
+		predRec := maxPredPage.docs[len(maxPredPage.docs)-1]
 
-		p.records[index] = predRec
+		p.docs[index] = predRec
 		p.save()
 
 		return maxPredPage.remove(predRec.Key)
@@ -88,9 +88,9 @@ func (p *Page) remove(k string) error {
 			return errors.Wrap(op, errors.EInternal, err)
 		}
 
-		succRec := succ.records[0]
+		succRec := succ.docs[0]
 
-		p.records[index] = succRec
+		p.docs[index] = succRec
 		p.save()
 
 		return succ.remove(succRec.Key)
@@ -113,9 +113,9 @@ func (p *Page) remove(k string) error {
 func (p *Page) insert(r types.Document) int {
 	out := []types.Document{}
 
-	for i, key := range p.records {
+	for i, key := range p.docs {
 		if r.Key == key.Key {
-			p.records[i] = r
+			p.docs[i] = r
 			p.save()
 			return i
 		}
@@ -126,40 +126,40 @@ func (p *Page) insert(r types.Document) int {
 			}
 
 			out = append(out, r)
-			p.records = append(out, p.records[i:]...)
+			p.docs = append(out, p.docs[i:]...)
 			p.save()
 			return i
 		}
 
-		out = append(out, p.records[i])
+		out = append(out, p.docs[i])
 	}
 
 	if p.full() {
 		panic(fmt.Sprintf("Cannot insert key into full node: %s", r.Key))
 	}
 
-	p.records = append(out, r)
+	p.docs = append(out, r)
 	p.save()
 
-	return len(p.records) - 1
+	return len(p.docs) - 1
 }
 
 // full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
 func (p *Page) full() bool {
-	return len(p.records) == 2*p.t-1
+	return len(p.docs) == 2*p.t-1
 }
 
 // sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
 func (p *Page) sparse() bool {
-	return len(p.records) <= p.t-1
+	return len(p.docs) <= p.t-1
 }
 
 // empty reports whether the node is empty (i.e., has no
 // records).
 func (p *Page) empty() bool {
-	return len(p.records) == 0
+	return len(p.docs) == 0
 }
 
 func (p *Page) newPage(leaf bool) *Page {
@@ -176,7 +176,7 @@ func (p *Page) newPageWithID(id string) *Page {
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
 func (p *Page) keyIndex(k string) (index int, exists bool) {
-	for i, kv := range p.records {
+	for i, kv := range p.docs {
 		if k == kv.Key {
 			return i, true
 		}
@@ -186,7 +186,7 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 		}
 	}
 
-	return len(p.records), false
+	return len(p.docs), false
 }
 
 // Panics if child is not full
@@ -204,10 +204,10 @@ func (p *Page) splitChild(index int) error {
 
 	newChild := p.newPage(fullChild.leaf)
 
-	medianKey, left, right := partitionMedian(fullChild.records)
+	medianKey, left, right := partitionMedian(fullChild.docs)
 	p.insert(medianKey)
 
-	fullChild.records, newChild.records = left, right
+	fullChild.docs, newChild.docs = left, right
 
 	if !fullChild.leaf {
 		newChild.insertChildren(0, fullChild.children[p.t:]...)
@@ -235,7 +235,7 @@ func (p *Page) splitChild(index int) error {
 }
 
 func (p *Page) setRecord(index int, r types.Document) {
-	p.records[index] = r
+	p.docs[index] = r
 }
 
 func (p *Page) insertChildren(index int, children ...*Page) {
@@ -312,8 +312,8 @@ func (p *Page) nextChildSibling(index int) *Page {
 
 // TODO: TEST
 func (p *Page) mergeWith(median types.Document, other *Page) {
-	p.records = append(p.records, median)
-	p.records = append(p.records, other.records...)
+	p.docs = append(p.docs, median)
+	p.docs = append(p.docs, other.docs...)
 	p.children = append(p.children, other.children...)
 }
 
@@ -325,7 +325,7 @@ func (p *Page) mergeWith(median types.Document, other *Page) {
 // for deletion.
 func (p *Page) mergeChildren(i int) {
 	var (
-		pivotRecord = p.records[i]
+		pivotRecord = p.docs[i]
 		leftChild   = p.children[i]
 		rightChild  = p.children[i+1]
 	)
@@ -333,7 +333,7 @@ func (p *Page) mergeChildren(i int) {
 	leftChild.mergeWith(pivotRecord, rightChild)
 
 	// Delete the key from the node
-	p.records = append(p.records[:i], p.records[i+1:]...)
+	p.docs = append(p.docs[:i], p.docs[i+1:]...)
 	// Remove rightChild
 	p.children = append(p.children[:i+1], p.children[i+2:]...)
 
@@ -344,7 +344,7 @@ func (p *Page) mergeChildren(i int) {
 
 // TODO: return error
 func partitionMedian(nums []types.Document) (types.Document, []types.Document, []types.Document) {
-	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
+	if nDocs := len(nums); nDocs%2 == 0 || nDocs < 3 {
 		panic("Cannot partition an even number of records")
 	}
 	medianIndex := (len(nums) - 1) / 2
@@ -371,8 +371,8 @@ func handleSparsePage(node, child *Page) {
 	if p != nil && !p.sparse() {
 		var (
 			recordIndex   = index - 1
-			pivot         = node.records[recordIndex]
-			siblingRecord = p.records[len(p.records)-1]
+			pivot         = node.docs[recordIndex]
+			siblingRecord = p.docs[len(p.docs)-1]
 		)
 
 		child.insert(pivot)
@@ -387,12 +387,12 @@ func handleSparsePage(node, child *Page) {
 		p.save()
 	} else if s != nil && !s.sparse() {
 		var (
-			pivot         = node.records[index]
-			siblingRecord = s.records[0]
+			pivot         = node.docs[index]
+			siblingRecord = s.docs[0]
 		)
 
 		// Move key from parent to child
-		child.records = append(child.records, pivot)
+		child.docs = append(child.docs, pivot)
 		node.setRecord(index, siblingRecord)
 
 		// Move child from sibling to child
@@ -467,7 +467,7 @@ type PageSerialized struct {
 	ID string
 
 	Children []string
-	Records  []types.Document
+	Docs     []types.Document
 	loaded   bool
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -503,7 +503,7 @@ func (p *Page) ToSerialized() *PageSerialized {
 
 	return &PageSerialized{
 		ID:       p.ID,
-		Records:  p.records,
+		Docs:     p.docs,
 		Leaf:     p.leaf,
 		T:        p.t,
 		Children: children,
@@ -512,7 +512,7 @@ func (p *Page) ToSerialized() *PageSerialized {
 
 func (ps *PageSerialized) ToDeserialized(p *Page) {
 	p.ID = ps.ID
-	p.records = ps.Records
+	p.docs = ps.Docs
 	p.leaf = ps.Leaf
 	p.t = ps.T
 

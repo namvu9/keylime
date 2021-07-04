@@ -24,7 +24,7 @@ type KeyIndex struct {
 	storage   ReadWriterTo
 }
 
-func (ki *KeyIndex) insert(ctx context.Context, r types.Document) error {
+func (ki *KeyIndex) insert(ctx context.Context, doc types.Document) (*types.Document, error) {
 	const op errors.Op = "(*KeyIndex).Insert"
 
 	if ki.root.full() {
@@ -41,14 +41,19 @@ func (ki *KeyIndex) insert(ctx context.Context, r types.Document) error {
 		ki.save()
 	}
 
-	page, err := ki.root.iter(byKey(r.Key)).forEach(splitFullPage).Get()
+	page, err := ki.root.iter(byKey(doc.Key)).forEach(splitFullPage).Get()
 	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
+		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
 
-	page.insert(r)
+	if idx, ok := page.keyIndex(doc.Key); ok {
+		oldDoc := page.docs[idx]
+		page.insert(doc)
+		return &oldDoc, nil
+	}
 
-	return nil
+	page.insert(doc)
+	return nil, nil
 }
 
 func (ki *KeyIndex) remove(ctx context.Context, key string) error {
@@ -96,7 +101,7 @@ func (ki *KeyIndex) get(ctx context.Context, key string) (*types.Document, error
 		return nil, errors.NewKeyNotFoundError(op, key)
 	}
 
-	return &node.records[i], nil
+	return &node.docs[i], nil
 }
 
 type KeyIndexSerialized struct {
@@ -193,7 +198,7 @@ func (ki *KeyIndex) Info() {
 		keys = append(keys, r.Key)
 	}
 
-	fmt.Printf("Records: %d\n", len(in.records))
+	fmt.Printf("Docs: %d\n", len(in.records))
 }
 
 type ID string
@@ -237,7 +242,7 @@ type Node struct {
 	Next ID
 
 	Capacity int
-	Records  []types.Document
+	Docs     []types.Document
 	storage  ReadWriterTo
 	writer   *WriteBuffer
 	loaded   bool
@@ -271,6 +276,8 @@ func (oi *OrderIndex) newNode() *Node {
 	oldHead.Prev = n.ID
 	oi.Head = n.ID
 
+	oldHead.save()
+
 	return n
 }
 
@@ -300,16 +307,16 @@ func newNodeWithID(id ID, s ReadWriterTo, w *WriteBuffer) *Node {
 }
 
 func (n *Node) Full() bool {
-	return len(n.Records) >= n.Capacity
+	return len(n.Docs) >= n.Capacity
 }
 
-func (n *Node) Insert(r types.Document) error {
-	n.Records = append(n.Records, r)
+func (n *Node) Insert(doc types.Document) error {
+	n.Docs = append(n.Docs, doc)
 
-	return n.Save()
+	return n.save()
 }
 
-func (n *Node) Save() error {
+func (n *Node) save() error {
 	return n.writer.Write(n)
 }
 
@@ -317,7 +324,9 @@ func (n *Node) Name() string {
 	return string(n.ID)
 }
 
-func (oi *OrderIndex) insert(ctx context.Context, r types.Document) error {
+// TODO: Bug, document will be inserted at the head of the
+// list regardless of whether it already exists
+func (oi *OrderIndex) insert(ctx context.Context, doc types.Document) error {
 	headNode, err := oi.Node(oi.Head)
 	if err != nil {
 		return err
@@ -330,16 +339,16 @@ func (oi *OrderIndex) insert(ctx context.Context, r types.Document) error {
 		}
 	}
 
-	return headNode.Insert(r)
+	return headNode.Insert(doc)
 }
 
 func (oi *OrderIndex) remove(ctx context.Context, k string) error {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
-		for i, record := range node.Records {
+		for i, record := range node.Docs {
 			if record.Key == k {
-				node.Records[i].Deleted = true
-				return node.Save()
+				node.Docs[i].Deleted = true
+				return node.save()
 			}
 		}
 
@@ -358,7 +367,34 @@ func (oi *OrderIndex) save() error {
 	}
 
 	_, err = oi.storage.WithSegment("order_index").Write(buf.Bytes())
+
 	return err
+}
+
+func (oi *OrderIndex) create() error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(oi)
+	if err != nil {
+		return err
+	}
+
+	_, err = oi.storage.WithSegment("order_index").Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	headNode, err := oi.Node(oi.Head)
+	if err != nil {
+		return err
+	}
+
+	err = headNode.save()
+	if err != nil {
+		return err
+	}
+
+	return oi.writer.flush()
 }
 
 func (oi *OrderIndex) load() error {
@@ -389,7 +425,7 @@ func (oi *OrderIndex) Get(n int, asc bool) []types.Document {
 
 	for node != nil {
 		if asc {
-			for _, r := range node.Records {
+			for _, r := range node.Docs {
 				if len(out) == n {
 					return out
 				}
@@ -400,12 +436,12 @@ func (oi *OrderIndex) Get(n int, asc bool) []types.Document {
 
 			node, _ = oi.Node(node.Prev)
 		} else {
-			for i := len(node.Records) - 1; i >= 0; i-- {
+			for i := len(node.Docs) - 1; i >= 0; i-- {
 				if len(out) == n {
 					return out
 				}
 
-				r := node.Records[i]
+				r := node.Docs[i]
 
 				if !r.Deleted {
 					out = append(out, r)
@@ -423,10 +459,10 @@ func (oi *OrderIndex) Get(n int, asc bool) []types.Document {
 func (oi *OrderIndex) update(ctx context.Context, r types.Document) error {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
-		for i, record := range node.Records {
+		for i, record := range node.Docs {
 			if r.Key == record.Key {
-				node.Records[i] = r
-				return node.Save()
+				node.Docs[i] = r
+				return node.save()
 			}
 		}
 
@@ -437,15 +473,15 @@ func (oi *OrderIndex) update(ctx context.Context, r types.Document) error {
 }
 
 func (oi *OrderIndex) Info() {
-	nRecords := 0
+	nDocs := 0
 	nNodes := 0
 
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		nNodes++
-		for _, r := range node.Records {
+		for _, r := range node.Docs {
 			if !r.Deleted {
-				nRecords++
+				nDocs++
 			}
 		}
 
@@ -455,8 +491,7 @@ func (oi *OrderIndex) Info() {
 	fmt.Println("<OrderIndex>")
 	fmt.Println("Block size:", oi.BlockSize)
 	fmt.Println("Nodes:", nNodes)
-	fmt.Printf("Records: %d\n", nRecords)
-
+	fmt.Printf("Docs: %d\n", nDocs)
 }
 
 func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
@@ -500,4 +535,3 @@ func (ki *KeyIndex) newPage(leaf bool) *Page {
 	p := newPage(ki.T, leaf, ki.bufWriter)
 	return p
 }
-

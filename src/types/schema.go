@@ -113,7 +113,7 @@ func (s *Schema) WithDefaults(r Document) Document {
 
 func (s *Schema) String() string {
 	var sb strings.Builder
-	sb.WriteString("SCHEMA:")
+	sb.WriteString("Schema:")
 
 	for name, field := range s.fields {
 		sb.WriteString(fmt.Sprintf("\n- %s\n", name))
@@ -123,8 +123,21 @@ func (s *Schema) String() string {
 			sb.WriteString(fmt.Sprintf("* Default: %v\n", field.DefaultValue))
 		}
 
+
+		if field.Min != nil {
+			sb.WriteString(fmt.Sprintf("* Min: %d\n", *field.Min))
+		}
+
+		if field.Max != nil {
+			sb.WriteString(fmt.Sprintf("* Max: %d\n", *field.Max))
+		}
+
+		if field.ElementType != nil {
+			sb.WriteString(fmt.Sprintf("* Element type: %s\n", string(*field.ElementType)))
+		}
+
 		if field.Schema != nil {
-			sb.WriteString(fmt.Sprintf("* Schema: %v\n", field.Schema))
+			sb.WriteString(fmt.Sprintf("* %s\n", field.Schema))
 		}
 
 	}

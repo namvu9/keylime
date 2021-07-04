@@ -15,9 +15,9 @@ func (u util) with(name string, node *Page, fn func(namedUtil)) {
 	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), node})
 }
 
-func (u util) hasNRecords(name string, n int, node *Page) {
-	if len(node.records) != n {
-		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.records), n)
+func (u util) hasNDocs(name string, n int, node *Page) {
+	if len(node.docs) != n {
+		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.docs), n)
 	}
 }
 
@@ -29,17 +29,17 @@ func (u util) hasNChildren(name string, n int, node *Page) {
 
 func (u util) hasKeys(name string, keys []string, node *Page) {
 	var nKeys []string
-	for _, k := range node.records {
+	for _, k := range node.docs {
 		nKeys = append(nKeys, k.Key)
 	}
 	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, nKeys, keys)
 
-	if len(node.records) != len(keys) {
+	if len(node.docs) != len(keys) {
 		u.t.Errorf(errMsg)
 		return
 	}
 
-	for i, r := range node.records {
+	for i, r := range node.docs {
 		if r.Key != keys[i] {
 			u.t.Errorf(errMsg)
 		}
@@ -86,8 +86,8 @@ func (nu namedUtil) is(other *Page) bool {
 	return nu.node == other
 }
 
-func (nu namedUtil) hasNRecords(n int) {
-	nu.u.hasNRecords(nu.name, n, nu.node)
+func (nu namedUtil) hasNDocs(n int) {
+	nu.u.hasNDocs(nu.name, n, nu.node)
 }
 
 func (nu namedUtil) hasNChildren(n int) {
@@ -105,7 +105,7 @@ func (nu namedUtil) hasChildren(children ...*Page) {
 func newPageWithKeys(t int, keys []string) *Page {
 	return &Page{
 		t:       t,
-		records: makeRecords(keys...),
+		docs: makeDocs(keys...),
 		loaded:  true,
 	}
 }
@@ -114,7 +114,7 @@ func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.D
 	return func(t int, records []record.Document, children ...*Page) *Page {
 		root := newPage(t, false, nil)
 		root.writer = bs
-		root.records = records
+		root.docs = records
 		root.children = children
 
 		for _, child := range children {
@@ -133,7 +133,7 @@ func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.D
 
 func makePage(t int, records []record.Document, children ...*Page) *Page {
 	root := newPage(t, false, nil)
-	root.records = records
+	root.docs = records
 	root.children = children
 
 	for _, child := range children {
@@ -148,7 +148,7 @@ func makePage(t int, records []record.Document, children ...*Page) *Page {
 	return root
 }
 
-func makeRecords(keys ...string) []record.Document {
+func makeDocs(keys ...string) []record.Document {
 	out := []record.Document{}
 	for _, key := range keys {
 		out = append(out, record.NewDoc(key))
@@ -164,26 +164,26 @@ type Info struct {
 
 // Iterates over a collection in order of key precedence
 func (info *Info) validate(p *Page, root bool) {
-	if !root && len(p.records) < p.t-1 || len(p.records) > 2*p.t-1 {
-		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.ID, len(p.records)))
+	if !root && len(p.docs) < p.t-1 || len(p.docs) > 2*p.t-1 {
+		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.ID, len(p.docs)))
 	}
 
 	if !p.leaf {
-		if len(p.children) != len(p.records)+1 {
-			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.ID, len(p.children)-1, len(p.records))
+		if len(p.children) != len(p.docs)+1 {
+			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.ID, len(p.children)-1, len(p.docs))
 		}
 		for i, child := range p.children {
 			if !child.loaded {
 				child.load()
 			}
 			info.validate(child, false)
-			if i < len(p.records) {
-				r := p.records[i]
+			if i < len(p.docs) {
+				r := p.docs[i]
 				info.records = append(info.records, r)
 			}
 		}
 	} else {
-		for _, r := range p.records {
+		for _, r := range p.docs {
 			info.records = append(info.records, r)
 		}
 	}

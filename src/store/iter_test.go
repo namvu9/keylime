@@ -3,16 +3,16 @@ package store
 import "testing"
 
 func TestMaxPage(t *testing.T) {
-	max := makePage(2, makeRecords("11"))
+	max := makePage(2, makeDocs("11"))
 	for _, test := range []struct {
 		name string
 		p    *Page
 	}{
 		{"from root",
-			makePage(2, makeRecords("7"),
-				makePage(2, makeRecords("5")),
-				makePage(2, makeRecords("9"),
-					makePage(2, makeRecords("8")),
+			makePage(2, makeDocs("7"),
+				makePage(2, makeDocs("5")),
+				makePage(2, makeDocs("9"),
+					makePage(2, makeDocs("8")),
 					max,
 				),
 			),
@@ -31,18 +31,18 @@ func TestMaxPage(t *testing.T) {
 }
 
 func TestMinPage(t *testing.T) {
-	min := makePage(2, makeRecords("11"))
+	min := makePage(2, makeDocs("11"))
 	for _, test := range []struct {
 		name string
 		p    *Page
 	}{
 		{"from root",
-			makePage(2, makeRecords("7"),
-				makePage(2, makeRecords("5"),
+			makePage(2, makeDocs("7"),
+				makePage(2, makeDocs("5"),
 					min,
-					makePage(2, makeRecords("8")),
+					makePage(2, makeDocs("8")),
 				),
-				makePage(2, makeRecords("9")),
+				makePage(2, makeDocs("9")),
 			),
 		},
 

@@ -12,7 +12,7 @@ import (
 	"github.com/namvu9/keylime/src/types"
 )
 
-// A collection is a named container for a group of records
+//A collection is a named container for a group of records
 type collection struct {
 	Name      string
 	HasSchema bool
@@ -64,44 +64,27 @@ func (c *collection) Set(ctx context.Context, k string, fields Fields) error {
 	return c.commit()
 }
 
+// TODO: Test that Insertion of the same doc is idempotent
+// with respect to the key
 func (c *collection) set(ctx context.Context, k string, fields Fields) error {
-	var wg sync.WaitGroup
-
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
-	r := types.NewDoc(k)
-	r.Set(fields)
+	doc := types.NewDoc(k).Set(fields)
 
 	if c.Schema != nil {
-		err := c.Schema.Validate(r)
+		err := c.Schema.Validate(doc)
 		if err != nil {
 			return wrapError(err)
 		}
 	}
 
-	wg.Add(2)
-	errChan := make(chan error, 2)
-	go func() {
-		defer wg.Done()
-		if err := c.primaryIndex.insert(ctx, r); err != nil {
-			errChan <- err
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-
-		if err := c.orderIndex.insert(ctx, r); err != nil {
-			errChan <- err
-		}
-	}()
-
-	wg.Wait()
-
-	if len(errChan) != 0 {
-		return <-errChan
+	if old, err := c.primaryIndex.insert(ctx, doc); err != nil {
+		return err
+	} else if old != nil {
+		return c.orderIndex.update(ctx, doc)
 	}
+	fmt.Println("HAHA")
 
-	return nil
+	return c.orderIndex.insert(ctx, doc)
 }
 
 func (c *collection) commit() error {
@@ -192,7 +175,7 @@ func (c *collection) update(ctx context.Context, k string, fields map[string]int
 		}
 	}
 
-	err = c.primaryIndex.insert(ctx, clone)
+	_, err = c.primaryIndex.insert(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
@@ -224,7 +207,7 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.save()
+	err = c.orderIndex.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -233,6 +216,8 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
+
+	fmt.Println("CREATED collection", c.orderIndex.Head)
 
 	return nil
 }
@@ -393,4 +378,3 @@ func newCollection(name string, s ReadWriterTo) *collection {
 
 	return c
 }
-
