@@ -22,9 +22,6 @@ const (
 	Delete         = "Delete"
 )
 
-// Operation is an intermediate representation of the
-// KeyLime query "language" and is interpretable by the
-// KeyLime Store
 type Operation struct {
 	// The target collection of the operation
 	Collection string

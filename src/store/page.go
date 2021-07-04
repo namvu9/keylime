@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/types"
 )
@@ -16,7 +17,7 @@ type Page struct {
 	ID string
 
 	children []*Page
-	records  []types.Record
+	records  []types.Document
 	loaded   bool
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -25,18 +26,7 @@ type Page struct {
 	writer *WriteBuffer
 }
 
-func (p *Page) Get(k string) ([]byte, error) {
-	const op errors.Op = "(*page).Get"
-
-	index, exists := p.keyIndex(k)
-	if !exists {
-		return nil, errors.NewKeyNotFoundError(op, k)
-	}
-
-	return p.records[index].Value, nil
-}
-
-func (p *Page) Child(i int) (*Page, error) {
+func (p *Page) child(i int) (*Page, error) {
 	const op errors.Op = "(*Page).Child"
 
 	if got := len(p.children); i >= got {
@@ -53,7 +43,7 @@ func (p *Page) Child(i int) (*Page, error) {
 
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
-func (p *Page) Delete(k string) error {
+func (p *Page) remove(k string) error {
 	const op errors.Op = "(*page).Delete"
 	index, exists := p.keyIndex(k)
 	if !exists {
@@ -67,12 +57,12 @@ func (p *Page) Delete(k string) error {
 	}
 
 	// Case 1: Predcessor has at least t keys
-	beforeChild, err := p.Child(index)
+	beforeChild, err := p.child(index)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if !beforeChild.Sparse() {
+	if !beforeChild.sparse() {
 		maxPredPage, err := beforeChild.maxPage().forEach(handleSparsePage).Get()
 		if err != nil {
 			return errors.Wrap(op, errors.EInternal, err)
@@ -83,16 +73,16 @@ func (p *Page) Delete(k string) error {
 		p.records[index] = predRec
 		p.save()
 
-		return maxPredPage.Delete(predRec.Key)
+		return maxPredPage.remove(predRec.Key)
 	}
 
 	// Case 2: Successor has at least t keys
-	afterChild, err := p.Child(index + 1)
+	afterChild, err := p.child(index + 1)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if !afterChild.Sparse() {
+	if !afterChild.sparse() {
 		succ, err := afterChild.minPage().forEach(handleSparsePage).Get()
 		if err != nil {
 			return errors.Wrap(op, errors.EInternal, err)
@@ -103,7 +93,7 @@ func (p *Page) Delete(k string) error {
 		p.records[index] = succRec
 		p.save()
 
-		return succ.Delete(succRec.Key)
+		return succ.remove(succRec.Key)
 	}
 
 	// Case 3: Neither p nor s has >= t keys
@@ -111,17 +101,17 @@ func (p *Page) Delete(k string) error {
 	p.mergeChildren(index)
 	p.save()
 
-	deleteChild, err := p.Child(index)
+	deleteChild, err := p.child(index)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	return deleteChild.Delete(k)
+	return deleteChild.remove(k)
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *Page) insert(r types.Record) int {
-	out := []types.Record{}
+func (p *Page) insert(r types.Document) int {
+	out := []types.Document{}
 
 	for i, key := range p.records {
 		if r.Key == key.Key {
@@ -131,7 +121,7 @@ func (p *Page) insert(r types.Record) int {
 		}
 
 		if r.IsLessThan(key) {
-			if p.Full() {
+			if p.full() {
 				panic(fmt.Errorf("Cannot insert key into full node: %s", key.Key))
 			}
 
@@ -144,7 +134,7 @@ func (p *Page) insert(r types.Record) int {
 		out = append(out, p.records[i])
 	}
 
-	if p.Full() {
+	if p.full() {
 		panic(fmt.Sprintf("Cannot insert key into full node: %s", r.Key))
 	}
 
@@ -154,27 +144,22 @@ func (p *Page) insert(r types.Record) int {
 	return len(p.records) - 1
 }
 
-// Full reports whether the number of records contained in a
+// full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
-func (p *Page) Full() bool {
+func (p *Page) full() bool {
 	return len(p.records) == 2*p.t-1
 }
 
-// Sparse reports whether the number of records contained in
+// sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
-func (p *Page) Sparse() bool {
+func (p *Page) sparse() bool {
 	return len(p.records) <= p.t-1
 }
 
-// Empty reports whether the node is empty (i.e., has no
+// empty reports whether the node is empty (i.e., has no
 // records).
-func (p *Page) Empty() bool {
+func (p *Page) empty() bool {
 	return len(p.records) == 0
-}
-
-// Leaf returns true if `p` is a leaf node
-func (p *Page) Leaf() bool {
-	return p.leaf
 }
 
 func (p *Page) newPage(leaf bool) *Page {
@@ -208,12 +193,12 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 func (p *Page) splitChild(index int) error {
 	const op errors.Op = "(*Page).splitChild"
 
-	fullChild, err := p.Child(index)
+	fullChild, err := p.child(index)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if !fullChild.Full() {
+	if !fullChild.full() {
 		return errors.Wrap(op, errors.EInternal, fmt.Errorf("Cannot split non-full child"))
 	}
 
@@ -249,7 +234,7 @@ func (p *Page) splitChild(index int) error {
 	return nil
 }
 
-func (p *Page) setRecord(index int, r types.Record) {
+func (p *Page) setRecord(index int, r types.Document) {
 	p.records[index] = r
 }
 
@@ -278,7 +263,7 @@ func (p *Page) predecessorPage(k string) (*Page, error) {
 		return nil, errors.NewKeyNotFoundError(op, k)
 	}
 
-	child, err := p.Child(index)
+	child, err := p.child(index)
 	if err != nil {
 		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
@@ -326,7 +311,7 @@ func (p *Page) nextChildSibling(index int) *Page {
 }
 
 // TODO: TEST
-func (p *Page) mergeWith(median types.Record, other *Page) {
+func (p *Page) mergeWith(median types.Document, other *Page) {
 	p.records = append(p.records, median)
 	p.records = append(p.records, other.records...)
 	p.children = append(p.children, other.children...)
@@ -358,7 +343,7 @@ func (p *Page) mergeChildren(i int) {
 }
 
 // TODO: return error
-func partitionMedian(nums []types.Record) (types.Record, []types.Record, []types.Record) {
+func partitionMedian(nums []types.Document) (types.Document, []types.Document, []types.Document) {
 	if nRecords := len(nums); nRecords%2 == 0 || nRecords < 3 {
 		panic("Cannot partition an even number of records")
 	}
@@ -368,7 +353,7 @@ func partitionMedian(nums []types.Record) (types.Record, []types.Record, []types
 
 // TODO: return error
 func handleSparsePage(node, child *Page) {
-	if !child.Sparse() {
+	if !child.sparse() {
 		return
 	}
 
@@ -383,7 +368,7 @@ func handleSparsePage(node, child *Page) {
 	)
 
 	// Rotate predecessor key
-	if p != nil && !p.Sparse() {
+	if p != nil && !p.sparse() {
 		var (
 			recordIndex   = index - 1
 			pivot         = node.records[recordIndex]
@@ -400,7 +385,7 @@ func handleSparsePage(node, child *Page) {
 			p.children = p.children[:len(p.children)-1]
 		}
 		p.save()
-	} else if s != nil && !s.Sparse() {
+	} else if s != nil && !s.sparse() {
 		var (
 			pivot         = node.records[index]
 			siblingRecord = s.records[0]
@@ -429,7 +414,7 @@ func handleSparsePage(node, child *Page) {
 
 // TODO: Return error
 func splitFullPage(node, child *Page) {
-	if !child.Full() {
+	if !child.full() {
 		return
 	}
 
@@ -482,7 +467,7 @@ type PageSerialized struct {
 	ID string
 
 	Children []string
-	Records  []types.Record
+	Records  []types.Document
 	loaded   bool
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
@@ -545,4 +530,45 @@ func (ps *PageSerialized) ToDeserialized(p *Page) {
 
 	p.children = children
 	p.loaded = true
+}
+
+func newPage(t int, leaf bool, bs *WriteBuffer) *Page {
+	id := uuid.New().String()
+	mockBs := newWriteBuffer(nil)
+
+	p := &Page{
+		ID:     id,
+		leaf:   leaf,
+		t:      t,
+		writer: mockBs,
+		reader: mockBs.WithSegment(id),
+		loaded: true,
+	}
+
+	if bs != nil {
+		p.writer = bs
+		p.reader = bs.WithSegment(id)
+	}
+
+	return p
+}
+
+func newPageWithID(t int, id string, bs *WriteBuffer) *Page {
+	mockBs := newWriteBuffer(nil)
+
+	p := &Page{
+		ID:     id,
+		leaf:   false,
+		t:      t,
+		writer: mockBs,
+		reader: mockBs.WithSegment(id),
+		loaded: true,
+	}
+
+	if bs != nil {
+		p.writer = bs
+		p.reader = bs.WithSegment(id)
+	}
+
+	return p
 }

@@ -8,33 +8,49 @@ import (
 	"time"
 )
 
-func Prettify(v interface{}) (string, error) {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+// Document represents a set of named fields. They are
+// recursively defined and may contain other embedded
+// documents.
+type Document struct {
+	Key          string
+	Fields       map[string]Field
+	CreatedAt    time.Time
+	LastModified time.Time
+	Deleted      bool
 }
 
-// TODO: Comment
-type Record struct {
-	Key     string
-	Value   []byte // Deprecated
-	Fields  map[string]Field
-	TS      time.Time
-	Deleted bool
-}
-
-type compareFunc func(Record, Record) int
-
+// Set the values of one or more fields whose type are
+// inferred from the values' concrete type. Optionally, a
+// schema may be provided to enforce the types of the
+// fields. Note, however, that the schema is not applied in
+// future calls to Set. If this is desired, apply the
+// schema at the collection level.
 // TODO: TEST
-func (r *Record) Set(name string, value interface{}) {
-	r.Fields[name] = NewField(value)
+func (d Document) Set(fields map[string]interface{}, schemas ...Schema) Document {
+	d.Fields = make(map[string]Field)
+	for name, value := range fields {
+		d.Fields[name] = newField(value)
+	}
+
+	d.LastModified = time.Now()
+
+	return d
+}
+
+// Update returns a copy of the current document, updated
+// with the provided fields.
+func (d Document) Update(fields map[string]interface{}) Document {
+	c := d.clone()
+	for name, value := range fields {
+		c.Fields[name] = newField(value)
+	}
+
+	return c
 }
 
 // TODO: test
-func (r *Record) Get(fieldPath ...string) (Field, bool) {
-	f, ok := r.Fields[fieldPath[0]]
+func (d Document) Get(fieldPath ...string) (Field, bool) {
+	f, ok := d.Fields[fieldPath[0]]
 	if !ok {
 		return f, false
 	}
@@ -54,18 +70,18 @@ func (r *Record) Get(fieldPath ...string) (Field, bool) {
 				return f, false
 			}
 
-			f = NewField(v)
+			f = newField(v)
 		}
 	}
 
 	return f, true
 }
 
-func (r Record) Select(selectFn ...FieldSelector) map[string]interface{} {
+func (d Document) Select(selectFn ...FieldSelector) map[string]interface{} {
 	out := make(map[string]interface{})
 
 	for _, selectFn := range selectFn {
-		name, field, ok := selectFn(r)
+		name, field, ok := selectFn(d)
 		if !ok {
 			out[name] = fmt.Errorf("Value at fieldpath %s does not exist", name)
 		} else {
@@ -76,78 +92,40 @@ func (r Record) Select(selectFn ...FieldSelector) map[string]interface{} {
 	return out
 }
 
-func (r Record) CreatedAt() time.Time {
-	return r.TS
+func (d Document) IsLessThan(other Document) bool {
+	return strings.Compare(d.Key, other.Key) < 0
 }
 
-func (r *Record) IsLessThan(other Record) bool {
-	return r.Compare(byKey, other) < 0
+func (d Document) IsEqualTo(other *Document) bool {
+	return d.Key == other.Key
 }
 
-func (r Record) Compare(by compareFunc, other Record) int {
-	return by(r, other)
+func (d Document) String() string {
+	s, _ := prettify(d.Fields)
+	return fmt.Sprintf("%s=%s", d.Key, s)
 }
 
-func (r Record) IsEqualTo(other *Record) bool {
-	return r.Key == other.Key
+func (d Document) compare(by compareFunc, other Document) int {
+	return by(d, other)
 }
 
-func (r *Record) String() string {
-	s, _ := Prettify(r.Fields)
-	return fmt.Sprintf("%s=%s", r.Key, s)
-}
-
-func (r *Record) SetFields(fields map[string]interface{}) {
-	r.Fields = make(map[string]Field)
-
-	for name, value := range fields {
-		r.Set(name, value)
-	}
-}
-
-func (r *Record) Clone() *Record {
-	clone := NewRecord(r.Key)
-	for name, field := range r.Fields {
-		clone.Fields[name] = field
+func (d Document) clone() Document {
+	fields := make(map[string]Field)
+	for name, field := range d.Fields {
+		fields[name] = field
 	}
 
-	return clone
+	d.Fields = fields
+
+	return d
 }
 
-// TODO: Make sure original isn't affected
-func (r *Record) UpdateFields(fields map[string]interface{}) *Record {
-	c := r.Clone()
-
-	for name, value := range fields {
-		c.Fields[name] = Field{
-			Type:  GetDataType(value),
-			Value: value,
-		}
-	}
-
-	return c
-}
-
-// TODO: implement
-func byKey(this, that Record) int {
-	return strings.Compare(this.Key, that.Key)
-}
-
-// TODO: Deprecate
-func New(key string, value []byte) Record {
-	return Record{
-		Key:    key,
-		Value:  value,
-		TS:     time.Now(),
-		Fields: make(map[string]Field),
-	}
-}
-
-func NewRecord(key string) *Record {
-	return &Record{
-		Key:    key,
-		TS:     time.Now(),
-		Fields: make(map[string]Field),
+func NewDoc(key string) Document {
+	return Document{
+		Key:          key,
+		CreatedAt:    time.Now(),
+		LastModified: time.Now(),
+		Fields:       make(map[string]Field),
 	}
 }
 
@@ -248,11 +226,11 @@ func (f *Field) Validate(name string, schemaField SchemaField) []error {
 
 	if f.IsType(Object) {
 		obj := f.Value.(map[string]interface{})
-		r := NewRecord("k")
-		r.SetFields(obj)
+		r := NewDoc("k")
+		r.Set(obj)
 		objErrs := schemaField.Schema.Validate(r)
 
-		if len(objErrs) != 0 {
+		if objErrs != nil {
 			errs = append(errs, objErrs)
 		}
 	}
@@ -345,7 +323,7 @@ func (f *Field) IsOneOf(ts ...Type) bool {
 	return false
 }
 
-type FieldSelector func(Record) (string, Field, bool)
+type FieldSelector func(Document) (string, Field, bool)
 
 // TODO: test
 func MakeFieldSelectors(selectors ...string) []FieldSelector {
@@ -354,7 +332,7 @@ func MakeFieldSelectors(selectors ...string) []FieldSelector {
 	for _, selector := range selectors {
 		name := selector
 
-		out = append(out, func(r Record) (string, Field, bool) {
+		out = append(out, func(r Document) (string, Field, bool) {
 			fieldPath := strings.Split(name, ".")
 			f, ok := r.Fields[fieldPath[0]]
 
@@ -378,7 +356,7 @@ func MakeFieldSelectors(selectors ...string) []FieldSelector {
 						return name, f, false
 					}
 
-					f = NewField(v)
+					f = newField(v)
 				}
 
 			}
@@ -390,3 +368,13 @@ func MakeFieldSelectors(selectors ...string) []FieldSelector {
 
 	return out
 }
+
+func prettify(v interface{}) (string, error) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+type compareFunc func(Document, Document) int

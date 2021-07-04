@@ -7,6 +7,7 @@ type Config struct {
 	BaseDir string
 	T       int
 	Storage ReadWriterTo
+	Port    int
 }
 
 type Option func(*Store)

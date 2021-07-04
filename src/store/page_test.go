@@ -1,36 +1,11 @@
 package store
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 
-	record "github.com/namvu9/keylime/src/types"
+	"github.com/namvu9/keylime/src/types"
 )
-
-func TestPageGet(t *testing.T) {
-	t.Run("Missing Key", func(t *testing.T) {
-		root := makePage(2, makeRecords())
-		_, err := root.Get("N")
-		if err == nil {
-			t.Errorf("Expected error but got nil")
-		}
-	})
-
-	t.Run("should work", func(t *testing.T) {
-		root := makePage(2, makeRecords("a"))
-		root.records[0] = record.New("a", []byte{99})
-
-		v, err := root.Get("a")
-		if err != nil {
-			t.Errorf("Expected nil, but got error")
-		}
-
-		if bytes.Compare([]byte{99}, v) != 0 {
-			t.Errorf("Want=%v, Got=%v", []byte{99}, v)
-		}
-	})
-}
 
 func TestDeletePage(t *testing.T) {
 	bs := newWriteBuffer(nil)
@@ -41,7 +16,7 @@ func TestDeletePage(t *testing.T) {
 
 		page := newPageWithKeys(2, []string{"a", "c"})
 		page.writer = bs
-		err := page.Delete("b")
+		err := page.remove("b")
 		if err == nil {
 			t.Errorf("deleteKey should return error if key is not found")
 		}
@@ -67,7 +42,7 @@ func TestDeletePage(t *testing.T) {
 				node = makeBufPage(2, makeRecords("a", "b", "c"))
 			)
 
-			err := node.Delete(test.targetKey)
+			err := node.remove(test.targetKey)
 			if err != nil {
 				t.Errorf("Should not return error")
 			}
@@ -94,7 +69,7 @@ func TestDeletePage(t *testing.T) {
 		)
 		root.writer = bs
 
-		root.Delete("5")
+		root.remove("5")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("3")
@@ -139,7 +114,7 @@ func TestDeletePage(t *testing.T) {
 			makeBufPage(2, makeRecords("10000")),
 		)
 
-		root.Delete("9")
+		root.remove("9")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("6")
@@ -193,7 +168,7 @@ func TestDeletePage(t *testing.T) {
 			makeBufPage(2, makeRecords("6", "7")),
 		)
 
-		root.Delete("5")
+		root.remove("5")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("6")
@@ -239,7 +214,7 @@ func TestDeletePage(t *testing.T) {
 			),
 		)
 
-		root.Delete("3")
+		root.remove("3")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasKeys("4")
@@ -296,7 +271,7 @@ func TestDeletePage(t *testing.T) {
 			deletePage,
 		)
 
-		root.Delete("5")
+		root.remove("5")
 
 		u.with("Root", root, func(nu namedUtil) {
 			nu.hasNRecords(0)
@@ -346,7 +321,7 @@ func TestInsertRecord(t *testing.T) {
 
 		root := makeBufPage(3, makeRecords(test.keys...))
 
-		root.insert(record.New(test.k, nil))
+		root.insert(types.NewDoc(test.k))
 
 		u.hasKeys(fmt.Sprintf("TestLeafInsert %d", i), test.wantKeys, root)
 
@@ -694,13 +669,13 @@ func TestPredecessorSuccessorPage(t *testing.T) {
 func TestFull(t *testing.T) {
 	root := newPage(2, true, nil)
 
-	if got := root.Full(); got {
+	if got := root.full(); got {
 		t.Errorf("New(2).IsFull() = %v; want false", got)
 	}
 
 	root.records = makeRecords("1", "2", "3")
 
-	if got := root.Full(); !got {
+	if got := root.full(); !got {
 		t.Errorf("Want root.IsFull() = true, got %v", got)
 	}
 }
@@ -717,7 +692,7 @@ func TestSparse(t *testing.T) {
 	} {
 		node := newPageWithKeys(test.t, test.keys)
 
-		if got := node.Sparse(); got != test.wantSparse {
+		if got := node.sparse(); got != test.wantSparse {
 			t.Errorf("%d: Got=%v; Want=%v", i, got, test.wantSparse)
 		}
 

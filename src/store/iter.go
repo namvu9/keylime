@@ -86,14 +86,14 @@ func byKey(k string) iterFunc {
 			return p, nil
 		}
 
-		return p.Child(index)
+		return p.child(index)
 	}
 }
 
 func byMinPage(p *Page) (*Page, error) {
-	return p.Child(0)
+	return p.child(0)
 }
 
 func byMaxPage(p *Page) (*Page, error) {
-	return p.Child(len(p.children) - 1)
+	return p.child(len(p.children) - 1)
 }

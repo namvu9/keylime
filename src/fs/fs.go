@@ -1,4 +1,4 @@
-package main
+package fs
 
 import (
 	"io"
@@ -54,5 +54,12 @@ func (fs *FStorage) Exists() (bool, error) {
 func (fs *FStorage) WithSegment(name string) store.ReadWriterTo {
 	return &FStorage{
 		location: path.Join(fs.location, name),
+	}
+}
+
+func New(baseDir string) *FStorage {
+	return &FStorage{
+		location: baseDir,
+		offset:   0,
 	}
 }

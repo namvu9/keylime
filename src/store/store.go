@@ -2,6 +2,7 @@ package store
 
 import (
 	"io"
+	"os"
 
 	"github.com/namvu9/keylime/src/types"
 )
@@ -30,3 +31,25 @@ type ReadWriterTo interface {
 	Delete() error
 	Exists() (bool, error)
 }
+
+// New instantiates a store with the provided config and
+// options
+func New(cfg *Config, opts ...Option) *Store {
+	s := &Store{
+		baseDir:     cfg.BaseDir,
+		t:           cfg.T,
+		collections: make(map[string]*collection),
+	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	if s.storage == nil {
+		os.Stderr.WriteString("Warning: Storage has not been initialized\n")
+		s.storage = newIOReporter()
+	}
+
+	return s
+}
+

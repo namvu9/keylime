@@ -110,8 +110,8 @@ func newPageWithKeys(t int, keys []string) *Page {
 	}
 }
 
-func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.Record, children ...*Page) *Page {
-	return func(t int, records []record.Record, children ...*Page) *Page {
+func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.Document, children ...*Page) *Page {
+	return func(t int, records []record.Document, children ...*Page) *Page {
 		root := newPage(t, false, nil)
 		root.writer = bs
 		root.records = records
@@ -131,7 +131,7 @@ func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.R
 	}
 }
 
-func makePage(t int, records []record.Record, children ...*Page) *Page {
+func makePage(t int, records []record.Document, children ...*Page) *Page {
 	root := newPage(t, false, nil)
 	root.records = records
 	root.children = children
@@ -148,17 +148,17 @@ func makePage(t int, records []record.Record, children ...*Page) *Page {
 	return root
 }
 
-func makeRecords(keys ...string) []record.Record {
-	out := []record.Record{}
+func makeRecords(keys ...string) []record.Document {
+	out := []record.Document{}
 	for _, key := range keys {
-		out = append(out, record.New(key, nil))
+		out = append(out, record.NewDoc(key))
 	}
 
 	return out
 }
 
 type Info struct {
-	records []record.Record
+	records []record.Document
 	pages   []*Page
 }
 

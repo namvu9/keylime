@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/namvu9/keylime/src/fs"
 	"github.com/namvu9/keylime/src/queries"
 	"github.com/namvu9/keylime/src/store"
 )
@@ -28,8 +29,7 @@ func main() {
 	}
 
 	var (
-		fs     = &FStorage{"./testdata", 0}
-		s      = store.New(cfg, store.WithStorage(fs))
+		s      = store.New(cfg, store.WithStorage(fs.New(cfg.BaseDir)))
 		reader = bufio.NewReader(os.Stdin)
 	)
 

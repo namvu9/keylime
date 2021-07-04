@@ -5,90 +5,106 @@ import (
 	"encoding/gob"
 	"fmt"
 	"strings"
-
-	"github.com/namvu9/keylime/src/errors"
 )
 
+// Schema represents a set of constraints
 type Schema struct {
 	fields map[string]SchemaField
 }
 
-func (s *Schema) GobEncode() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(s.fields)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-}
-
-func (s *Schema) GobDecode(data []byte) error {
-	var (
-		buf = bytes.NewBuffer(data)
-		dec = gob.NewDecoder(buf)
-	)
-
-	return dec.Decode(&s.fields)
-}
-
-// Validate a record's field against the current schema. If
-// a field's value is of type String and does not match the
-// expected type, an attempt will be made to implicitly
-// convert the field's value to the expected type. If
-// validation passes, nil is returned.
-func (s *Schema) Validate(r *Record) ValidationError {
-	var (
-		wrapError = errors.WrapWith("(*Schema).Validate", errors.EInternal)
-		es        = make(ValidationError)
-	)
+// Validate a document against the current schema. An error
+// is returned if validation fails.
+func (s *Schema) Validate(doc Document) error {
+	var ve = make(ValidationError)
 
 	if s == nil {
 		return nil
 	}
 
-	for name, field := range r.Fields {
-		sf, ok := s.fields[name]
-		if !ok {
-			es[name] = append(es[name], fmt.Errorf("Unknown field: %s", name))
+	// validate the fields in doc
+	for _, name := range s.RevComplement(doc) {
+		ve[name] = append(ve[name], fmt.Errorf("Unknown field: %s", name))
+	}
+
+	for _, name := range s.Intersection(doc) {
+		field := doc.Fields[name]
+		schemaField := s.fields[name]
+
+		err := field.Validate(name, schemaField)
+		if err != nil {
+			ve[name] = err
 		} else {
-			err := field.Validate(name, sf)
-			if err != nil {
-				es[name] = err
-			} else {
-				r.Fields[name] = field
-			}
+			doc.Fields[name] = field
 		}
 	}
 
-	for name, field := range s.fields {
-		if v, ok := r.Fields[name]; !ok && field.Required {
-			err := wrapError(fmt.Errorf("Required field missing: %s", name))
-			es[name] = append(es[name], err)
-		} else if v.Value == nil && field.Required {
-			err := wrapError(fmt.Errorf("Required field is non-nullable: %s", name))
-			es[name] = append(es[name], err)
+	// Check for missing fields
+	for _, name := range s.Complement(doc) {
+		schemaField := s.fields[name]
+		if schemaField.Required {
+			ve[name] = append(ve[name], fmt.Errorf("Required field %s missing", name))
 		}
 	}
 
-	if len(es) == 0 {
+	if len(ve) == 0 {
 		return nil
 	}
 
-	return es
+	return ve
 }
 
-// With default makes a copy of Record r's fields and
+// RevComplement returns the set of fields present in the
+// document but not in the schema
+func (s *Schema) RevComplement(doc Document) []string {
+	out := []string{}
+	for name := range doc.Fields {
+		if _, ok := s.fields[name]; !ok {
+			out = append(out, name)
+		}
+	}
+
+	return out
+
+}
+
+// Intersection return the set of fields present in both the
+// schema and the document
+func (s *Schema) Intersection(doc Document) []string {
+	out := []string{}
+
+	for name := range s.fields {
+		if field, ok := doc.Fields[name]; ok && field.Value != nil {
+			out = append(out, name)
+		}
+	}
+
+	return out
+}
+
+// Complement returns the set of fields present in the
+// schema but not in the document
+func (s *Schema) Complement(doc Document) []string {
+	out := []string{}
+
+	for name := range s.fields {
+		if field, ok := doc.Fields[name]; !ok || field.Value == nil {
+			out = append(out, name)
+		}
+	}
+
+	return out
+}
+
+// WithDefaults makes a copy of Record r's fields and
 // and returns a pointer to a record with the schema's
 // default values applied
-func (s *Schema) WithDefaults(r *Record) *Record {
-	recordClone := r.Clone()
+func (s *Schema) WithDefaults(r Document) Document {
+	recordClone := r.clone()
 
 	for name, schemaField := range s.fields {
 		_, ok := recordClone.Fields[name]
 		if schemaField.DefaultValue != nil && !ok {
-			schemaField.ApplyDefault(name, recordClone)
+			recordClone = schemaField.ApplyDefault(name, recordClone)
 		}
 	}
 
@@ -135,36 +151,34 @@ func (s *SchemaBuilder) AddField(name string, valueType Type, opts ...SchemaFiel
 	return s
 }
 
-func NewField(v interface{}) Field {
+func newField(v interface{}) Field {
 	return Field{
 		Type:  GetDataType(v),
 		Value: v,
 	}
 }
 
-// TODO: Return error instead of []error
-func (s *SchemaBuilder) Build() (*Schema, []error) {
-	wrapError := errors.WrapWith("(*SchemaBuilder).Build", errors.EInternal)
-
+// Build builds, validates, and returns the schema
+func (s *SchemaBuilder) Build() (*Schema, ValidationError) {
 	schema := NewSchema()
-	errors := []error{}
+	errors := make(ValidationError)
 
 	for name, schemaField := range s.fields {
-		if schemaField.DefaultValue != nil {
-			defaultField := NewField(schemaField.DefaultValue)
-			defaultType := GetDataType(schemaField.DefaultValue)
+		if schemaField.HasDefault() {
+			defaultField := newField(schemaField.DefaultValue)
 
-			if defaultType.Is(Map) && schemaField.Type.Is(Object) {
-				err := defaultField.Validate(name, schemaField)
-				errors = append(errors, err...)
-			} else if defaultType != schemaField.Type {
-				errors = append(errors, wrapError(fmt.Errorf("Invalid default value for field of type %s: %v", schemaField.Type, defaultType)))
+			if defaultField.IsOneOf(Map, Object) && schemaField.Type.Is(Object) {
+				if err := defaultField.Validate(name, schemaField); err != nil {
+					errors[name] = err
+				}
+			} else if !defaultField.IsType(schemaField.Type) {
+				errors[name] = append(errors[name], fmt.Errorf("Invalid default value for field of type %s: %v", schemaField.Type, defaultField.Type))
 			}
 		}
 
 		// TODO: TEST
 		if schemaField.Type.Is(Object) && schemaField.Schema == nil {
-			errors = append(errors, wrapError(fmt.Errorf("Field of type Object must have a schema")))
+			errors[name] = append(errors[name], fmt.Errorf("Field of type Object must have a schema"))
 		}
 
 		schema.fields[name] = schemaField
@@ -177,13 +191,16 @@ func (s *SchemaBuilder) Build() (*Schema, []error) {
 	return schema, nil
 }
 
+// NewSchemaBuilder instantiates a new SchemaBuilder
 func NewSchemaBuilder() *SchemaBuilder {
 	return &SchemaBuilder{
 		fields: make(map[string]SchemaField),
 	}
 }
 
-func ExtendSchema(s *Schema) *SchemaBuilder {
+// Extend returns a `SchemaBuilder` that uses the current
+// schema as basis.
+func (s *Schema) Extend() *SchemaBuilder {
 	sb := NewSchemaBuilder()
 	for name, field := range s.fields {
 		sb.fields[name] = field
@@ -280,11 +297,16 @@ type SchemaField struct {
 	ElementType  *Type
 }
 
-func (sf SchemaField) ApplyDefault(name string, r *Record) {
-	r.Fields[name] = Field{
-		Type:  sf.Type,
-		Value: sf.Default(),
-	}
+// HasDefault reports whether the schema field has a default
+// value set
+func (sf SchemaField) HasDefault() bool {
+	return sf.DefaultValue != nil
+}
+
+func (sf SchemaField) ApplyDefault(name string, r Document) Document {
+	c := r.clone()
+	c.Fields[name] = newField(sf.Default())
+	return c
 }
 
 func (sf SchemaField) Default() interface{} {
@@ -296,7 +318,7 @@ func (sf SchemaField) Default() interface{} {
 	return sf.DefaultValue
 }
 
-type ValidationError map[string][]error
+type ValidationError map[string]FieldValidationError
 
 func (ve ValidationError) Error() string {
 	var sb strings.Builder
@@ -309,4 +331,34 @@ func (ve ValidationError) Error() string {
 	}
 	sb.WriteString("\n")
 	return sb.String()
+}
+
+type FieldValidationError []error
+
+func (fve FieldValidationError) Error() string {
+	var sb strings.Builder
+	for _, e := range fve {
+		sb.WriteString(fmt.Sprintf("* %s\n", e))
+	}
+	return sb.String()
+}
+
+func (s *Schema) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(s.fields)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (s *Schema) GobDecode(data []byte) error {
+	var (
+		buf = bytes.NewBuffer(data)
+		dec = gob.NewDecoder(buf)
+	)
+
+	return dec.Decode(&s.fields)
 }

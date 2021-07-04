@@ -26,22 +26,23 @@ type collection struct {
 
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *collection) Get(ctx context.Context, k string) (*types.Record, error) {
+func (c *collection) Get(ctx context.Context, k string) (types.Document, error) {
 	err := c.load()
 	if err != nil {
-		return nil, err
+		return types.NewDoc(k), err
 	}
 
 	r, err := c.primaryIndex.get(ctx, k)
 	if err != nil {
-		return nil, err
+		return *r, err
 	}
 
 	if c.Schema != nil {
-		return c.Schema.WithDefaults(r), nil
+		doc := c.Schema.WithDefaults(*r)
+		return doc, nil
 	}
 
-	return r, nil
+	return *r, nil
 }
 
 type Fields = map[string]interface{}
@@ -67,8 +68,8 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	var wg sync.WaitGroup
 
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
-	r := types.NewRecord(k)
-	r.SetFields(fields)
+	r := types.NewDoc(k)
+	r.Set(fields)
 
 	if c.Schema != nil {
 		err := c.Schema.Validate(r)
@@ -81,7 +82,7 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	errChan := make(chan error, 2)
 	go func() {
 		defer wg.Done()
-		if err := c.primaryIndex.insert(ctx, *r); err != nil {
+		if err := c.primaryIndex.insert(ctx, r); err != nil {
 			errChan <- err
 		}
 	}()
@@ -141,20 +142,20 @@ func (c *collection) commit() error {
 	return nil
 }
 
-func (c *collection) GetLast(ctx context.Context, n int) ([]*types.Record, error) {
+func (c *collection) GetLast(ctx context.Context, n int) ([]types.Document, error) {
 	err := c.load()
 	if err != nil {
-		return nil, err
+		return []types.Document{}, err
 	}
 
 	// TODO: return error from oi
 	return c.orderIndex.Get(n, false), nil
 }
 
-func (c *collection) GetFirst(ctx context.Context, n int) ([]*types.Record, error) {
+func (c *collection) GetFirst(ctx context.Context, n int) ([]types.Document, error) {
 	err := c.load()
 	if err != nil {
-		return nil, err
+		return []types.Document{}, err
 	}
 
 	// TODO: return error from oi
@@ -183,7 +184,7 @@ func (c *collection) update(ctx context.Context, k string, fields map[string]int
 		return wrapError(err)
 	}
 
-	clone := r.UpdateFields(fields)
+	clone := r.Update(fields)
 	if c.Schema != nil {
 		err := c.Schema.Validate(clone)
 		if err != nil {
@@ -191,7 +192,7 @@ func (c *collection) update(ctx context.Context, k string, fields map[string]int
 		}
 	}
 
-	err = c.primaryIndex.insert(ctx, *clone)
+	err = c.primaryIndex.insert(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
@@ -372,3 +373,24 @@ func (c *collection) exists() bool {
 	return true
 
 }
+
+func newCollection(name string, s ReadWriterTo) *collection {
+	t := 50
+	c := &collection{
+		Name:    name,
+		storage: newIOReporter(),
+	}
+
+	if s != nil {
+		c.storage = s.WithSegment(name)
+		c.primaryIndex =
+			newKeyIndex(t, s.WithSegment(name))
+		c.orderIndex = newOrderIndex(t*2, s.WithSegment(name))
+	} else {
+		c.primaryIndex = newKeyIndex(t, c.storage)
+		c.orderIndex = newOrderIndex(t*2, c.storage)
+	}
+
+	return c
+}
+

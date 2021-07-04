@@ -9,15 +9,15 @@ type TokenType string
 
 const (
 	Delimiter    TokenType = "Delimiter"
-	Keyword      TokenType = "Keyword"
-	Identifier   TokenType = "Identifier"
-	StringValue  TokenType = "String"
-	BooleanValue TokenType = "Boolean"
-	NumberValue  TokenType = "Number"
-	ArrayValue   TokenType = "Array"
-	ObjectValue  TokenType = "Object"
-	MapValue     TokenType = "Map"
-	EOF          TokenType = "EOF"
+	Keyword                = "Keyword"
+	Identifier             = "Identifier"
+	StringValue            = "String"
+	BooleanValue           = "Boolean"
+	NumberValue            = "Number"
+	ArrayValue             = "Array"
+	ObjectValue            = "Object"
+	MapValue               = "Map"
+	EOF                    = "EOF"
 )
 
 func (t Token) IsValueType() bool {

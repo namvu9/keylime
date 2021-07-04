@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/types"
 )
@@ -23,10 +24,10 @@ type KeyIndex struct {
 	storage   ReadWriterTo
 }
 
-func (ki *KeyIndex) insert(ctx context.Context, r types.Record) error {
+func (ki *KeyIndex) insert(ctx context.Context, r types.Document) error {
 	const op errors.Op = "(*KeyIndex).Insert"
 
-	if ki.root.Full() {
+	if ki.root.full() {
 		newRoot := ki.newPage(false)
 		newRoot.children = []*Page{ki.root}
 		newRoot.splitChild(0)
@@ -51,21 +52,21 @@ func (ki *KeyIndex) insert(ctx context.Context, r types.Record) error {
 }
 
 func (ki *KeyIndex) remove(ctx context.Context, key string) error {
-	const op errors.Op = "(*KeyIndex).Delete"
+	const op errors.Op = "(*KeyIndex).remove"
 
 	page, err := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if err := page.Delete(key); err != nil {
+	if err := page.remove(key); err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if ki.root.Empty() && !ki.root.Leaf() {
+	if ki.root.empty() && !ki.root.leaf {
 		oldRoot := ki.root
 
-		newRoot, err := ki.root.Child(0)
+		newRoot, err := ki.root.child(0)
 		if err != nil {
 			return errors.Wrap(op, errors.EInternal, err)
 		}
@@ -82,7 +83,7 @@ func (ki *KeyIndex) remove(ctx context.Context, key string) error {
 	return ki.bufWriter.flush()
 }
 
-func (ki *KeyIndex) get(ctx context.Context, key string) (*types.Record, error) {
+func (ki *KeyIndex) get(ctx context.Context, key string) (*types.Document, error) {
 	const op errors.Op = "(*KeyIndex).Get"
 
 	node, err := ki.root.iter(byKey(key)).Get()
@@ -236,7 +237,7 @@ type Node struct {
 	Next ID
 
 	Capacity int
-	Records  []*types.Record
+	Records  []types.Document
 	storage  ReadWriterTo
 	writer   *WriteBuffer
 	loaded   bool
@@ -302,7 +303,7 @@ func (n *Node) Full() bool {
 	return len(n.Records) >= n.Capacity
 }
 
-func (n *Node) Insert(r *types.Record) error {
+func (n *Node) Insert(r types.Document) error {
 	n.Records = append(n.Records, r)
 
 	return n.Save()
@@ -316,7 +317,7 @@ func (n *Node) Name() string {
 	return string(n.ID)
 }
 
-func (oi *OrderIndex) insert(ctx context.Context, r *types.Record) error {
+func (oi *OrderIndex) insert(ctx context.Context, r types.Document) error {
 	headNode, err := oi.Node(oi.Head)
 	if err != nil {
 		return err
@@ -376,8 +377,8 @@ func (oi *OrderIndex) load() error {
 	return nil
 }
 
-func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
-	out := []*types.Record{}
+func (oi *OrderIndex) Get(n int, asc bool) []types.Document {
+	out := []types.Document{}
 
 	var node *Node
 	if asc {
@@ -419,7 +420,7 @@ func (oi *OrderIndex) Get(n int, asc bool) []*types.Record {
 	return out
 }
 
-func (oi *OrderIndex) update(ctx context.Context, r *types.Record) error {
+func (oi *OrderIndex) update(ctx context.Context, r types.Document) error {
 	node, _ := oi.Node(oi.Head)
 	for node != nil {
 		for i, record := range node.Records {
@@ -457,3 +458,46 @@ func (oi *OrderIndex) Info() {
 	fmt.Printf("Records: %d\n", nRecords)
 
 }
+
+func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
+	wb := newWriteBuffer(s)
+	node := newNode(blockSize, s, wb)
+	oi := &OrderIndex{
+		BlockSize: blockSize,
+		storage:   newIOReporter(),
+		Head:      node.ID,
+		Tail:      node.ID,
+		nodes:     NodeMap{node.ID: node},
+		writer:    wb,
+	}
+
+	if s != nil {
+		oi.storage = s
+	}
+
+	return oi
+}
+
+func newKeyIndex(t int, s ReadWriterTo) *KeyIndex {
+	ki := &KeyIndex{
+		T:       t,
+		storage: newIOReporter(),
+	}
+
+	if s != nil {
+		ki.storage = s.WithSegment("key_index")
+	}
+
+	ki.bufWriter = newWriteBuffer(s)
+
+	ki.root = ki.newPage(true)
+	ki.RootPage = ki.root.ID
+
+	return ki
+}
+
+func (ki *KeyIndex) newPage(leaf bool) *Page {
+	p := newPage(ki.T, leaf, ki.bufWriter)
+	return p
+}
+
