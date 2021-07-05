@@ -1,0 +1,16 @@
+WITH SCHEMA {
+  age: Number? = 0,
+  name: String,
+  completedLesson: Map,
+  facebook: {
+    dicks: Boolean
+  }
+} CREATE table;
+
+INFO table;
+
+WITH '{
+  "name": "NAM",
+  "completedLesson": {},
+  "facebook": {}
+}' SET a IN table;
