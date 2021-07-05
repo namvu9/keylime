@@ -112,37 +112,44 @@ func (s *Schema) WithDefaults(r Document) Document {
 }
 
 func (s *Schema) String() string {
+	return s.StringIndent(0)
+}
+
+func (s *Schema) StringIndent(n int) string {
 	var sb strings.Builder
 	sb.WriteString("Schema:")
 
 	for name, field := range s.fields {
-		sb.WriteString(fmt.Sprintf("\n- %s\n", name))
-		sb.WriteString(fmt.Sprintf("* Type: %s\n", field.Type))
-		sb.WriteString(fmt.Sprintf("* Required: %v\n", field.Required))
+		prefix := strings.Repeat("  ", n)
+
+		sb.WriteString(fmt.Sprintf("%s\n- %s\n", prefix, name))
+		sb.WriteString(fmt.Sprintf("%s* Type: %s\n", prefix, field.Type))
+		sb.WriteString(fmt.Sprintf("%s* Required: %v\n", prefix, field.Required))
 		if field.DefaultValue != nil {
-			sb.WriteString(fmt.Sprintf("* Default: %v\n", field.DefaultValue))
+			sb.WriteString(fmt.Sprintf("%s* Default: %v\n", prefix, field.DefaultValue))
 		}
 
 
 		if field.Min != nil {
-			sb.WriteString(fmt.Sprintf("* Min: %d\n", *field.Min))
+			sb.WriteString(fmt.Sprintf("%s* Min: %d\n", prefix, *field.Min))
 		}
 
 		if field.Max != nil {
-			sb.WriteString(fmt.Sprintf("* Max: %d\n", *field.Max))
+			sb.WriteString(fmt.Sprintf("%s* Max: %d\n", prefix, *field.Max))
 		}
 
 		if field.ElementType != nil {
-			sb.WriteString(fmt.Sprintf("* Element type: %s\n", string(*field.ElementType)))
+			sb.WriteString(fmt.Sprintf("%s* Element type: %s\n", prefix, string(*field.ElementType)))
 		}
 
 		if field.Schema != nil {
-			sb.WriteString(fmt.Sprintf("* %s\n", field.Schema))
+			sb.WriteString(fmt.Sprintf("%s* %s\n", prefix, field.Schema.StringIndent(n+1)))
 		}
 
 	}
 
 	return sb.String()
+
 }
 
 type SchemaBuilder struct {
