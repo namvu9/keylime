@@ -91,3 +91,7 @@ func GetDataType(s interface{}) Type {
 		return Unknown
 	}
 }
+
+type Identifiable interface {
+	ID() string
+}

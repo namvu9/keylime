@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/namvu9/keylime/src/errors"
+	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
@@ -211,9 +212,12 @@ type OrderIndex struct {
 	Tail      ID
 	BlockSize int // Number of records inside each node
 
-	storage ReadWriterTo
-	nodes   NodeMap
-	writer  *WriteBuffer
+	repo   repository.Repository
+	nodes  NodeMap
+}
+
+func (oi *OrderIndex) ID() string {
+	return "order_index"
 }
 
 func (oi *OrderIndex) Node(id ID) (*Node, error) {
@@ -221,86 +225,48 @@ func (oi *OrderIndex) Node(id ID) (*Node, error) {
 		return nil, fmt.Errorf("No ID provided")
 	}
 
-	v, ok := oi.nodes[id]
-	if !ok {
-		n := newNodeWithID(id, oi.storage, oi.writer)
-		err := n.Load()
-		if err != nil {
-			return nil, err
-		}
-
-		oi.nodes[id] = n
-		return n, nil
+	item, err := oi.repo.Get(string(id))
+	if err != nil {
+		return nil, err
 	}
+
+	v, ok := item.(*Node)
+	if !ok {
+		return nil, fmt.Errorf("Item with ID %s did not have type Node", id)
+	}
+
+	v.repo = &oi.repo
 
 	return v, nil
 }
 
 type Node struct {
-	ID   ID
-	Prev ID
-	Next ID
+	Identifier ID
+	Prev       ID
+	Next       ID
+	Capacity   int
+	Docs       []types.Document
 
-	Capacity int
-	Docs     []types.Document
-	storage  ReadWriterTo
-	writer   *WriteBuffer
-	loaded   bool
+	storage ReadWriterTo
+	writer  *WriteBuffer
+	repo    *repository.Repository
 }
 
-func (n *Node) Load() error {
-	data, err := io.ReadAll(n.storage)
-	if err != nil {
-		return err
-	}
-	buf := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buf)
-
-	err = dec.Decode(n)
-	if err != nil {
-		return err
-	}
-
-	n.loaded = true
-	return nil
+func (n *Node) ID() string {
+	return string(n.Identifier)
 }
 
-func (oi *OrderIndex) newNode() *Node {
-	oldHead, _ := oi.Node(oi.Head)
-
-	n := newNode(oi.BlockSize, oi.storage, oi.writer)
-	n.loaded = true
-	n.Next = oldHead.ID
-	oi.nodes[n.ID] = n
-
-	oldHead.Prev = n.ID
-	oi.Head = n.ID
-
-	oldHead.save()
-
-	return n
-}
-
-func newNode(capacity int, s ReadWriterTo, w *WriteBuffer) *Node {
+func newNode(capacity int, s ReadWriterTo, w *WriteBuffer, r *repository.Repository) *Node {
 	n := &Node{
-		ID:       ID(uuid.NewString()),
-		Capacity: capacity,
-		storage:  newIOReporter(),
-		loaded:   true,
-		writer:   w,
+		Identifier: ID(uuid.NewString()),
+		Capacity:   capacity,
+		storage:    newIOReporter(),
+		writer:     w,
+		repo:       r,
 	}
 
 	if s != nil {
-		n.storage = s.WithSegment(string(n.ID))
-	}
-
-	return n
-}
-
-func newNodeWithID(id ID, s ReadWriterTo, w *WriteBuffer) *Node {
-	n := &Node{ID: id, storage: newIOReporter(), writer: w}
-	if s != nil {
-		n.storage = s.WithSegment(string(n.ID))
+		n.storage = s.WithSegment(string(n.Identifier))
 	}
 
 	return n
@@ -317,11 +283,11 @@ func (n *Node) Insert(doc types.Document) error {
 }
 
 func (n *Node) save() error {
-	return n.writer.Write(n)
+	return n.repo.Save(n)
 }
 
 func (n *Node) Name() string {
-	return string(n.ID)
+	return string(n.Identifier)
 }
 
 // TODO: Bug, document will be inserted at the head of the
@@ -331,15 +297,41 @@ func (oi *OrderIndex) insert(ctx context.Context, doc types.Document) error {
 	if err != nil {
 		return err
 	}
+
 	if headNode.Full() {
-		headNode = oi.newNode()
-		err := oi.save()
+		newHead := oi.New()
+		err := oi.setHeadNode(newHead)
 		if err != nil {
 			return err
 		}
+
+		return newHead.Insert(doc)
 	}
 
 	return headNode.Insert(doc)
+}
+
+func (oi *OrderIndex) setHeadNode(node *Node) error {
+	headNode, err := oi.Node(oi.Head)
+	if err != nil {
+		return err
+	}
+
+	headNode.Prev = node.Identifier
+	node.Next = headNode.Identifier
+	oi.Head = node.Identifier
+
+	err = oi.repo.Save(headNode)
+	if err != nil {
+		return err
+	}
+
+	err = oi.repo.Save(node)
+	if err != nil {
+		return err
+	}
+
+	return oi.repo.Save(oi)
 }
 
 func (oi *OrderIndex) remove(ctx context.Context, k string) error {
@@ -359,58 +351,39 @@ func (oi *OrderIndex) remove(ctx context.Context, k string) error {
 }
 
 func (oi *OrderIndex) save() error {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(oi)
-	if err != nil {
-		return err
-	}
-
-	_, err = oi.storage.WithSegment("order_index").Write(buf.Bytes())
-
-	return err
+	return oi.repo.Save(oi)
 }
 
 func (oi *OrderIndex) create() error {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(oi)
-	if err != nil {
-		return err
-	}
-
-	_, err = oi.storage.WithSegment("order_index").Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-
+	// WRAP OP
 	headNode, err := oi.Node(oi.Head)
 	if err != nil {
 		return err
 	}
 
-	err = headNode.save()
+	err = oi.repo.Save(headNode)
 	if err != nil {
 		return err
 	}
 
-	return oi.writer.flush()
-}
+	if oi.Head != oi.Tail {
+		tailNode, err := oi.Node(oi.Tail)
+		if err != nil {
+			return err
+		}
 
-func (oi *OrderIndex) load() error {
-	data, err := io.ReadAll(oi.storage.WithSegment("order_index"))
+		err = oi.repo.Save(tailNode)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = oi.repo.Save(oi)
 	if err != nil {
 		return err
 	}
-	buf := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buf)
 
-	err = dec.Decode(oi)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return oi.repo.Flush()
 }
 
 func (oi *OrderIndex) Get(n int, asc bool) []types.Document {
@@ -476,7 +449,11 @@ func (oi *OrderIndex) Info() {
 	nDocs := 0
 	nNodes := 0
 
-	node, _ := oi.Node(oi.Head)
+	node, err := oi.Node(oi.Head)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	for node != nil {
 		nNodes++
 		for _, r := range node.Docs {
@@ -494,23 +471,36 @@ func (oi *OrderIndex) Info() {
 	fmt.Printf("Docs: %d\n", nDocs)
 }
 
-func newOrderIndex(blockSize int, s ReadWriterTo) *OrderIndex {
-	wb := newWriteBuffer(s)
-	node := newNode(blockSize, s, wb)
+func newOrderIndex(blockSize int, s repository.Repository) *OrderIndex {
+	repo := repository.WithFactory(s, &NodeFactory{repo: s, capacity: blockSize})
 	oi := &OrderIndex{
 		BlockSize: blockSize,
-		storage:   newIOReporter(),
-		Head:      node.ID,
-		Tail:      node.ID,
-		nodes:     NodeMap{node.ID: node},
-		writer:    wb,
+		repo:      repo,
 	}
 
-	if s != nil {
-		oi.storage = s
-	}
+	node := oi.New()
+
+	oi.Head = ID(node.ID())
+	oi.Tail = ID(node.ID())
 
 	return oi
+}
+
+type NodeFactory struct {
+	capacity int
+	repo     repository.Repository
+	writer   ReadWriterTo
+}
+
+func (nf *NodeFactory) New() types.Identifiable {
+	return newNode(nf.capacity, nil, nil, &nf.repo)
+}
+
+func (oi *OrderIndex) New() *Node {
+	item := oi.repo.New()
+	node := item.(*Node)
+
+	return node
 }
 
 func newKeyIndex(t int, s ReadWriterTo) *KeyIndex {

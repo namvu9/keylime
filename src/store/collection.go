@@ -6,9 +6,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 
 	"github.com/namvu9/keylime/src/errors"
+	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
@@ -22,6 +24,7 @@ type collection struct {
 	orderIndex   *OrderIndex
 	storage      ReadWriterTo
 	loaded       bool
+	repo         repository.Repository
 }
 
 // Get the value associated with the key `k`, if a record
@@ -82,7 +85,6 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	} else if old != nil {
 		return c.orderIndex.update(ctx, doc)
 	}
-	fmt.Println("HAHA")
 
 	return c.orderIndex.insert(ctx, doc)
 }
@@ -111,7 +113,7 @@ func (c *collection) commit() error {
 			return
 		}
 
-		if err := c.orderIndex.writer.flush(); err != nil {
+		if err := c.orderIndex.repo.Flush(); err != nil {
 			errChan <- err
 		}
 	}()
@@ -207,6 +209,8 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
+
+	c.orderIndex = newOrderIndex(200, c.repo)
 	err = c.orderIndex.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
@@ -238,13 +242,20 @@ func (c *collection) load() error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.load()
+	item, err := c.repo.Get("order_index")
 	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
+		return err
 	}
 
+	oi, ok := item.(*OrderIndex)
+	if !ok {
+		return fmt.Errorf("Could not load order index: %v", reflect.TypeOf(item))
+	}
+	oi.repo = c.repo
+	c.orderIndex = oi
+
 	schemaReader := c.storage.WithSegment("schema")
-	ok, err := schemaReader.Exists()
+	ok, err = schemaReader.Exists()
 	if err != nil {
 		return errors.Wrap(op, errors.EIO, err)
 	}
@@ -336,6 +347,13 @@ func (c *collection) save() error {
 }
 
 func (c *collection) Info(ctx context.Context) {
+	err := c.load()
+	if err != nil {
+		fmt.Printf("Could not load collection: %s\n", err)
+
+		return
+	}
+
 	fmt.Println()
 	fmt.Println("---------------")
 	fmt.Println("Collection:", c.Name)
@@ -356,24 +374,22 @@ func (c *collection) exists() bool {
 	}
 
 	return true
-
 }
 
-func newCollection(name string, s ReadWriterTo) *collection {
+func newCollection(name string, s ReadWriterTo, r repository.Repository) *collection {
 	t := 50
 	c := &collection{
 		Name:    name,
 		storage: newIOReporter(),
+		repo:    repository.WithScope(r, name),
 	}
 
 	if s != nil {
 		c.storage = s.WithSegment(name)
 		c.primaryIndex =
 			newKeyIndex(t, s.WithSegment(name))
-		c.orderIndex = newOrderIndex(t*2, s.WithSegment(name))
 	} else {
 		c.primaryIndex = newKeyIndex(t, c.storage)
-		c.orderIndex = newOrderIndex(t*2, c.storage)
 	}
 
 	return c

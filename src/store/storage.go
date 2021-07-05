@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/gob"
+	"io"
 	"path"
 )
 
@@ -116,6 +117,11 @@ func (ior *ioReporter) Delete() error {
 
 func (ior *ioReporter) Exists() (bool, error) {
 	return true, nil
+}
+
+func (ior *ioReporter) Open(loc string) (io.ReadWriter, error) {
+	ior.location = loc
+	return ior, nil
 }
 
 func (ior *ioReporter) WithSegment(s string) ReadWriterTo {
