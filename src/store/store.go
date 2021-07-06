@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"os"
 
@@ -18,15 +19,59 @@ type Store struct {
 	repo        repository.Repository
 }
 
-func (s Store) Collection(name string) types.Collection {
-	c, ok := s.collections[name]
+type CollectionFactory struct {
+	storage ReadWriterTo
+	repo    repository.Repository
+}
+
+func (cf CollectionFactory) New() types.Identifiable {
+	nop := repository.NoOpFactory{}
+	return nop.New()
+}
+
+func (cf CollectionFactory) Restore(item types.Identifiable) error {
+	c, ok := item.(*collection)
 	if !ok {
-		c := newCollection(name, s.storage, s.repo)
-		s.collections[name] = c
-		return c
+		return fmt.Errorf("CollectionFactory does not know how to handle item %v", item)
 	}
 
-	return c
+	c.repo = repository.WithScope(cf.repo, c.ID())
+	c.storage = cf.storage
+
+	return c.load()
+}
+
+func newCollectionFactory(r repository.Repository, s ReadWriterTo) CollectionFactory {
+	return CollectionFactory{
+		repo: r,
+		storage: s,
+	}
+}
+
+func (s *Store) Collection(name string) (types.Collection, error) {
+	repo := repository.WithScope(s.repo, name)
+
+	item, err := repo.Get(name)
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			c := newCollection(name, s.storage, s.repo)
+			err := repo.SaveCommit(c)
+			if err != nil {
+				return nil, err
+			}
+			return c, err
+		}
+
+		return nil, err
+	}
+
+	c, ok := item.(*collection)
+	if !ok {
+		return nil, fmt.Errorf("Could not load collection %s", name)
+	}
+
+	return c, nil
 }
 
 type ReadWriterTo interface {
@@ -44,7 +89,7 @@ func (gc GobCodec) Encode(v interface{}) ([]byte, error) {
 	err := enc.Encode(v)
 	if err != nil {
 		return nil, err
-	} 
+	}
 
 	b := buf.Bytes()
 	return b, nil
@@ -78,6 +123,8 @@ func New(cfg *Config, opts ...Option) *Store {
 		os.Stderr.WriteString("Warning: Storage has not been initialized\n")
 		s.storage = newIOReporter()
 	}
+
+	s.repo = repository.WithFactory(s.repo, newCollectionFactory(s.repo, s.storage))
 
 	return s
 }

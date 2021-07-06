@@ -15,7 +15,8 @@ func WithFactory(r Repository, f Factory) Repository {
 // the parent scope
 func WithScope(r Repository, name string) Repository {
 	r.scope = path.Join(r.scope, name)
+
 	r.items[r.scope] = make(map[string]types.Identifiable)
+	r.buffer[r.scope] = make(map[string]types.Identifiable)
 	return r
 }
-

@@ -10,4 +10,5 @@ import "encoding/gob"
 func init() {
 	gob.Register(&OrderIndex{})
 	gob.Register(&Node{})
+	gob.Register(&collection{})
 }

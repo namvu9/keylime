@@ -1,12 +1,8 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
-	"io"
-	"reflect"
 	"sync"
 
 	"github.com/namvu9/keylime/src/errors"
@@ -16,15 +12,18 @@ import (
 
 //A collection is a named container for a group of records
 type collection struct {
-	Name      string
-	HasSchema bool
-	Schema    *types.Schema
+	Name         string
+	Schema       *types.Schema
+	PrimaryIndex *KeyIndex
+	OrderIndex   *OrderIndex
 
-	primaryIndex *KeyIndex
-	orderIndex   *OrderIndex
-	storage      ReadWriterTo
-	loaded       bool
-	repo         repository.Repository
+	storage ReadWriterTo
+	loaded  bool
+	repo    repository.Repository
+}
+
+func (c *collection) ID() string {
+	return c.Name
 }
 
 // Get the value associated with the key `k`, if a record
@@ -35,7 +34,7 @@ func (c *collection) Get(ctx context.Context, k string) (types.Document, error) 
 		return types.NewDoc(k), err
 	}
 
-	r, err := c.primaryIndex.get(ctx, k)
+	r, err := c.PrimaryIndex.get(ctx, k)
 	if err != nil {
 		return *r, err
 	}
@@ -80,13 +79,13 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 		}
 	}
 
-	if old, err := c.primaryIndex.insert(ctx, doc); err != nil {
+	if old, err := c.PrimaryIndex.insert(ctx, doc); err != nil {
 		return err
 	} else if old != nil {
-		return c.orderIndex.update(ctx, doc)
+		return c.OrderIndex.update(ctx, doc)
 	}
 
-	return c.orderIndex.insert(ctx, doc)
+	return c.OrderIndex.insert(ctx, doc)
 }
 
 func (c *collection) commit() error {
@@ -96,24 +95,24 @@ func (c *collection) commit() error {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		if err := c.primaryIndex.save(); err != nil {
+		if err := c.PrimaryIndex.save(); err != nil {
 			errChan <- err
 			return
 		}
 
-		if err := c.primaryIndex.bufWriter.flush(); err != nil {
+		if err := c.PrimaryIndex.bufWriter.flush(); err != nil {
 			errChan <- err
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if err := c.orderIndex.save(); err != nil {
+		if err := c.OrderIndex.save(); err != nil {
 			errChan <- err
 			return
 		}
 
-		if err := c.orderIndex.repo.Flush(); err != nil {
+		if err := c.OrderIndex.repo.Flush(); err != nil {
 			errChan <- err
 		}
 	}()
@@ -134,7 +133,7 @@ func (c *collection) GetLast(ctx context.Context, n int) ([]types.Document, erro
 	}
 
 	// TODO: return error from oi
-	return c.orderIndex.Get(n, false), nil
+	return c.OrderIndex.Get(n, false), nil
 }
 
 func (c *collection) GetFirst(ctx context.Context, n int) ([]types.Document, error) {
@@ -144,7 +143,7 @@ func (c *collection) GetFirst(ctx context.Context, n int) ([]types.Document, err
 	}
 
 	// TODO: return error from oi
-	return c.orderIndex.Get(n, true), nil
+	return c.OrderIndex.Get(n, true), nil
 }
 
 func (c *collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
@@ -164,7 +163,7 @@ func (c *collection) Update(ctx context.Context, k string, fields map[string]int
 func (c *collection) update(ctx context.Context, k string, fields map[string]interface{}) error {
 	// Retrieve record
 	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
-	r, err := c.primaryIndex.get(ctx, k)
+	r, err := c.PrimaryIndex.get(ctx, k)
 	if err != nil {
 		return wrapError(err)
 	}
@@ -177,12 +176,12 @@ func (c *collection) update(ctx context.Context, k string, fields map[string]int
 		}
 	}
 
-	_, err = c.primaryIndex.insert(ctx, clone)
+	_, err = c.PrimaryIndex.insert(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
 
-	err = c.orderIndex.update(ctx, clone)
+	err = c.OrderIndex.update(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
@@ -200,18 +199,14 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 	}
 
 	c.Schema = s
-	if s != nil {
-		c.HasSchema = true
-	}
 
-	err = c.primaryIndex.create()
+	err = c.PrimaryIndex.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-
-	c.orderIndex = newOrderIndex(200, c.repo)
-	err = c.orderIndex.create()
+	c.OrderIndex = newOrderIndex(200, c.repo)
+	err = c.OrderIndex.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -221,7 +216,7 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	fmt.Println("CREATED collection", c.orderIndex.Head)
+	fmt.Println("CREATED collection", c.OrderIndex.Head)
 
 	return nil
 }
@@ -231,53 +226,16 @@ func (c *collection) load() error {
 		return nil
 	}
 
-	if !c.exists() {
-		return fmt.Errorf("Collection %s does not exist", c.Name)
-	}
+	//var op errors.Op = "(*Collection).Load"
+	//c.PrimaryIndex.storage = c.storage
+	//c.PrimaryIndex.bufWriter = newWriteBuffer(c.storage)
+	//fmt.Println("C", c.PrimaryIndex.RootPage)
+	//err := c.PrimaryIndex.Load()
+	//if err != nil {
+	//return errors.Wrap(op, errors.EInternal, err)
+	//}
 
-	var op errors.Op = "(*Collection).Load"
-	err := c.primaryIndex.Load()
-
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
-
-	item, err := c.repo.Get("order_index")
-	if err != nil {
-		return err
-	}
-
-	oi, ok := item.(*OrderIndex)
-	if !ok {
-		return fmt.Errorf("Could not load order index: %v", reflect.TypeOf(item))
-	}
-	oi.repo = c.repo
-	c.orderIndex = oi
-
-	schemaReader := c.storage.WithSegment("schema")
-	ok, err = schemaReader.Exists()
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
-
-	if ok {
-		data, err := io.ReadAll(schemaReader)
-		if err != nil {
-			return errors.Wrap(op, errors.EIO, err)
-		}
-
-		s := types.NewSchema()
-
-		buf := bytes.NewBuffer(data)
-		dec := gob.NewDecoder(buf)
-		err = dec.Decode(&s)
-		if err != nil {
-			return errors.Wrap(op, errors.EIO, err)
-		}
-
-		c.Schema = s
-	}
-
+	c.OrderIndex.repo = c.repo
 	c.loaded = true
 
 	return nil
@@ -302,22 +260,22 @@ func (c *collection) Delete(ctx context.Context, k string) error {
 func (c *collection) remove(ctx context.Context, k string) error {
 	var op errors.Op = "(*Collection).Delete"
 
-	err := c.primaryIndex.remove(ctx, k)
+	err := c.PrimaryIndex.remove(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.primaryIndex.save()
+	err = c.PrimaryIndex.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.remove(ctx, k)
+	err = c.OrderIndex.remove(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.orderIndex.save()
+	err = c.OrderIndex.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -328,32 +286,17 @@ func (c *collection) remove(ctx context.Context, k string) error {
 func (c *collection) save() error {
 	wrapError := errors.WrapWith("(*Collection).Save", errors.EIO)
 
-	if c.Schema != nil {
-		w := c.storage.WithSegment("schema")
-		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(c.Schema)
-		if err != nil {
-			return wrapError(err)
-		}
-
-		_, err = w.Write(buf.Bytes())
-		if err != nil {
-			return wrapError(err)
-		}
+	err := c.repo.SaveCommit(c)
+	if err != nil {
+		return wrapError(err)
 	}
+
+	fmt.Println("SAVED COLLECTION")
 
 	return nil
 }
 
 func (c *collection) Info(ctx context.Context) {
-	err := c.load()
-	if err != nil {
-		fmt.Printf("Could not load collection: %s\n", err)
-
-		return
-	}
-
 	fmt.Println()
 	fmt.Println("---------------")
 	fmt.Println("Collection:", c.Name)
@@ -362,9 +305,9 @@ func (c *collection) Info(ctx context.Context) {
 	if c.Schema != nil {
 		fmt.Println(c.Schema)
 	}
-	c.primaryIndex.Info()
+	c.PrimaryIndex.Info()
 	fmt.Println()
-	c.orderIndex.Info()
+	c.OrderIndex.Info()
 	fmt.Println()
 }
 
@@ -386,10 +329,10 @@ func newCollection(name string, s ReadWriterTo, r repository.Repository) *collec
 
 	if s != nil {
 		c.storage = s.WithSegment(name)
-		c.primaryIndex =
+		c.PrimaryIndex =
 			newKeyIndex(t, s.WithSegment(name))
 	} else {
-		c.primaryIndex = newKeyIndex(t, c.storage)
+		c.PrimaryIndex = newKeyIndex(t, c.storage)
 	}
 
 	return c

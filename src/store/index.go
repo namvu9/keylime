@@ -212,8 +212,8 @@ type OrderIndex struct {
 	Tail      ID
 	BlockSize int // Number of records inside each node
 
-	repo   repository.Repository
-	nodes  NodeMap
+	repo  repository.Repository
+	nodes NodeMap
 }
 
 func (oi *OrderIndex) ID() string {
@@ -494,6 +494,18 @@ type NodeFactory struct {
 
 func (nf *NodeFactory) New() types.Identifiable {
 	return newNode(nf.capacity, nil, nil, &nf.repo)
+}
+
+func (nf *NodeFactory) Restore(item types.Identifiable) error {
+	node, ok := item.(*Node)
+	if !ok {
+		return fmt.Errorf("NodeFactory does not know how to handle item %v", item)
+	}
+
+	node.repo = &nf.repo
+	node.writer = newWriteBuffer(nf.writer)
+
+	return nil
 }
 
 func (oi *OrderIndex) New() *Node {

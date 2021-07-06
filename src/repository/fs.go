@@ -31,7 +31,12 @@ func (fs *FStorage) Read(dst []byte) (int, error) {
 }
 
 func (fs *FStorage) Open(location string) (io.ReadWriter, error) {
-	f, err := os.OpenFile(location, os.O_CREATE|os.O_RDWR, 0655)
+	err := os.MkdirAll(path.Dir(location), 0777)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.OpenFile(location, os.O_CREATE|os.O_RDWR, 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +44,8 @@ func (fs *FStorage) Open(location string) (io.ReadWriter, error) {
 	return &File{location, f}, nil
 }
 
-func (fs *FStorage) Write(src []byte) (int, error) {
-	if src == nil {
-		return 0, os.MkdirAll(fs.location, 0755)
-	}
-
-	return 0, os.WriteFile(fs.location, src, 0755)
+func (fs *FStorage) Create(location string) (io.ReadWriter, error) {
+	return os.Create(location)
 }
 
 func (fs *FStorage) Exists() (bool, error) {
@@ -61,11 +62,6 @@ type File struct {
 }
 
 func (f *File) Write(data []byte) (int, error) {
-	err := os.MkdirAll(path.Dir(f.location), 0655)
-	if err != nil {
-		return 0, err
-	}
-
 	return f.File.Write(data)
 }
 

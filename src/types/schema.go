@@ -12,6 +12,10 @@ type Schema struct {
 	fields map[string]SchemaField
 }
 
+func (s *Schema) ID() string {
+	return "schema"
+}
+
 // Validate a document against the current schema. An error
 // is returned if validation fails.
 func (s *Schema) Validate(doc Document) error {

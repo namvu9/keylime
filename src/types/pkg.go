@@ -39,7 +39,7 @@ func init() {
 }
 
 type Store interface {
-	Collection(name string) Collection
+	Collection(name string) (Collection, error)
 }
 
 // A Collection represents a named set of Documents.

@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"io"
+	"os"
 	"path"
 
 	"github.com/namvu9/keylime/src/types"
@@ -10,6 +11,9 @@ import (
 
 type Factory interface {
 	New() types.Identifiable
+
+	// Inject any dependencies objects may need
+	Restore(types.Identifiable) error
 }
 
 type Codec interface {
@@ -23,11 +27,16 @@ type Opener interface {
 
 type Storage interface {
 	Opener
+	Create(string) (io.ReadWriter, error)
 }
 
 type NoOpFactory struct{}
 
 func (n NoOpFactory) New() types.Identifiable {
+	return nil
+}
+
+func (n NoOpFactory) Restore(types.Identifiable) error {
 	return nil
 }
 
@@ -44,19 +53,43 @@ type Repository struct {
 	factory Factory
 	items   map[string]map[string]types.Identifiable
 
-	buffer map[string]types.Identifiable
+	buffer map[string]map[string]types.Identifiable
 }
 
 func (r Repository) Delete(item types.Identifiable) error {
 	return nil
 }
 
-func (r Repository) Exists() (bool, error) {
-	return false, nil
+func (r Repository) Exists(id string) (bool, error) {
+	if _, err := os.Stat(path.Join(r.scope, id)); os.IsNotExist(err) {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (r Repository) Get(id string) (types.Identifiable, error) {
-	return r.get(id, r.scope)
+	fmt.Println(r.scope, id)
+	items, ok := r.items[r.scope]
+	if !ok {
+		return nil, fmt.Errorf("Scope %s has not been registered", r.scope)
+	}
+
+	n, ok := items[id]
+	if !ok {
+		ok, err := r.Exists(id)
+		if ok {
+			n, err := r.load(id)
+			if err != nil {
+				return nil, err
+			}
+
+			return n, nil
+		}
+		return nil, err
+	}
+
+	return n, nil
 }
 
 // New returns the object created by the repository's
@@ -70,12 +103,14 @@ func (r Repository) New() types.Identifiable {
 
 func (r Repository) Flush() error {
 	defer func() {
-		for id := range r.buffer {
+		for id, item := range r.buffer[r.scope] {
 			delete(r.buffer, id)
+
+			r.items[r.scope][id] = item
 		}
 	}()
 
-	for id, item := range r.buffer {
+	for id, item := range r.buffer[r.scope] {
 		items, ok := r.items[r.scope]
 		if !ok {
 			return fmt.Errorf("Current scope %s does not exist", r.scope)
@@ -107,28 +142,23 @@ func (r Repository) Save(i types.Identifiable) error {
 		return fmt.Errorf("ID must not be empty")
 	}
 
-	r.buffer[i.ID()] = i
+	r.buffer[r.scope][i.ID()] = i
 
 	return nil
 }
 
-func (r *Repository) get(id string, scope string) (types.Identifiable, error) {
-	items, ok := r.items[scope]
-	if !ok {
-		return nil, fmt.Errorf("Scope %s has not been registered", scope)
+// Saves item and commits immediately. It is equivalent to
+// calling `r.Save(i)`, followed by `r.Flush()`
+func (r Repository) SaveCommit(i types.Identifiable) error {
+	if err := r.Save(i); err != nil {
+		return err
 	}
 
-	n, ok := items[id]
-	if !ok {
-		n, err := r.load(id)
-		if err != nil {
-			return nil, err
-		}
+	return r.Flush()
+}
 
-		return n, nil
-	}
-
-	return n, nil
+func (r Repository) Scope() string {
+	return r.scope
 }
 
 func (repo Repository) load(id string) (types.Identifiable, error) {
@@ -144,6 +174,11 @@ func (repo Repository) load(id string) (types.Identifiable, error) {
 
 	var item types.Identifiable
 	err = repo.codec.Decode(data, &item)
+	if err != nil {
+		return nil, err
+	}
+
+	err = repo.factory.Restore(item)
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +209,6 @@ func New(scope string, c Codec, s Storage, opts ...Option) Repository {
 		factory: NoOpFactory{},
 		codec:   c,
 		storage: s,
-		buffer: make(map[string]types.Identifiable),
+		buffer:  make(map[string]map[string]types.Identifiable),
 	}
 }

@@ -49,7 +49,6 @@ func main() {
 
 		statements := strings.Split(string(data), ";")
 		for _, input := range statements {
-			fmt.Println("Running", input)
 			res, err := queries.Interpret(context.Background(), s, input)
 			if err != nil {
 				fmt.Println(err)

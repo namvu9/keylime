@@ -124,6 +124,11 @@ func (ior *ioReporter) Open(loc string) (io.ReadWriter, error) {
 	return ior, nil
 }
 
+func (ior *ioReporter) Create(loc string) (io.ReadWriter, error) {
+	ior.location = loc
+	return ior, nil
+}
+
 func (ior *ioReporter) WithSegment(s string) ReadWriterTo {
 	return &ioReporter{
 		root:     ior.root,

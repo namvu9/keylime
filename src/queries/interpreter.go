@@ -38,7 +38,10 @@ var handlers = map[Command]cmdHandler{
 }
 
 func handleGet(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
-	c := s.Collection(op.Collection)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
 
 	key := op.Arguments["key"]
 	rec, err := c.Get(ctx, key)
@@ -58,11 +61,15 @@ func handleGet(ctx context.Context, s types.Store, op Operation) (interface{}, e
 }
 
 func handleSet(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
-	c := s.Collection(op.Collection)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
+
 	key := op.Arguments["key"]
 	fields := op.Payload.Data
 
-	err := c.Set(ctx, key, fields)
+	err = c.Set(ctx, key, fields)
 	if err != nil {
 		return nil, err
 	}
@@ -72,18 +79,25 @@ func handleSet(ctx context.Context, s types.Store, op Operation) (interface{}, e
 
 func handleUpdate(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
 	var (
-		c      = s.Collection(op.Collection)
 		key    = op.Arguments["key"]
 		fields = op.Payload.Data
 	)
 
-	err := c.Update(ctx, key, fields)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.Update(ctx, key, fields)
 
 	return nil, err
 }
 
 func handleCreate(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
-	c := s.Collection(op.Collection)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
 
 	if schema, ok := op.Payload.Data["schema"]; ok {
 		err := c.Create(ctx, schema.(*types.Schema))
@@ -102,11 +116,15 @@ func handleCreate(ctx context.Context, s types.Store, op Operation) (interface{}
 
 func handleDelete(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
 	var (
-		c   = s.Collection(op.Collection)
 		key = op.Arguments["key"]
 	)
 
-	err := c.Delete(ctx, key)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.Delete(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +133,11 @@ func handleDelete(ctx context.Context, s types.Store, op Operation) (interface{}
 }
 
 func handleFirst(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
-	c := s.Collection(op.Collection)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
+
 	n, err := strconv.ParseInt(op.Arguments["n"], 0, 0)
 	if err != nil {
 		return nil, err
@@ -125,7 +147,11 @@ func handleFirst(ctx context.Context, s types.Store, op Operation) (interface{},
 }
 
 func handleLast(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
-	c := s.Collection(op.Collection)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
+
 	n, err := strconv.ParseInt(op.Arguments["n"], 0, 0)
 	if err != nil {
 		return nil, err
@@ -135,7 +161,11 @@ func handleLast(ctx context.Context, s types.Store, op Operation) (interface{}, 
 }
 
 func handleInfo(ctx context.Context, s types.Store, op Operation) (interface{}, error) {
-	c := s.Collection(op.Collection)
+	c, err := s.Collection(op.Collection)
+	if err != nil {
+		return nil, err
+	}
+
 	c.Info(ctx)
 	return nil, nil
 }
