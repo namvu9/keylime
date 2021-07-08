@@ -12,18 +12,14 @@ type Schema struct {
 	fields map[string]SchemaField
 }
 
-func (s *Schema) ID() string {
+func (s Schema) ID() string {
 	return "schema"
 }
 
 // Validate a document against the current schema. An error
 // is returned if validation fails.
-func (s *Schema) Validate(doc Document) error {
+func (s Schema) Validate(doc Document) error {
 	var ve = make(ValidationError)
-
-	if s == nil {
-		return nil
-	}
 
 	// validate the fields in doc
 	for _, name := range s.RevComplement(doc) {
@@ -59,7 +55,7 @@ func (s *Schema) Validate(doc Document) error {
 
 // RevComplement returns the set of fields present in the
 // document but not in the schema
-func (s *Schema) RevComplement(doc Document) []string {
+func (s Schema) RevComplement(doc Document) []string {
 	out := []string{}
 	for name := range doc.Fields {
 		if _, ok := s.fields[name]; !ok {
@@ -73,7 +69,7 @@ func (s *Schema) RevComplement(doc Document) []string {
 
 // Intersection return the set of fields present in both the
 // schema and the document
-func (s *Schema) Intersection(doc Document) []string {
+func (s Schema) Intersection(doc Document) []string {
 	out := []string{}
 
 	for name := range s.fields {
@@ -102,7 +98,7 @@ func (s *Schema) Complement(doc Document) []string {
 // WithDefaults makes a copy of Record r's fields and
 // and returns a pointer to a record with the schema's
 // default values applied
-func (s *Schema) WithDefaults(r Document) Document {
+func (s Schema) WithDefaults(r Document) Document {
 	recordClone := r.clone()
 
 	for name, schemaField := range s.fields {
@@ -115,11 +111,11 @@ func (s *Schema) WithDefaults(r Document) Document {
 	return recordClone
 }
 
-func (s *Schema) String() string {
+func (s Schema) String() string {
 	return s.StringIndent(0)
 }
 
-func (s *Schema) StringIndent(n int) string {
+func (s Schema) StringIndent(n int) string {
 	var sb strings.Builder
 	sb.WriteString("Schema:")
 
@@ -183,7 +179,7 @@ func newField(v interface{}) Field {
 }
 
 // Build builds, validates, and returns the schema
-func (s *SchemaBuilder) Build() (*Schema, ValidationError) {
+func (s *SchemaBuilder) Build() (Schema, ValidationError) {
 	schema := NewSchema()
 	errors := make(ValidationError)
 
@@ -209,7 +205,7 @@ func (s *SchemaBuilder) Build() (*Schema, ValidationError) {
 	}
 
 	if len(errors) > 0 {
-		return nil, errors
+		return schema, errors
 	}
 
 	return schema, nil
@@ -222,17 +218,6 @@ func NewSchemaBuilder() *SchemaBuilder {
 	}
 }
 
-// Extend returns a `SchemaBuilder` that uses the current
-// schema as basis.
-func (s *Schema) Extend() *SchemaBuilder {
-	sb := NewSchemaBuilder()
-	for name, field := range s.fields {
-		sb.fields[name] = field
-	}
-
-	return sb
-}
-
 func CopyObj(obj map[string]interface{}) map[string]interface{} {
 	clone := make(map[string]interface{})
 
@@ -243,8 +228,19 @@ func CopyObj(obj map[string]interface{}) map[string]interface{} {
 	return clone
 }
 
-func NewSchema() *Schema {
-	return &Schema{
+// Extend returns a `SchemaBuilder` that uses the current
+// schema as basis.
+func (s Schema) Extend() *SchemaBuilder {
+	sb := NewSchemaBuilder()
+	for name, field := range s.fields {
+		sb.fields[name] = field
+	}
+
+	return sb
+}
+
+func NewSchema() Schema {
+	return Schema{
 		fields: make(map[string]SchemaField),
 	}
 }

@@ -242,5 +242,5 @@ func parseSchema(p *Parser) (*types.Schema, error) {
 		return nil, fmt.Errorf("%v", err)
 	}
 
-	return schema, nil
+	return &schema, nil
 }

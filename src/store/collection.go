@@ -13,12 +13,11 @@ import (
 //A collection is a named container for a group of records
 type collection struct {
 	Name   string
-	Schema *types.Schema
+	Schema types.Schema
+	Index  Index
+	Blocks Blocklist
 
-	index  *Index
-	blocks *Blocklist
-	loaded bool
-	repo   repository.Repository
+	repo repository.Repository
 }
 
 func (c *collection) ID() string {
@@ -33,17 +32,13 @@ func (c *collection) Get(ctx context.Context, k string) (types.Document, error) 
 		return types.NewDoc(k), err
 	}
 
-	r, err := c.index.get(ctx, k)
+	r, err := c.Index.get(ctx, k)
 	if err != nil {
 		return *r, err
 	}
 
-	if c.Schema != nil {
-		doc := c.Schema.WithDefaults(*r)
-		return doc, nil
-	}
-
-	return *r, nil
+	doc := c.Schema.WithDefaults(*r)
+	return doc, nil
 }
 
 type Fields = map[string]interface{}
@@ -71,20 +66,18 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
 	doc := types.NewDoc(k).Set(fields)
 
-	if c.Schema != nil {
-		err := c.Schema.Validate(doc)
-		if err != nil {
-			return wrapError(err)
-		}
+	err := c.Schema.Validate(doc)
+	if err != nil {
+		return wrapError(err)
 	}
 
-	if old, err := c.index.insert(ctx, doc); err != nil {
+	if old, err := c.Index.insert(ctx, doc); err != nil {
 		return err
 	} else if old != nil {
-		return c.blocks.update(ctx, doc)
+		return c.Blocks.update(ctx, doc)
 	}
 
-	return c.blocks.insert(ctx, doc)
+	return c.Blocks.insert(ctx, doc)
 }
 
 func (c *collection) commit() error {
@@ -94,7 +87,7 @@ func (c *collection) commit() error {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		if err := c.index.save(); err != nil {
+		if err := c.Index.save(); err != nil {
 			errChan <- err
 			return
 		}
@@ -106,12 +99,12 @@ func (c *collection) commit() error {
 
 	go func() {
 		defer wg.Done()
-		if err := c.blocks.save(); err != nil {
+		if err := c.Blocks.save(); err != nil {
 			errChan <- err
 			return
 		}
 
-		if err := c.blocks.repo.Flush(); err != nil {
+		if err := c.Blocks.repo.Flush(); err != nil {
 			errChan <- err
 		}
 	}()
@@ -132,7 +125,7 @@ func (c *collection) GetLast(ctx context.Context, n int) ([]types.Document, erro
 	}
 
 	// TODO: return error from oi
-	return c.blocks.Get(n, false), nil
+	return c.Blocks.Get(n, false), nil
 }
 
 func (c *collection) GetFirst(ctx context.Context, n int) ([]types.Document, error) {
@@ -142,7 +135,7 @@ func (c *collection) GetFirst(ctx context.Context, n int) ([]types.Document, err
 	}
 
 	// TODO: return error from oi
-	return c.blocks.Get(n, true), nil
+	return c.Blocks.Get(n, true), nil
 }
 
 func (c *collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
@@ -162,25 +155,23 @@ func (c *collection) Update(ctx context.Context, k string, fields map[string]int
 func (c *collection) update(ctx context.Context, k string, fields map[string]interface{}) error {
 	// Retrieve record
 	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
-	r, err := c.index.get(ctx, k)
+	r, err := c.Index.get(ctx, k)
 	if err != nil {
 		return wrapError(err)
 	}
 
 	clone := r.Update(fields)
-	if c.Schema != nil {
-		err := c.Schema.Validate(clone)
-		if err != nil {
-			return wrapError(err)
-		}
+	err = c.Schema.Validate(clone)
+	if err != nil {
+		return wrapError(err)
 	}
 
-	_, err = c.index.insert(ctx, clone)
+	_, err = c.Index.insert(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
 
-	err = c.blocks.update(ctx, clone)
+	err = c.Blocks.update(ctx, clone)
 	if err != nil {
 		wrapError(err)
 	}
@@ -197,15 +188,17 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 	//return errors.Wrap(op, errors.EIO, err)
 	//}
 
-	c.Schema = s
+	if s != nil {
+		c.Schema = *s
+	}
 
-	err := c.index.create()
+	err := c.Index.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	c.blocks = newOrderIndex(200, c.repo)
-	err = c.blocks.create()
+	c.Blocks = newOrderIndex(200, c.repo)
+	err = c.Blocks.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -215,15 +208,12 @@ func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	fmt.Println("CREATED collection", c.blocks.Head)
+	fmt.Println("CREATED collection", c.Blocks.Head)
 
 	return nil
 }
 
 func (c *collection) load() error {
-	if c.loaded {
-		return nil
-	}
 
 	//var op errors.Op = "(*Collection).Load"
 	//c.PrimaryIndex.storage = c.storage
@@ -234,8 +224,7 @@ func (c *collection) load() error {
 	//return errors.Wrap(op, errors.EInternal, err)
 	//}
 
-	c.blocks.repo = c.repo
-	c.loaded = true
+	c.Blocks.repo = c.repo
 
 	return nil
 }
@@ -259,22 +248,22 @@ func (c *collection) Delete(ctx context.Context, k string) error {
 func (c *collection) remove(ctx context.Context, k string) error {
 	var op errors.Op = "(*Collection).Delete"
 
-	err := c.index.remove(ctx, k)
+	err := c.Index.remove(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.index.save()
+	err = c.Index.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.blocks.remove(ctx, k)
+	err = c.Blocks.remove(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.blocks.save()
+	err = c.Blocks.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -301,12 +290,10 @@ func (c *collection) Info(ctx context.Context) {
 	fmt.Println("Collection:", c.Name)
 	fmt.Println("---------------")
 
-	if c.Schema != nil {
-		fmt.Println(c.Schema)
-	}
-	c.index.Info()
+	fmt.Println(c.Schema)
+	c.Index.Info()
 	fmt.Println()
-	c.blocks.Info()
+	c.Blocks.Info()
 	fmt.Println()
 }
 
@@ -321,8 +308,8 @@ func (c *collection) exists() bool {
 func newCollection(name string, r repository.Repository) *collection {
 	//t := 50
 	c := &collection{
-		Name:    name,
-		repo:    repository.WithScope(r, name),
+		Name: name,
+		repo: repository.WithScope(r, name),
 	}
 
 	return c

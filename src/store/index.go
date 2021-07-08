@@ -6,38 +6,55 @@ import (
 	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
+	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
 // Index represents a B-tree that indexes records by key
 // TODO: Replace bufWriter, storage with repo
 type Index struct {
-	RootPage string
-	Height   int
-	T        int
+	RootID string
+	Height int
+	T      int
 
-	// TODO: Remove
-	root *Page
+	repo repository.Repository
+}
+
+func (ki *Index) Root() (*Page, error) {
+	item, err := ki.repo.Get(ki.RootID)
+	if err != nil {
+		return nil, err
+	}
+
+	page, ok := item.(*Page)
+	if !ok {
+		return nil, fmt.Errorf("Could not load Index root page")
+	}
+
+	return page, nil
 }
 
 func (ki *Index) insert(ctx context.Context, doc types.Document) (*types.Document, error) {
 	const op errors.Op = "(*KeyIndex).Insert"
+	root, err := ki.Root()
+	if err != nil {
+		return nil, err
+	}
 
-	if ki.root.full() {
+	if root.full() {
 		newRoot := ki.newPage(false)
-		newRoot.children = []*Page{ki.root}
+		newRoot.children = []*Page{root}
 		newRoot.splitChild(0)
 		newRoot.save()
 
-		ki.RootPage = newRoot.ID
-		ki.root = newRoot
+		ki.RootID = newRoot.Name
 		ki.Height++
 
 		newRoot.save()
 		ki.save()
 	}
 
-	page, err := ki.root.iter(byKey(doc.Key)).forEach(splitFullPage).Get()
+	page, err := root.iter(byKey(doc.Key)).forEach(splitFullPage).Get()
 	if err != nil {
 		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
@@ -54,8 +71,12 @@ func (ki *Index) insert(ctx context.Context, doc types.Document) (*types.Documen
 
 func (ki *Index) remove(ctx context.Context, key string) error {
 	const op errors.Op = "(*KeyIndex).remove"
+	root, err := ki.Root()
+	if err != nil {
+		return err
+	}
 
-	page, err := ki.root.iter(byKey(key)).forEach(handleSparsePage).Get()
+	page, err := root.iter(byKey(key)).forEach(handleSparsePage).Get()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -64,16 +85,15 @@ func (ki *Index) remove(ctx context.Context, key string) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if ki.root.empty() && !ki.root.leaf {
-		oldRoot := ki.root
+	if root.empty() && !root.leaf {
+		oldRoot := root
 
-		newRoot, err := ki.root.child(0)
+		newRoot, err := root.child(0)
 		if err != nil {
 			return errors.Wrap(op, errors.EInternal, err)
 		}
 
-		ki.root = newRoot
-		ki.RootPage = ki.root.ID
+		ki.RootID = newRoot.ID()
 		ki.Height--
 
 		oldRoot.deletePage()
@@ -86,8 +106,12 @@ func (ki *Index) remove(ctx context.Context, key string) error {
 
 func (ki *Index) get(ctx context.Context, key string) (*types.Document, error) {
 	const op errors.Op = "(*KeyIndex).Get"
+	root, err := ki.Root()
+	if err != nil {
+		return nil, err
+	}
 
-	node, err := ki.root.iter(byKey(key)).Get()
+	node, err := root.iter(byKey(key)).Get()
 	if err != nil {
 		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
@@ -105,8 +129,8 @@ func newIndex(t int) *Index {
 		T: t,
 	}
 
-	ki.root = ki.newPage(true)
-	ki.RootPage = ki.root.ID
+	root := ki.repo.New()
+	ki.RootID = root.ID()
 
 	return ki
 }
@@ -180,20 +204,20 @@ func (ki *Index) Load() error {
 }
 
 func (ki *Index) loadRoot() error {
-	var op errors.Op = "(*KeyIndex).loadRoot"
-	ki.root = newPageWithID(ki.T, ki.RootPage)
+	//var op errors.Op = "(*KeyIndex).loadRoot"
+	//ki.root = newPageWithID(ki.T, ki.RootID)
 
-	err := ki.root.load()
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
+	//err := ki.root.load()
+	//if err != nil {
+	//return errors.Wrap(op, errors.EInternal, err)
+	//}
 
 	return nil
 }
 
 func (ki *Index) Info() {
 	in := Info{}
-	in.validate(ki.root, true)
+	//in.validate(ki.root, true)
 
 	fmt.Println("<KeyIndex>")
 	fmt.Println("Height:", ki.Height)

@@ -164,12 +164,12 @@ type Info struct {
 // Iterates over a collection in order of key precedence
 func (info *Info) validate(p *Page, root bool) {
 	if !root && len(p.docs) < p.t-1 || len(p.docs) > 2*p.t-1 {
-		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.ID, len(p.docs)))
+		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.Name, len(p.docs)))
 	}
 
 	if !p.leaf {
 		if len(p.children) != len(p.docs)+1 {
-			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.ID, len(p.children)-1, len(p.docs))
+			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.Name, len(p.children)-1, len(p.docs))
 		}
 		for i, child := range p.children {
 			if !child.loaded {

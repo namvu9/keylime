@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -17,8 +18,8 @@ type Factory interface {
 }
 
 type Codec interface {
-	Encode(interface{}) ([]byte, error)
-	Decode([]byte, interface{}) error
+	Encode(v interface{}) ([]byte, error)
+	Decode(r io.Reader, v interface{}) error
 }
 
 type Opener interface {
@@ -172,7 +173,7 @@ func (repo Repository) load(id string) (types.Identifier, error) {
 	}
 
 	var item types.Identifier
-	err = repo.codec.Decode(data, &item)
+	err = repo.codec.Decode(bytes.NewBuffer(data), &item)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +195,7 @@ type NoOpCodec struct{}
 func (noc NoOpCodec) Encode(interface{}) ([]byte, error) {
 	return []byte{}, nil
 }
-func (noc NoOpCodec) Decode([]byte, interface{}) error {
+func (noc NoOpCodec) Decode(io.Reader, interface{}) error {
 	return nil
 }
 

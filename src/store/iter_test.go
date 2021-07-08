@@ -24,7 +24,7 @@ func TestMaxPage(t *testing.T) {
 			n, _ := test.p.maxPage().Get()
 
 			if n != max {
-				t.Errorf("Got=%v, Want=%v", n.ID, max.ID)
+				t.Errorf("Got=%v, Want=%v", n.Name, max.Name)
 			}
 		})
 	}
@@ -52,7 +52,7 @@ func TestMinPage(t *testing.T) {
 			n, _ := test.p.minPage().Get()
 
 			if n != min {
-				t.Errorf("Got=%v, Want=%v", n.ID, min.ID)
+				t.Errorf("Got=%v, Want=%v", n.Name, min.Name)
 			}
 		})
 	}

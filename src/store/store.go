@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/namvu9/keylime/src/repository"
@@ -85,8 +86,8 @@ func (dc DefaultCodec) Encode(v interface{}) ([]byte, error) {
 }
 
 // TODO: Replace data with reader
-func (dc DefaultCodec) Decode(data []byte, dst interface{}) error {
-	dec := gob.NewDecoder(bytes.NewBuffer(data))
+func (dc DefaultCodec) Decode(r io.Reader, dst interface{}) error {
+	dec := gob.NewDecoder(r)
 	err := dec.Decode(dst)
 	if err != nil {
 		return err

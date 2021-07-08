@@ -16,7 +16,7 @@ type DocRef struct {
 
 // A Page is an implementation of a node in a B-tree.
 type Page struct {
-	ID       string
+	Name     string
 	Children []string
 	Docs     []DocRef
 	loaded   bool
@@ -25,6 +25,10 @@ type Page struct {
 
 	children []*Page
 	docs     []types.Document
+}
+
+func (p *Page) ID() string {
+	return p.Name
 }
 
 func (p *Page) child(i int) (*Page, error) {
@@ -453,10 +457,6 @@ func (p *Page) deletePage() error {
 	return nil
 }
 
-func (p *Page) Name() string {
-	return p.ID
-}
-
 func (p *Page) load() error {
 	//var op errors.Op = "(*Page).load"
 
@@ -481,29 +481,28 @@ func (p *Page) load() error {
 func (p Page) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "-----\nPage\n-----\n")
-	if p.ID != "" {
-		fmt.Fprintf(&sb, "ID:\t\t%s\n", p.ID)
+	if p.Name != "" {
+		fmt.Fprintf(&sb, "ID:\t\t%s\n", p.Name)
 	} else {
 		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
 	}
 	fmt.Fprintf(&sb, "t:\t\t%d\n", p.t)
-fmt.Fprintf(&sb, "Loaded:\t\t%v\n", p.loaded)
-fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.leaf)
-fmt.Fprintf(&sb, "Children:\t%v\n", len(p.children))
-fmt.Fprintf(&sb, "Docs:\t")
-for _, r := range p.docs {
-	fmt.Fprintf(&sb, "%v ", r)
-}
+	fmt.Fprintf(&sb, "Loaded:\t\t%v\n", p.loaded)
+	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.leaf)
+	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.children))
+	fmt.Fprintf(&sb, "Docs:\t")
+	for _, r := range p.docs {
+		fmt.Fprintf(&sb, "%v ", r)
+	}
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
 }
-
 
 func newPage(t int, leaf bool) *Page {
 	id := uuid.New().String()
 
 	p := &Page{
-		ID:     id,
+		Name:   id,
 		leaf:   leaf,
 		t:      t,
 		loaded: true,
@@ -514,7 +513,7 @@ func newPage(t int, leaf bool) *Page {
 
 func newPageWithID(t int, id string) *Page {
 	p := &Page{
-		ID:     id,
+		Name:   id,
 		leaf:   false,
 		t:      t,
 		loaded: true,
@@ -522,4 +521,3 @@ func newPageWithID(t int, id string) *Page {
 
 	return p
 }
-

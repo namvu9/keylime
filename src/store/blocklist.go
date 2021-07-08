@@ -233,9 +233,9 @@ func (oi *Blocklist) Info() {
 	fmt.Printf("Docs: %d\n", nDocs)
 }
 
-func newOrderIndex(blockSize int, s repository.Repository) *Blocklist {
+func newOrderIndex(blockSize int, s repository.Repository) Blocklist {
 	repo := repository.WithFactory(s, &NodeFactory{repo: s, capacity: blockSize})
-	oi := &Blocklist{
+	oi := Blocklist{
 		BlockSize: blockSize,
 		repo:      repo,
 	}
