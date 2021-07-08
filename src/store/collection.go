@@ -15,11 +15,10 @@ type collection struct {
 	Name   string
 	Schema *types.Schema
 
-	index   *Index
-	blocks  *Blocklist
-	storage ReadWriterTo
-	loaded  bool
-	repo    repository.Repository
+	index  *Index
+	blocks *Blocklist
+	loaded bool
+	repo   repository.Repository
 }
 
 func (c *collection) ID() string {
@@ -101,7 +100,7 @@ func (c *collection) commit() error {
 		}
 
 		//if err := c.index.bufWriter.flush(); err != nil {
-			//errChan <- err
+		//errChan <- err
 		//}
 	}()
 
@@ -193,14 +192,14 @@ func (c *collection) update(ctx context.Context, k string, fields map[string]int
 func (c *collection) Create(ctx context.Context, s *types.Schema) error {
 	var op errors.Op = "(*Collection).Create"
 
-	_, err := c.storage.Write(nil)
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//_, err := c.storage.Write(nil)
+	//if err != nil {
+	//return errors.Wrap(op, errors.EIO, err)
+	//}
 
 	c.Schema = s
 
-	err = c.index.create()
+	err := c.index.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -312,27 +311,18 @@ func (c *collection) Info(ctx context.Context) {
 }
 
 func (c *collection) exists() bool {
-	if ok, err := c.storage.Exists(); !ok || err != nil {
-		return false
-	}
+	//if ok, err := c.storage.Exists(); !ok || err != nil {
+	//return false
+	//}
 
 	return true
 }
 
-func newCollection(name string, s ReadWriterTo, r repository.Repository) *collection {
-	t := 50
+func newCollection(name string, r repository.Repository) *collection {
+	//t := 50
 	c := &collection{
 		Name:    name,
-		storage: newIOReporter(),
 		repo:    repository.WithScope(r, name),
-	}
-
-	if s != nil {
-		c.storage = s.WithSegment(name)
-		c.index =
-			newKeyIndex(t, s.WithSegment(name))
-	} else {
-		c.index = newKeyIndex(t, c.storage)
 	}
 
 	return c

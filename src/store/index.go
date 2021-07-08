@@ -1,11 +1,8 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
@@ -20,8 +17,7 @@ type Index struct {
 	T        int
 
 	// TODO: Remove
-	root      *Page
-	storage   ReadWriterTo
+	root *Page
 }
 
 func (ki *Index) insert(ctx context.Context, doc types.Document) (*types.Document, error) {
@@ -104,15 +100,9 @@ func (ki *Index) get(ctx context.Context, key string) (*types.Document, error) {
 	return &node.docs[i], nil
 }
 
-func newKeyIndex(t int, s ReadWriterTo) *Index {
+func newIndex(t int) *Index {
 	ki := &Index{
 		T: t,
-		// TODO: REMOVE
-		storage: newIOReporter(),
-	}
-
-	if s != nil {
-		ki.storage = s.WithSegment("key_index")
 	}
 
 	ki.root = ki.newPage(true)
@@ -127,53 +117,53 @@ func (ki *Index) newPage(leaf bool) *Page {
 }
 
 func (ki *Index) save() error {
-	var op errors.Op = "(*KeyIndex).Save"
+	//var op errors.Op = "(*KeyIndex).Save"
 
-	buf := new(bytes.Buffer)
-	enc := gob.NewEncoder(buf)
-	enc.Encode(ki)
+	//buf := new(bytes.Buffer)
+	//enc := gob.NewEncoder(buf)
+	//enc.Encode(ki)
 
-	_, err := ki.storage.Write(buf.Bytes())
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//_, err := ki.storage.Write(buf.Bytes())
+	//if err != nil {
+	//return errors.Wrap(op, errors.EIO, err)
+	//}
 
 	return nil
 }
 
 func (ki *Index) create() error {
-	var op errors.Op = "(*KeyIndex).Create"
+	//var op errors.Op = "(*KeyIndex).Create"
 
-	buf := new(bytes.Buffer)
-	enc := gob.NewEncoder(buf)
-	enc.Encode(ki)
+	//buf := new(bytes.Buffer)
+	//enc := gob.NewEncoder(buf)
+	//enc.Encode(ki)
 
-	_, err := ki.storage.Write(buf.Bytes())
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//_, err := ki.storage.Write(buf.Bytes())
+	//if err != nil {
+	//return errors.Wrap(op, errors.EIO, err)
+	//}
 
-	err = ki.root.save()
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
+	//err = ki.root.save()
+	//if err != nil {
+	//return errors.Wrap(op, errors.EInternal, err)
+	//}
 
 	//return ki.bufWriter.flush()
 	return nil
 }
 func (ki *Index) read() error {
-	const op errors.Op = "(*KeyIndex).read"
+	//const op errors.Op = "(*KeyIndex).read"
 
-	data, err := io.ReadAll(ki.storage)
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//data, err := io.ReadAll(ki.storage)
+	//if err != nil {
+	//return errors.Wrap(op, errors.EIO, err)
+	//}
 
-	dec := gob.NewDecoder(bytes.NewBuffer(data))
-	err = dec.Decode(ki)
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//dec := gob.NewDecoder(bytes.NewBuffer(data))
+	//err = dec.Decode(ki)
+	//if err != nil {
+	//return errors.Wrap(op, errors.EIO, err)
+	//}
 
 	return nil
 }

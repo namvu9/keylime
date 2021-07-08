@@ -6,7 +6,6 @@ type Config struct {
 	Name    string
 	BaseDir string
 	T       int
-	Storage ReadWriterTo
 	Port    int
 }
 

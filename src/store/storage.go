@@ -2,10 +2,7 @@ package store
 
 import (
 	"io"
-	"path"
 )
-
-// TODO REMOVE THIS FILE
 
 type ioReporter struct {
 	root     *ioReporter
@@ -43,13 +40,6 @@ func (ior *ioReporter) Open(loc string) (io.ReadWriter, error) {
 func (ior *ioReporter) Create(loc string) (io.ReadWriter, error) {
 	ior.location = loc
 	return ior, nil
-}
-
-func (ior *ioReporter) WithSegment(s string) ReadWriterTo {
-	return &ioReporter{
-		root:     ior.root,
-		location: path.Join(ior.location, s),
-	}
 }
 
 func newIOReporter() *ioReporter {

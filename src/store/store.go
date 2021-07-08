@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/namvu9/keylime/src/repository"
@@ -16,14 +15,11 @@ type Store struct {
 	t           int
 	collections map[string]*collection
 
-	// TODO: Remove
-	storage     ReadWriterTo
-	repo        repository.Repository
+	repo repository.Repository
 }
 
 type CollectionFactory struct {
-	storage ReadWriterTo
-	repo    repository.Repository
+	repo repository.Repository
 }
 
 func (cf CollectionFactory) New() types.Identifier {
@@ -38,15 +34,13 @@ func (cf CollectionFactory) Restore(item types.Identifier) error {
 	}
 
 	c.repo = repository.WithScope(cf.repo, c.ID())
-	c.storage = cf.storage
 
 	return c.load()
 }
 
-func newCollectionFactory(r repository.Repository, s ReadWriterTo) CollectionFactory {
+func newCollectionFactory(r repository.Repository) CollectionFactory {
 	return CollectionFactory{
 		repo: r,
-		storage: s,
 	}
 }
 
@@ -57,7 +51,7 @@ func (s *Store) Collection(name string) (types.Collection, error) {
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			c := newCollection(name, s.storage, s.repo)
+			c := newCollection(name, s.repo)
 			err := repo.SaveCommit(c)
 			if err != nil {
 				return nil, err
@@ -74,14 +68,6 @@ func (s *Store) Collection(name string) (types.Collection, error) {
 	}
 
 	return c, nil
-}
-
-// TODO: Remove
-type ReadWriterTo interface {
-	io.ReadWriter
-	WithSegment(pathSegment string) ReadWriterTo
-	Delete() error
-	Exists() (bool, error)
 }
 
 type DefaultCodec struct{}
@@ -123,12 +109,7 @@ func New(cfg *Config, opts ...Option) *Store {
 		opt(s)
 	}
 
-	if s.storage == nil {
-		os.Stderr.WriteString("Warning: Storage has not been initialized\n")
-		s.storage = newIOReporter()
-	}
-
-	s.repo = repository.WithFactory(s.repo, newCollectionFactory(s.repo, s.storage))
+	s.repo = repository.WithFactory(s.repo, newCollectionFactory(s.repo))
 
 	return s
 }
