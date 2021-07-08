@@ -8,7 +8,7 @@ package store
 import "encoding/gob"
 
 func init() {
-	gob.Register(&OrderIndex{})
-	gob.Register(&Node{})
+	gob.Register(&Blocklist{})
+	gob.Register(&Block{})
 	gob.Register(&collection{})
 }

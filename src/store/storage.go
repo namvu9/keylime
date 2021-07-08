@@ -1,95 +1,11 @@
 package store
 
 import (
-	"bytes"
-	"encoding/gob"
 	"io"
 	"path"
 )
 
-type WriteBuffer struct {
-	ReadWriterTo
-	writeBuf  map[string]Named
-	deleteBuf map[string]Named
-}
-
-type Named interface {
-	Name() string
-}
-
-// Write schedules a page for being written to storage. If a
-// page has already been scheduled for a write or delete,
-// Write is a no-op.
-func (wb *WriteBuffer) Write(p Named) error {
-	if _, ok := wb.deleteBuf[p.Name()]; !ok {
-		wb.writeBuf[p.Name()] = p
-	}
-	return nil
-}
-
-func (wb *WriteBuffer) Delete(p Named) error {
-	wb.deleteBuf[p.Name()] = p
-	delete(wb.writeBuf, p.Name())
-	return nil
-}
-
-func (wb *WriteBuffer) flush() error {
-	defer func() {
-		for k := range wb.writeBuf {
-			delete(wb.writeBuf, k)
-		}
-
-		for k := range wb.deleteBuf {
-			delete(wb.deleteBuf, k)
-		}
-	}()
-
-	for id, p := range wb.writeBuf {
-		buf := new(bytes.Buffer)
-		enc := gob.NewEncoder(buf)
-
-		switch v := p.(type) {
-		case *Page:
-			if err := enc.Encode(v.ToSerialized()); err != nil {
-				return err
-			}
-			_, err := wb.WithSegment(id).Write(buf.Bytes())
-			if err != nil {
-				return err
-			}
-		case *Node:
-			if err := enc.Encode(v); err != nil {
-				return err
-			}
-			_, err := wb.WithSegment(id).Write(buf.Bytes())
-			if err != nil {
-				return err
-
-			}
-
-		}
-	}
-
-	for k := range wb.deleteBuf {
-		wb.WithSegment(k).Delete()
-	}
-
-	return nil
-}
-
-func newWriteBuffer(rw ReadWriterTo) *WriteBuffer {
-	bs := &WriteBuffer{
-		newIOReporter(),
-		make(map[string]Named),
-		make(map[string]Named),
-	}
-
-	if rw != nil {
-		bs.ReadWriterTo = rw
-	}
-
-	return bs
-}
+// TODO REMOVE THIS FILE
 
 type ioReporter struct {
 	root     *ioReporter

@@ -15,6 +15,8 @@ type Store struct {
 	baseDir     string
 	t           int
 	collections map[string]*collection
+
+	// TODO: Remove
 	storage     ReadWriterTo
 	repo        repository.Repository
 }
@@ -24,12 +26,12 @@ type CollectionFactory struct {
 	repo    repository.Repository
 }
 
-func (cf CollectionFactory) New() types.Identifiable {
+func (cf CollectionFactory) New() types.Identifier {
 	nop := repository.NoOpFactory{}
 	return nop.New()
 }
 
-func (cf CollectionFactory) Restore(item types.Identifiable) error {
+func (cf CollectionFactory) Restore(item types.Identifier) error {
 	c, ok := item.(*collection)
 	if !ok {
 		return fmt.Errorf("CollectionFactory does not know how to handle item %v", item)
@@ -74,6 +76,7 @@ func (s *Store) Collection(name string) (types.Collection, error) {
 	return c, nil
 }
 
+// TODO: Remove
 type ReadWriterTo interface {
 	io.ReadWriter
 	WithSegment(pathSegment string) ReadWriterTo
@@ -81,9 +84,9 @@ type ReadWriterTo interface {
 	Exists() (bool, error)
 }
 
-type GobCodec struct{}
+type DefaultCodec struct{}
 
-func (gc GobCodec) Encode(v interface{}) ([]byte, error) {
+func (dc DefaultCodec) Encode(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(v)
@@ -95,7 +98,8 @@ func (gc GobCodec) Encode(v interface{}) ([]byte, error) {
 	return b, nil
 }
 
-func (gc GobCodec) Decode(data []byte, dst interface{}) error {
+// TODO: Replace data with reader
+func (dc DefaultCodec) Decode(data []byte, dst interface{}) error {
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
 	err := dec.Decode(dst)
 	if err != nil {
@@ -112,7 +116,7 @@ func New(cfg *Config, opts ...Option) *Store {
 		baseDir:     cfg.BaseDir,
 		t:           cfg.T,
 		collections: make(map[string]*collection),
-		repo:        repository.New(cfg.BaseDir, GobCodec{}, repository.NewFS(cfg.BaseDir)),
+		repo:        repository.New(cfg.BaseDir, DefaultCodec{}, repository.NewFS(cfg.BaseDir)),
 	}
 
 	for _, opt := range opts {

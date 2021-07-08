@@ -70,7 +70,7 @@ func TestInsert(t *testing.T) {
 		ki.root.docs = makeDocs("k", "o", "s")
 
 		ki.insert(context.Background(), types.NewDoc("q"))
-		ki.bufWriter.flush()
+		//ki.bufWriter.flush()
 
 		u.with("Root", ki.root, func(nu namedUtil) {
 			nu.hasNChildren(2)
@@ -342,7 +342,7 @@ func TestInsertOrderIndex(t *testing.T) {
 		oi.insert(ctx, doc)
 		oi.repo.Flush()
 
-		headNode, _ := oi.Node(oi.Head)
+		headNode, _ := oi.Block(oi.Head)
 
 		if got := len(headNode.Docs); got != 1 {
 			t.Errorf("n records, want %d got %d", 1, got)
@@ -364,7 +364,7 @@ func TestInsertOrderIndex(t *testing.T) {
 	t.Run("Insertion into full node", func(t *testing.T) {
 		repo, reporter := newMockRepo()
 		oi := newOrderIndex(2, repo)
-		oldHead, _ := oi.Node(oi.Head)
+		oldHead, _ := oi.Block(oi.Head)
 		oldHead.Docs = []types.Document{types.NewDoc("nil"), types.NewDoc("HAHA")}
 
 
@@ -380,7 +380,7 @@ func TestInsertOrderIndex(t *testing.T) {
 			t.Errorf("Expected old head to be new tail")
 		}
 
-		newHead, _ := oi.Node(oi.Head)
+		newHead, _ := oi.Block(oi.Head)
 		if newHead.Next != oi.Tail {
 			t.Errorf("New head does not reference old head")
 		}
@@ -404,7 +404,7 @@ func TestDeleteOrderIndex(t *testing.T) {
 	oi := newOrderIndex(2, repo)
 	doc := types.NewDoc("k")
 
-	headNode, err := oi.Node(oi.Head)
+	headNode, err := oi.Block(oi.Head)
 	oi.insert(context.Background(), doc)
 
 	if headNode.Docs[0].Deleted {
@@ -432,7 +432,7 @@ func TestUpdateOrderIndex(t *testing.T) {
 	oi := newOrderIndex(2, repo)
 	doc := types.NewDoc("k")
 
-	headNode, err := oi.Node(oi.Head)
+	headNode, err := oi.Block(oi.Head)
 	if err != nil {
 		t.Error(err)
 	}

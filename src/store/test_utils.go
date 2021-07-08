@@ -110,10 +110,9 @@ func newPageWithKeys(t int, keys []string) *Page {
 	}
 }
 
-func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.Document, children ...*Page) *Page {
+func makePageWithBufferedStorage(bs interface{}) func(t int, records []record.Document, children ...*Page) *Page {
 	return func(t int, records []record.Document, children ...*Page) *Page {
-		root := newPage(t, false, nil)
-		root.writer = bs
+		root := newPage(t, false)
 		root.docs = records
 		root.children = children
 
@@ -132,7 +131,7 @@ func makePageWithBufferedStorage(bs *WriteBuffer) func(t int, records []record.D
 }
 
 func makePage(t int, records []record.Document, children ...*Page) *Page {
-	root := newPage(t, false, nil)
+	root := newPage(t, false)
 	root.docs = records
 	root.children = children
 

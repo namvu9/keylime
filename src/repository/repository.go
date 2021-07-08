@@ -10,10 +10,10 @@ import (
 )
 
 type Factory interface {
-	New() types.Identifiable
+	New() types.Identifier
 
 	// Inject any dependencies objects may need
-	Restore(types.Identifiable) error
+	Restore(types.Identifier) error
 }
 
 type Codec interface {
@@ -32,11 +32,11 @@ type Storage interface {
 
 type NoOpFactory struct{}
 
-func (n NoOpFactory) New() types.Identifiable {
+func (n NoOpFactory) New() types.Identifier {
 	return nil
 }
 
-func (n NoOpFactory) Restore(types.Identifiable) error {
+func (n NoOpFactory) Restore(types.Identifier) error {
 	return nil
 }
 
@@ -51,12 +51,12 @@ type Repository struct {
 	storage Storage
 	codec   Codec
 	factory Factory
-	items   map[string]map[string]types.Identifiable
 
-	buffer map[string]map[string]types.Identifiable
+	items  map[string]map[string]types.Identifier
+	buffer map[string]map[string]types.Identifier
 }
 
-func (r Repository) Delete(item types.Identifiable) error {
+func (r Repository) Delete(item types.Identifier) error {
 	return nil
 }
 
@@ -68,8 +68,7 @@ func (r Repository) Exists(id string) (bool, error) {
 	return true, nil
 }
 
-func (r Repository) Get(id string) (types.Identifiable, error) {
-	fmt.Println(r.scope, id)
+func (r Repository) Get(id string) (types.Identifier, error) {
 	items, ok := r.items[r.scope]
 	if !ok {
 		return nil, fmt.Errorf("Scope %s has not been registered", r.scope)
@@ -94,7 +93,7 @@ func (r Repository) Get(id string) (types.Identifiable, error) {
 
 // New returns the object created by the repository's
 // Factory.
-func (r Repository) New() types.Identifiable {
+func (r Repository) New() types.Identifier {
 	n := r.factory.New()
 	r.items[r.scope][n.ID()] = n
 
@@ -137,7 +136,7 @@ func (r Repository) Flush() error {
 	return nil
 }
 
-func (r Repository) Save(i types.Identifiable) error {
+func (r Repository) Save(i types.Identifier) error {
 	if i.ID() == "" {
 		return fmt.Errorf("ID must not be empty")
 	}
@@ -149,7 +148,7 @@ func (r Repository) Save(i types.Identifiable) error {
 
 // Saves item and commits immediately. It is equivalent to
 // calling `r.Save(i)`, followed by `r.Flush()`
-func (r Repository) SaveCommit(i types.Identifiable) error {
+func (r Repository) SaveCommit(i types.Identifier) error {
 	if err := r.Save(i); err != nil {
 		return err
 	}
@@ -161,7 +160,7 @@ func (r Repository) Scope() string {
 	return r.scope
 }
 
-func (repo Repository) load(id string) (types.Identifiable, error) {
+func (repo Repository) load(id string) (types.Identifier, error) {
 	r, err := repo.storage.Open(path.Join(repo.scope, id))
 	if err != nil {
 		return nil, err
@@ -172,7 +171,7 @@ func (repo Repository) load(id string) (types.Identifiable, error) {
 		return nil, err
 	}
 
-	var item types.Identifiable
+	var item types.Identifier
 	err = repo.codec.Decode(data, &item)
 	if err != nil {
 		return nil, err
@@ -200,8 +199,8 @@ func (noc NoOpCodec) Decode([]byte, interface{}) error {
 }
 
 func New(scope string, c Codec, s Storage, opts ...Option) Repository {
-	items := make(map[string]map[string]types.Identifiable)
-	items[scope] = make(map[string]types.Identifiable)
+	items := make(map[string]map[string]types.Identifier)
+	items[scope] = make(map[string]types.Identifier)
 
 	return Repository{
 		scope:   scope,
@@ -209,6 +208,6 @@ func New(scope string, c Codec, s Storage, opts ...Option) Repository {
 		factory: NoOpFactory{},
 		codec:   c,
 		storage: s,
-		buffer:  make(map[string]map[string]types.Identifiable),
+		buffer:  make(map[string]map[string]types.Identifier),
 	}
 }

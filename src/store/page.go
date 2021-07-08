@@ -1,8 +1,6 @@
 package store
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"strings"
@@ -12,18 +10,24 @@ import (
 	"github.com/namvu9/keylime/src/types"
 )
 
+type DocRef struct {
+	Key     string
+	BlockID string
+}
+
 // A Page is an implementation of a node in a B-tree.
 type Page struct {
-	ID string
-
-	children []*Page
-	docs     []types.Document
+	ID       string
+	Children []string
+	Docs     []DocRef
 	loaded   bool
 	leaf     bool
 	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
+	children []*Page
+	docs     []types.Document
+
 	reader io.Reader
-	writer *WriteBuffer
 }
 
 func (p *Page) child(i int) (*Page, error) {
@@ -163,13 +167,11 @@ func (p *Page) empty() bool {
 }
 
 func (p *Page) newPage(leaf bool) *Page {
-	np := newPage(p.t, leaf, p.writer)
-	return np
+	return nil
 }
 
 func (p *Page) newPageWithID(id string) *Page {
-	return newPageWithID(p.t, id, p.writer)
-
+	return newPageWithID(p.t, id)
 }
 
 // keyIndex returns the index of key k in node b if it
@@ -438,23 +440,18 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 
 func (p *Page) save() error {
 
-	var op errors.Op = "(*Page).save"
-
-	err := p.writer.Write(p)
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//var op errors.Op = "(*Page).save"
 
 	return nil
 }
 
 func (p *Page) deletePage() error {
-	var op errors.Op = "(*Page).deletePage"
+	//var op errors.Op = "(*Page).deletePage"
 
-	err := p.writer.Delete(p)
-	if err != nil {
-		return errors.Wrap(op, errors.EIO, err)
-	}
+	//err := p.writer.Delete(p)
+	//if err != nil {
+	//return errors.Wrap(op, errors.EIO, err)
+	//}
 
 	return nil
 }
@@ -463,111 +460,46 @@ func (p *Page) Name() string {
 	return p.ID
 }
 
-type PageSerialized struct {
-	ID string
-
-	Children []string
-	Docs     []types.Document
-	loaded   bool
-	Leaf     bool
-	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
-}
-
 func (p *Page) load() error {
-	var op errors.Op = "(*Page).load"
+	//var op errors.Op = "(*Page).load"
 
-	data, err := io.ReadAll(p.reader)
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
-	buf := bytes.NewBuffer(data)
-	ps := PageSerialized{}
+	//data, err := io.ReadAll(p.reader)
+	//if err != nil {
+	//return errors.Wrap(op, errors.EInternal, err)
+	//}
+	//buf := bytes.NewBuffer(data)
+	//ps := PageSerialized{}
 
-	dec := gob.NewDecoder(buf)
-	err = dec.Decode(&ps)
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
+	//dec := gob.NewDecoder(buf)
+	//err = dec.Decode(&ps)
+	//if err != nil {
+	//return errors.Wrap(op, errors.EInternal, err)
+	//}
 
-	ps.ToDeserialized(p)
+	//ps.ToDeserialized(p)
 
 	return nil
 }
 
-func (p *Page) ToSerialized() *PageSerialized {
-	children := []string{}
-
-	for _, child := range p.children {
-		children = append(children, child.ID)
-	}
-
-	return &PageSerialized{
-		ID:       p.ID,
-		Docs:     p.docs,
-		Leaf:     p.leaf,
-		T:        p.t,
-		Children: children,
-	}
-}
-
-func (ps *PageSerialized) ToDeserialized(p *Page) {
-	p.ID = ps.ID
-	p.docs = ps.Docs
-	p.leaf = ps.Leaf
-	p.t = ps.T
-
-	children := []*Page{}
-
-	for _, childID := range ps.Children {
-		if childID == ps.ID {
-			panic(fmt.Sprintf("Page %s has a child reference to itself", ps.ID))
-		}
-
-		np := p.newPageWithID(childID)
-		np.loaded = false
-		children = append(children, np)
-	}
-
-	p.children = children
-	p.loaded = true
-}
-
-func newPage(t int, leaf bool, bs *WriteBuffer) *Page {
+func newPage(t int, leaf bool) *Page {
 	id := uuid.New().String()
-	mockBs := newWriteBuffer(nil)
 
 	p := &Page{
 		ID:     id,
 		leaf:   leaf,
 		t:      t,
-		writer: mockBs,
-		reader: mockBs.WithSegment(id),
 		loaded: true,
-	}
-
-	if bs != nil {
-		p.writer = bs
-		p.reader = bs.WithSegment(id)
 	}
 
 	return p
 }
 
-func newPageWithID(t int, id string, bs *WriteBuffer) *Page {
-	mockBs := newWriteBuffer(nil)
-
+func newPageWithID(t int, id string) *Page {
 	p := &Page{
 		ID:     id,
 		leaf:   false,
 		t:      t,
-		writer: mockBs,
-		reader: mockBs.WithSegment(id),
 		loaded: true,
-	}
-
-	if bs != nil {
-		p.writer = bs
-		p.reader = bs.WithSegment(id)
 	}
 
 	return p

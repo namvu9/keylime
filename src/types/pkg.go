@@ -92,6 +92,7 @@ func GetDataType(s interface{}) Type {
 	}
 }
 
-type Identifiable interface {
+// Identifier is interface wrapping the basic ID method
+type Identifier interface {
 	ID() string
 }
