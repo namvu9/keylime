@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/repository"
@@ -21,16 +23,16 @@ type Blocklist struct {
 	repo repository.Repository
 }
 
-func (oi *Blocklist) ID() string {
+func (*Blocklist) ID() string {
 	return "order_index"
 }
 
-func (oi *Blocklist) Block(id ID) (*Block, error) {
+func (bl *Blocklist) Get(id ID) (*Block, error) {
 	if id == "" {
 		return nil, fmt.Errorf("No ID provided")
 	}
 
-	item, err := oi.repo.Get(string(id))
+	item, err := bl.repo.Get(string(id))
 	if err != nil {
 		return nil, err
 	}
@@ -40,57 +42,80 @@ func (oi *Blocklist) Block(id ID) (*Block, error) {
 		return nil, fmt.Errorf("Item with ID %s did not have type Node", id)
 	}
 
-	v.repo = &oi.repo
+	v.repo = &bl.repo
 
 	return v, nil
 }
 
 // TODO: Bug, document will be inserted at the head of the
 // list regardless of whether it already exists
-func (oi *Blocklist) insert(ctx context.Context, doc types.Document) error {
-	headNode, err := oi.Block(oi.Head)
+func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (*DocRef, error) {
+	log.Printf("Block list: inserting %s in scope %s\n", doc.Key, bl.repo.Scope())
+	headNode, err := bl.Get(bl.Head)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if headNode.Full() {
-		newHead := oi.New()
-		err := oi.setHeadNode(newHead)
+		fmt.Println("FULL")
+		newHead, err := bl.New()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		return newHead.Insert(doc)
+		err = bl.setHeadNode(newHead)
+		if err != nil {
+			return nil, err
+		}
+
+		err = newHead.Insert(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		return &DocRef{
+			Key:     doc.Key,
+			BlockID: ID(newHead.ID()),
+		}, nil
 	}
 
-	return headNode.Insert(doc)
+	err = headNode.Insert(doc)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Block list: done inserting %s\n", doc.Key)
+	return &DocRef{
+		Key:     doc.Key,
+		BlockID: bl.Head,
+	}, nil
 }
 
-func (oi *Blocklist) setHeadNode(node *Block) error {
-	headNode, err := oi.Block(oi.Head)
+func (bl *Blocklist) setHeadNode(node *Block) error {
+	headNode, err := bl.Get(bl.Head)
 	if err != nil {
 		return err
 	}
 
 	headNode.Prev = node.Identifier
 	node.Next = headNode.Identifier
-	oi.Head = node.Identifier
+	bl.Head = node.Identifier
 
-	err = oi.repo.Save(headNode)
+	err = bl.repo.Save(headNode)
 	if err != nil {
 		return err
 	}
 
-	err = oi.repo.Save(node)
+	err = bl.repo.Save(node)
 	if err != nil {
 		return err
 	}
 
-	return oi.repo.Save(oi)
+	return bl.repo.Save(bl)
 }
 
-func (oi *Blocklist) remove(ctx context.Context, k string) error {
-	node, _ := oi.Block(oi.Head)
+func (bl *Blocklist) remove(ctx context.Context, k string) error {
+	node, _ := bl.Get(bl.Head)
 	for node != nil {
 		for i, record := range node.Docs {
 			if record.Key == k {
@@ -99,56 +124,43 @@ func (oi *Blocklist) remove(ctx context.Context, k string) error {
 			}
 		}
 
-		node, _ = oi.Block(node.Next)
+		node, _ = bl.Get(node.Next)
 	}
 
 	return fmt.Errorf("Key not found: %s", k)
 }
 
-func (oi *Blocklist) save() error {
-	return oi.repo.Save(oi)
+func (bl *Blocklist) save() error {
+	return bl.repo.Save(bl)
 }
 
-func (oi *Blocklist) create() error {
-	// WRAP OP
-	headNode, err := oi.Block(oi.Head)
+func (bl *Blocklist) create() error {
+	log.Printf("Creating block list in scope %s\n", bl.repo.Scope())
+	block, err := bl.New()
 	if err != nil {
 		return err
 	}
 
-	err = oi.repo.Save(headNode)
+	err = bl.repo.Save(block)
 	if err != nil {
 		return err
 	}
 
-	if oi.Head != oi.Tail {
-		tailNode, err := oi.Block(oi.Tail)
-		if err != nil {
-			return err
-		}
+	bl.Head = block.Identifier
+	bl.Tail = block.Identifier
 
-		err = oi.repo.Save(tailNode)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = oi.repo.Save(oi)
-	if err != nil {
-		return err
-	}
-
-	return oi.repo.Flush()
+	log.Printf("Done creating block list in scope %s\n", bl.repo.Scope())
+	return nil
 }
 
-func (oi *Blocklist) Get(n int, asc bool) []types.Document {
+func (bl *Blocklist) GetN(n int, asc bool) []types.Document {
 	out := []types.Document{}
 
 	var node *Block
 	if asc {
-		node, _ = oi.Block(oi.Tail)
+		node, _ = bl.Get(bl.Tail)
 	} else {
-		node, _ = oi.Block(oi.Head)
+		node, _ = bl.Get(bl.Head)
 	}
 
 	for node != nil {
@@ -162,7 +174,7 @@ func (oi *Blocklist) Get(n int, asc bool) []types.Document {
 				}
 			}
 
-			node, _ = oi.Block(node.Prev)
+			node, _ = bl.Get(node.Prev)
 		} else {
 			for i := len(node.Docs) - 1; i >= 0; i-- {
 				if len(out) == n {
@@ -176,7 +188,7 @@ func (oi *Blocklist) Get(n int, asc bool) []types.Document {
 				}
 			}
 
-			node, _ = oi.Block(node.Next)
+			node, _ = bl.Get(node.Next)
 		}
 
 	}
@@ -184,8 +196,8 @@ func (oi *Blocklist) Get(n int, asc bool) []types.Document {
 	return out
 }
 
-func (oi *Blocklist) update(ctx context.Context, r types.Document) error {
-	node, _ := oi.Block(oi.Head)
+func (bl *Blocklist) update(ctx context.Context, r types.Document) error {
+	node, _ := bl.Get(bl.Head)
 	for node != nil {
 		for i, record := range node.Docs {
 			if r.Key == record.Key {
@@ -194,27 +206,30 @@ func (oi *Blocklist) update(ctx context.Context, r types.Document) error {
 			}
 		}
 
-		node, _ = oi.Block(node.Next)
+		node, _ = bl.Get(node.Next)
 	}
 
 	return fmt.Errorf("Key not found: %s", r.Key)
 }
 
-func (oi *Blocklist) New() *Block {
-	item := oi.repo.New()
-	node := item.(*Block)
+func (bl *Blocklist) New() (*Block, error){
+	item := bl.repo.New()
+	node, ok := item.(*Block)
+	if !ok {
+		return nil, fmt.Errorf("TODO")
+	}
 
-	return node
+	return node, nil
 }
 
-func (oi *Blocklist) Info() {
+func (bl *Blocklist) Info() string {
+	var sb strings.Builder
 	nDocs := 0
 	nNodes := 0
 
-	node, err := oi.Block(oi.Head)
+	node, err := bl.Get(bl.Head)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return ""
 	}
 	for node != nil {
 		nNodes++
@@ -224,28 +239,24 @@ func (oi *Blocklist) Info() {
 			}
 		}
 
-		node, _ = oi.Block(node.Next)
+		node, _ = bl.Get(node.Next)
 	}
 
-	fmt.Println("<OrderIndex>")
-	fmt.Println("Block size:", oi.BlockSize)
-	fmt.Println("Nodes:", nNodes)
-	fmt.Printf("Docs: %d\n", nDocs)
+	sb.WriteString("<Block list>\n")
+	sb.WriteString(fmt.Sprintf("Block size: %d\n", bl.BlockSize))
+	sb.WriteString(fmt.Sprintf("Nodes: %d\n", nNodes))
+	sb.WriteString(fmt.Sprintf("Docs: %d\n", nDocs))
+	return sb.String()
 }
 
-func newOrderIndex(blockSize int, s repository.Repository) Blocklist {
-	repo := repository.WithFactory(s, &NodeFactory{repo: s, capacity: blockSize})
-	oi := Blocklist{
+func newBlocklist(blockSize int, s repository.Repository) Blocklist {
+	repo := repository.WithFactory(s, &BlockFactory{repo: s, capacity: blockSize})
+	bl := Blocklist{
 		BlockSize: blockSize,
 		repo:      repo,
 	}
 
-	node := oi.New()
-
-	oi.Head = ID(node.ID())
-	oi.Tail = ID(node.ID())
-
-	return oi
+	return bl
 }
 
 type Block struct {
@@ -258,54 +269,68 @@ type Block struct {
 	repo *repository.Repository
 }
 
-func (n *Block) ID() string {
-	return string(n.Identifier)
+func (b *Block) Get(k string) (*types.Document, error) {
+	for _, doc := range b.Docs {
+		if doc.Key == k {
+			return &doc, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Key not found")
 }
 
-func newNode(capacity int, r *repository.Repository) *Block {
+func (b *Block) ID() string {
+	return string(b.Identifier)
+}
+
+func (b *Block) Full() bool {
+	return len(b.Docs) >= b.Capacity
+}
+
+func (b *Block) Insert(doc types.Document) error {
+	b.Docs = append(b.Docs, doc)
+
+	return b.save()
+}
+
+// TODO: TEST
+func (b *Block) Update(targetDoc types.Document) error {
+	for i, doc := range b.Docs {
+		if doc.Key == targetDoc.Key {
+			b.Docs[i] = targetDoc
+			return b.save()
+		}
+	}
+
+	return fmt.Errorf("Key not found")
+}
+
+func (b *Block) save() error {
+	return b.repo.Save(b)
+}
+
+type BlockFactory struct {
+	capacity int
+	repo     repository.Repository
+}
+
+func (bf *BlockFactory) New() types.Identifier {
 	n := &Block{
 		Identifier: ID(uuid.NewString()),
-		Capacity:   capacity,
-		repo:       r,
+		Capacity:   bf.capacity,
+		repo:       &bf.repo,
 	}
 
 	return n
 }
 
-func (n *Block) Full() bool {
-	return len(n.Docs) >= n.Capacity
-}
-
-func (n *Block) Insert(doc types.Document) error {
-	n.Docs = append(n.Docs, doc)
-
-	return n.save()
-}
-
-func (n *Block) save() error {
-	return n.repo.Save(n)
-}
-
-func (n *Block) Name() string {
-	return string(n.Identifier)
-}
-
-type NodeFactory struct {
-	capacity int
-	repo     repository.Repository
-}
-
-func (nf *NodeFactory) New() types.Identifier {
-	return newNode(nf.capacity, &nf.repo)
-}
-
-func (nf *NodeFactory) Restore(item types.Identifier) error {
+func (bf *BlockFactory) Restore(item types.Identifier) error {
 	node, ok := item.(*Block)
 	if !ok {
-		return fmt.Errorf("NodeFactory does not know how to handle item %v", item)
+		return fmt.Errorf("BlockFactory does not know how to handle item %v", item)
 	}
 
-	node.repo = &nf.repo
+	node.repo = &bf.repo
 
 	return nil
 }

@@ -8,7 +8,7 @@ type iterFunc func(*Page) (*Page, error)
 type handleFunc func(*Page, *Page)
 
 func (next iterFunc) done(p *Page) bool {
-	if p.leaf {
+	if p.Leaf {
 		return true
 	}
 
@@ -95,5 +95,5 @@ func byMinPage(p *Page) (*Page, error) {
 }
 
 func byMaxPage(p *Page) (*Page, error) {
-	return p.child(len(p.children) - 1)
+	return p.child(len(p.Children) - 1)
 }

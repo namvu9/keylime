@@ -1,11 +1,13 @@
 all: one two three
 
-repl:
+server: 
 	KEYLIME_HOME=/home/nam/go/src/github.com/namvu9/keylime/testdata \
+	go run ./cmd/keylimed
+repl:
 	go run ./cmd/repl
 repls:
 	KEYLIME_HOME=/home/nam/go/src/github.com/namvu9/keylime/testdata \
-	go run ./cmd/repl -script=./script
+	go run ./cmd/keylimed -script=./script
 lint:
 	go vet ./...
 test_watch: 

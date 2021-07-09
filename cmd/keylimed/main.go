@@ -1,15 +1,31 @@
 package main
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
 	"os"
 	"time"
 
 	"github.com/namvu9/keylime/src/queries"
 	"github.com/namvu9/keylime/src/store"
 )
+
+func prettify(v interface{}) (string, error) {
+	if s, ok := v.(string); ok {
+		return s, nil
+	}
+
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
 
 func readConfig() (*store.Config, error) {
 	cfg := &store.Config{
@@ -27,46 +43,49 @@ func main() {
 		os.Exit(1)
 	}
 
-	var (
-		//s      = store.New(cfg, store.WithStorage(repository.NewFS(cfg.BaseDir)))
-		s      = store.New(cfg)
-		reader = bufio.NewReader(os.Stdin)
-	)
+	listener, err := net.Listen("tcp", "127.0.0.1:1337")
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	s := store.New(cfg)
 	timeout := time.Minute
 
+	log.Printf("Listening on %s\n", listener.Addr())
+
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
+		conn, _ := listener.Accept()
 
-		input, err := reader.ReadString(';')
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+		go func(c net.Conn) {
+			defer c.Close()
+			log.Printf("Accepted incoming connection from %s\n", c.RemoteAddr())
 
-		done := make(chan interface{})
-		go func() {
-			res, err := queries.Interpret(ctx, s, input)
-			if err != nil {
-				fmt.Println(err)
-				cancel()
-				return
+			for {
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+
+				buf := make([]byte, 1000)
+				n, err := conn.Read(buf)
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						log.Printf("Connection closed by %s\n", c.RemoteAddr())
+					} else {
+						log.Println(err)
+					}
+					return
+				}
+
+				res, err := queries.Interpret(ctx, s, string(buf[:n]))
+				if err != nil {
+					log.Printf("Error: %s\n", err)
+					conn.Write([]byte(fmt.Sprintf("Error: %s", err)))
+				} else if res != nil {
+					s, _ := prettify(res)
+					conn.Write([]byte(s))
+				} else {
+					conn.Write([]byte("OK"))
+				}
 			}
-
-			done <- res
-		}()
-
-		select {
-		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
-				fmt.Println("Error: request timed out")
-			}
-
-		case v := <-done:
-			if v != nil {
-				fmt.Println(v)
-			}
-		}
+		}(conn)
 	}
 }

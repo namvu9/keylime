@@ -10,5 +10,6 @@ import "encoding/gob"
 func init() {
 	gob.Register(&Blocklist{})
 	gob.Register(&Block{})
-	gob.Register(&collection{})
+	gob.Register(&Collection{})
+	gob.Register(&Page{})
 }

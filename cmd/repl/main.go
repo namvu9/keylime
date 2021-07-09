@@ -2,28 +2,38 @@ package main
 
 import (
 	"bufio"
-	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
-	"time"
+
+	"github.com/namvu9/keylime/src/keylime"
 )
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	timeout := time.Minute
+
+	client, err := keylime.Connect("localhost", "1337")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer client.Close()
 
 	for {
 		fmt.Print("KL> ")
 
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
 		input, err := reader.ReadString(';')
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Println()
+				return
+			}
 			fmt.Println(err)
 			continue
 		}
 
-		fmt.Println(input, ctx, cancel)
+		client.WriteString(input)
 	}
 }

@@ -44,7 +44,7 @@ type Store interface {
 
 // A Collection represents a named set of Documents.
 type Collection interface {
-	Get(ctx context.Context, k string) (Document, error)
+	Get(ctx context.Context, k string) (*Document, error)
 	GetFirst(ctx context.Context, n int) ([]Document, error)
 	GetLast(ctx context.Context, n int) ([]Document, error)
 
@@ -53,7 +53,7 @@ type Collection interface {
 	Update(ctx context.Context, k string, fields map[string]interface{}) error
 	Create(ctx context.Context, s *Schema) error
 
-	Info(ctx context.Context)
+	Info(ctx context.Context) string
 }
 
 type Type string

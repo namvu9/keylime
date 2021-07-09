@@ -5,16 +5,14 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
 type Store struct {
-	baseDir     string
-	t           int
-	collections map[string]*collection
+	baseDir string
+	t       int
 
 	repo repository.Repository
 }
@@ -29,7 +27,7 @@ func (cf CollectionFactory) New() types.Identifier {
 }
 
 func (cf CollectionFactory) Restore(item types.Identifier) error {
-	c, ok := item.(*collection)
+	c, ok := item.(*Collection)
 	if !ok {
 		return fmt.Errorf("CollectionFactory does not know how to handle item %v", item)
 	}
@@ -48,22 +46,19 @@ func newCollectionFactory(r repository.Repository) CollectionFactory {
 func (s *Store) Collection(name string) (types.Collection, error) {
 	repo := repository.WithScope(s.repo, name)
 
-	item, err := repo.Get(name)
-
-	if err != nil {
-		if os.IsNotExist(err) {
-			c := newCollection(name, s.repo)
-			err := repo.SaveCommit(c)
-			if err != nil {
-				return nil, err
-			}
-			return c, err
-		}
-
+	if ok, err := repo.Exists(name); !ok && err == nil {
+		c := newCollection(name, s.repo)
+		return c, nil
+	} else if err != nil {
 		return nil, err
 	}
 
-	c, ok := item.(*collection)
+	item, err := repo.Get(name)
+	if err != nil {
+		return nil, err
+	}
+
+	c, ok := item.(*Collection)
 	if !ok {
 		return nil, fmt.Errorf("Could not load collection %s", name)
 	}
@@ -85,7 +80,6 @@ func (dc DefaultCodec) Encode(v interface{}) ([]byte, error) {
 	return b, nil
 }
 
-// TODO: Replace data with reader
 func (dc DefaultCodec) Decode(r io.Reader, dst interface{}) error {
 	dec := gob.NewDecoder(r)
 	err := dec.Decode(dst)
@@ -100,10 +94,9 @@ func (dc DefaultCodec) Decode(r io.Reader, dst interface{}) error {
 // options
 func New(cfg *Config, opts ...Option) *Store {
 	s := &Store{
-		baseDir:     cfg.BaseDir,
-		t:           cfg.T,
-		collections: make(map[string]*collection),
-		repo:        repository.New(cfg.BaseDir, DefaultCodec{}, repository.NewFS(cfg.BaseDir)),
+		baseDir: cfg.BaseDir,
+		t:       cfg.T,
+		repo:    repository.New(cfg.BaseDir, DefaultCodec{}, repository.NewFS(cfg.BaseDir)),
 	}
 
 	for _, opt := range opts {

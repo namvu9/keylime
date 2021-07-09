@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 
@@ -63,6 +64,8 @@ func (r Repository) Delete(item types.Identifier) error {
 
 func (r Repository) Exists(id string) (bool, error) {
 	if _, err := os.Stat(path.Join(r.scope, id)); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
 		return false, err
 	}
 
@@ -79,6 +82,7 @@ func (r Repository) Get(id string) (types.Identifier, error) {
 	if !ok {
 		ok, err := r.Exists(id)
 		if ok {
+			log.Printf("Repository: Loading object with ID %s\n", id)
 			n, err := r.load(id)
 			if err != nil {
 				return nil, err
@@ -132,6 +136,8 @@ func (r Repository) Flush() error {
 		}
 
 		items[id] = item
+
+		log.Printf("repository.Repository: wrote %s to scope %s\n", id, r.scope)
 	}
 
 	return nil
@@ -161,7 +167,7 @@ func (r Repository) Scope() string {
 	return r.scope
 }
 
-func (repo Repository) load(id string) (types.Identifier, error) {
+func (repo *Repository) load(id string) (types.Identifier, error) {
 	r, err := repo.storage.Open(path.Join(repo.scope, id))
 	if err != nil {
 		return nil, err

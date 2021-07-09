@@ -92,14 +92,6 @@ func (d Document) Select(selectFn ...FieldSelector) map[string]interface{} {
 	return out
 }
 
-func (d Document) IsLessThan(other Document) bool {
-	return strings.Compare(d.Key, other.Key) < 0
-}
-
-func (d Document) IsEqualTo(other *Document) bool {
-	return d.Key == other.Key
-}
-
 func (d Document) String() string {
 	s, _ := prettify(d.Fields)
 	return fmt.Sprintf("%s=%s", d.Key, s)

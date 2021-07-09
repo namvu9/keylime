@@ -42,7 +42,6 @@ type Parser struct {
 	tokens []Token
 }
 
-// TODO: Test
 // TODO: TEST
 func (p *Parser) Parse() (Operation, error) {
 	for token := p.tokens[p.index]; token.Type != "EOF"; token = p.Next() {
@@ -58,6 +57,10 @@ func (p *Parser) Parse() (Operation, error) {
 
 			n := p.Next()
 			p.op.Arguments["n"] = n.Value
+
+			if p.Peek().Value != "IN" {
+				return *p.op, fmt.Errorf("expected IN token after FIRST but got %s", p.Peek().Value)
+			}
 		case "LAST":
 			p.op.Command = Last
 
@@ -66,6 +69,10 @@ func (p *Parser) Parse() (Operation, error) {
 			}
 			n := p.Next()
 			p.op.Arguments["n"] = n.Value
+
+			if p.Peek().Value != "IN" {
+				return *p.op, fmt.Errorf("expected IN token after LAST but got %s", p.Peek().Value)
+			}
 
 		case "DELETE":
 			p.op.Command = Delete

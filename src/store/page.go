@@ -4,14 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/errors"
-	"github.com/namvu9/keylime/src/types"
+	"github.com/namvu9/keylime/src/repository"
 )
 
 type DocRef struct {
 	Key     string
-	BlockID string
+	BlockID ID
+}
+
+func (d DocRef) IsLessThan(other DocRef) bool {
+	return strings.Compare(d.Key, other.Key) < 0
+}
+
+func (d DocRef) IsEqualTo(other DocRef) bool {
+	return d.Key == other.Key
 }
 
 // A Page is an implementation of a node in a B-tree.
@@ -19,12 +26,10 @@ type Page struct {
 	Name     string
 	Children []string
 	Docs     []DocRef
-	loaded   bool
-	leaf     bool
-	t        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
+	Leaf     bool
+	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
-	children []*Page
-	docs     []types.Document
+	repo repository.Repository
 }
 
 func (p *Page) ID() string {
@@ -34,13 +39,18 @@ func (p *Page) ID() string {
 func (p *Page) child(i int) (*Page, error) {
 	const op errors.Op = "(*Page).Child"
 
-	if got := len(p.children); i >= got {
+	if got := len(p.Children); i >= got {
 		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("OutOfBounds %d (length %d)", i, got))
 	}
 
-	child := p.children[i]
-	if !child.loaded {
-		child.load()
+	item, err := p.repo.Get(p.Children[i])
+	if err != nil {
+		return nil, err
+	}
+
+	child, ok := item.(*Page)
+	if !ok {
+		return nil, fmt.Errorf("(*Page).child: Could not load page")
 	}
 
 	return child, nil
@@ -55,8 +65,8 @@ func (p *Page) remove(k string) error {
 		return errors.NewKeyNotFoundError(op, k)
 	}
 
-	if p.leaf {
-		p.docs = append(p.docs[:index], p.docs[index+1:]...)
+	if p.Leaf {
+		//p.docs = append(p.docs[:index], p.docs[index+1:]...)
 		p.save()
 		return nil
 	}
@@ -68,17 +78,18 @@ func (p *Page) remove(k string) error {
 	}
 
 	if !beforeChild.sparse() {
-		maxPredPage, err := beforeChild.maxPage().forEach(handleSparsePage).Get()
-		if err != nil {
-			return errors.Wrap(op, errors.EInternal, err)
-		}
+		//maxPredPage, err := beforeChild.maxPage().forEach(handleSparsePage).Get()
+		//if err != nil {
+		//return errors.Wrap(op, errors.EInternal, err)
+		//}
 
-		predRec := maxPredPage.docs[len(maxPredPage.docs)-1]
+		//predRec := maxPredPage.docs[len(maxPredPage.docs)-1]
 
-		p.docs[index] = predRec
+		//p.docs[index] = predRec
 		p.save()
 
-		return maxPredPage.remove(predRec.Key)
+		//return maxPredPage.remove(predRec.Key)
+		return nil
 	}
 
 	// Case 2: Successor has at least t keys
@@ -93,9 +104,9 @@ func (p *Page) remove(k string) error {
 			return errors.Wrap(op, errors.EInternal, err)
 		}
 
-		succRec := succ.docs[0]
+		succRec := succ.Docs[0]
 
-		p.docs[index] = succRec
+		p.Docs[index] = succRec
 		p.save()
 
 		return succ.remove(succRec.Key)
@@ -115,71 +126,74 @@ func (p *Page) remove(k string) error {
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *Page) insert(r types.Document) int {
-	out := []types.Document{}
+func (p *Page) insert(d DocRef) error {
+	out := []DocRef{}
 
-	for i, key := range p.docs {
-		if r.Key == key.Key {
-			p.docs[i] = r
+	for i, key := range p.Docs {
+		if d.Key == key.Key {
+			p.Docs[i] = d
 			p.save()
-			return i
+			return nil
 		}
 
-		if r.IsLessThan(key) {
+		if d.IsLessThan(key) {
 			if p.full() {
 				panic(fmt.Errorf("Cannot insert key into full node: %s", key.Key))
 			}
 
-			out = append(out, r)
-			p.docs = append(out, p.docs[i:]...)
+			out = append(out, d)
+			p.Docs = append(out, p.Docs[i:]...)
 			p.save()
-			return i
+			return nil
 		}
 
-		out = append(out, p.docs[i])
+		out = append(out, p.Docs[i])
 	}
 
 	if p.full() {
-		panic(fmt.Sprintf("Cannot insert key into full node: %s", r.Key))
+		panic(fmt.Sprintf("Cannot insert key into full node: %s", d.Key))
 	}
 
-	p.docs = append(out, r)
-	p.save()
-
-	return len(p.docs) - 1
+	p.Docs = append(out, d)
+	return p.save()
 }
 
 // full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
 func (p *Page) full() bool {
-	return len(p.docs) == 2*p.t-1
+	return len(p.Docs) == 2*p.T-1
 }
 
 // sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
 func (p *Page) sparse() bool {
-	return len(p.docs) <= p.t-1
+	return len(p.Docs) <= p.T-1
 }
 
 // empty reports whether the node is empty (i.e., has no
 // records).
 func (p *Page) empty() bool {
-	return len(p.docs) == 0
+	return len(p.Docs) == 0
 }
 
-func (p *Page) newPage(leaf bool) *Page {
-	return nil
-}
+func (p *Page) newPage(leaf bool) (*Page, error){
+	item := p.repo.New()
 
-func (p *Page) newPageWithID(id string) *Page {
-	return newPageWithID(p.t, id)
+	page, ok := item.(*Page)
+	if !ok {
+		return nil, fmt.Errorf("Could not create new page")
+	}
+
+	page.Leaf = leaf
+
+	return page, nil
 }
 
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
 func (p *Page) keyIndex(k string) (index int, exists bool) {
-	for i, kv := range p.docs {
+	for i, kv := range p.Docs {
 		if k == kv.Key {
 			return i, true
 		}
@@ -189,7 +203,7 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 		}
 	}
 
-	return len(p.docs), false
+	return len(p.Docs), false
 }
 
 // Panics if child is not full
@@ -205,19 +219,22 @@ func (p *Page) splitChild(index int) error {
 		return errors.Wrap(op, errors.EInternal, fmt.Errorf("Cannot split non-full child"))
 	}
 
-	newChild := p.newPage(fullChild.leaf)
-
-	medianKey, left, right := partitionMedian(fullChild.docs)
-	p.insert(medianKey)
-
-	fullChild.docs, newChild.docs = left, right
-
-	if !fullChild.leaf {
-		newChild.insertChildren(0, fullChild.children[p.t:]...)
-		fullChild.children = fullChild.children[:p.t]
+	newChild, err := p.newPage(fullChild.Leaf)
+	if err != nil {
+		return err
 	}
 
-	p.insertChildren(index+1, newChild)
+	medianKey, left, right := partitionMedian(fullChild.Docs)
+	p.insert(medianKey)
+
+	fullChild.Docs, newChild.Docs = left, right
+
+	if !fullChild.Leaf {
+		newChild.insertChildren(0, fullChild.Children[p.T:]...)
+		fullChild.Children = fullChild.Children[:p.T]
+	}
+
+	p.insertChildren(index+1, newChild.ID())
 
 	err = newChild.save()
 	if err != nil {
@@ -237,27 +254,27 @@ func (p *Page) splitChild(index int) error {
 	return nil
 }
 
-func (p *Page) setRecord(index int, r types.Document) {
-	p.docs[index] = r
+func (p *Page) setRecord(index int, d DocRef) {
+	p.Docs[index] = d
 }
 
-func (p *Page) insertChildren(index int, children ...*Page) {
+func (p *Page) insertChildren(index int, children ...string) {
 	// Check whether index + len(children) leads to node
 	// overflow
-	nExistingChildren := len(p.children)
+	nExistingChildren := len(p.Children)
 	nChildren := len(children)
 
-	tmp := make([]*Page, nExistingChildren+nChildren)
-	copy(tmp[:index], p.children[:index])
+	tmp := make([]string, nExistingChildren+nChildren)
+	copy(tmp[:index], p.Children[:index])
 	copy(tmp[index:index+nChildren], children)
-	copy(tmp[nChildren+index:], p.children[index:])
+	copy(tmp[nChildren+index:], p.Children[index:])
 
-	p.children = tmp
+	p.Children = tmp
 }
 
 func (p *Page) predecessorPage(k string) (*Page, error) {
 	const op errors.Op = "(*Page).predecessorPage"
-	if p.leaf {
+	if p.Leaf {
 		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("Leaf has no predecessor page"))
 	}
 
@@ -282,7 +299,7 @@ func (p *Page) predecessorPage(k string) (*Page, error) {
 func (p *Page) successorPage(k string) (*Page, error) {
 	const op errors.Op = "(*Page).successorPage"
 
-	if p.leaf {
+	if p.Leaf {
 		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("Leaf has no successor page"))
 	}
 
@@ -291,33 +308,44 @@ func (p *Page) successorPage(k string) (*Page, error) {
 		return nil, errors.NewKeyNotFoundError(op, k)
 	}
 
-	page, err := p.children[index+1].minPage().Get()
+	page, err := p.child(index + 1)
 	if err != nil {
 		return nil, errors.Wrap(op, errors.EInternal, err)
 	}
 
-	return page, nil
+	return page.minPage().Get()
 }
 
+// TODO: return error
 func (p *Page) prevChildSibling(index int) *Page {
 	if index <= 0 {
 		return nil
 	}
-	return p.children[index-1]
+	child, err := p.child(index - 1)
+	if err != nil {
+		return nil
+	}
+
+	return child
 }
 
 func (p *Page) nextChildSibling(index int) *Page {
-	if index >= len(p.children)-1 {
+	if index >= len(p.Children)-1 {
 		return nil
 	}
-	return p.children[index+1]
+	child, err := p.child(index + 1)
+	if err != nil {
+		return nil
+	}
+
+	return child
 }
 
 // TODO: TEST
-func (p *Page) mergeWith(median types.Document, other *Page) {
-	p.docs = append(p.docs, median)
-	p.docs = append(p.docs, other.docs...)
-	p.children = append(p.children, other.children...)
+func (p *Page) mergeWith(median DocRef, other *Page) {
+	p.Docs = append(p.Docs, median)
+	p.Docs = append(p.Docs, other.Docs...)
+	p.Children = append(p.Children, other.Children...)
 }
 
 // TODO: Errors
@@ -328,17 +356,17 @@ func (p *Page) mergeWith(median types.Document, other *Page) {
 // for deletion.
 func (p *Page) mergeChildren(i int) {
 	var (
-		pivotRecord = p.docs[i]
-		leftChild   = p.children[i]
-		rightChild  = p.children[i+1]
+		pivotDoc = p.Docs[i]
+		leftChild, _  = p.child(i)
+		rightChild, _ = p.child(i+1)
 	)
 
-	leftChild.mergeWith(pivotRecord, rightChild)
+	leftChild.mergeWith(pivotDoc, rightChild)
 
 	// Delete the key from the node
-	p.docs = append(p.docs[:i], p.docs[i+1:]...)
+	p.Docs = append(p.Docs[:i], p.Docs[i+1:]...)
 	// Remove rightChild
-	p.children = append(p.children[:i+1], p.children[i+2:]...)
+	p.Children = append(p.Children[:i+1], p.Children[i+2:]...)
 
 	p.save()
 	leftChild.save()
@@ -346,7 +374,7 @@ func (p *Page) mergeChildren(i int) {
 }
 
 // TODO: return error
-func partitionMedian(nums []types.Document) (types.Document, []types.Document, []types.Document) {
+func partitionMedian(nums []DocRef) (DocRef, []DocRef, []DocRef) {
 	if nDocs := len(nums); nDocs%2 == 0 || nDocs < 3 {
 		panic("Cannot partition an even number of records")
 	}
@@ -356,63 +384,63 @@ func partitionMedian(nums []types.Document) (types.Document, []types.Document, [
 
 // TODO: return error
 func handleSparsePage(node, child *Page) {
-	if !child.sparse() {
-		return
-	}
+	//if !child.sparse() {
+	//return
+	//}
 
-	index, ok := node.childIndex(child)
-	if !ok {
-		panic("Tried to find childIndex of invalid child")
-	}
+	//index, ok := node.childIndex(child)
+	//if !ok {
+	//panic("Tried to find childIndex of invalid child")
+	//}
 
-	var (
-		p = node.prevChildSibling(index)
-		s = node.nextChildSibling(index)
-	)
+	//var (
+	//p = node.prevChildSibling(index)
+	//s = node.nextChildSibling(index)
+	//)
 
-	// Rotate predecessor key
-	if p != nil && !p.sparse() {
-		var (
-			recordIndex   = index - 1
-			pivot         = node.docs[recordIndex]
-			siblingRecord = p.docs[len(p.docs)-1]
-		)
+	//// Rotate predecessor key
+	//if p != nil && !p.sparse() {
+	//var (
+	//recordIndex   = index - 1
+	//pivot         = node.docs[recordIndex]
+	//siblingRecord = p.docs[len(p.docs)-1]
+	//)
 
-		child.insert(pivot)
-		node.setRecord(recordIndex, siblingRecord)
+	//child.insert(pivot)
+	//node.setRecord(recordIndex, siblingRecord)
 
-		if !p.leaf {
-			// Move child from sibling to child
-			siblingLastChild := p.children[len(p.children)-1]
-			child.children = append([]*Page{siblingLastChild}, child.children...)
-			p.children = p.children[:len(p.children)-1]
-		}
-		p.save()
-	} else if s != nil && !s.sparse() {
-		var (
-			pivot         = node.docs[index]
-			siblingRecord = s.docs[0]
-		)
+	//if !p.leaf {
+	//// Move child from sibling to child
+	//siblingLastChild := p.children[len(p.children)-1]
+	//child.children = append([]*Page{siblingLastChild}, child.children...)
+	//p.children = p.children[:len(p.children)-1]
+	//}
+	//p.save()
+	//} else if s != nil && !s.sparse() {
+	//var (
+	//pivot         = node.docs[index]
+	//siblingRecord = s.docs[0]
+	//)
 
-		// Move key from parent to child
-		child.docs = append(child.docs, pivot)
-		node.setRecord(index, siblingRecord)
+	//// Move key from parent to child
+	//child.docs = append(child.docs, pivot)
+	//node.setRecord(index, siblingRecord)
 
-		// Move child from sibling to child
-		if !s.leaf {
-			siblingFirstChild := s.children[0]
-			child.children = append(child.children, siblingFirstChild)
-			s.children = s.children[1:]
-		}
-		s.save()
-	} else if p != nil {
-		node.mergeChildren(index - 1)
-	} else {
-		node.mergeChildren(index)
-	}
+	//// Move child from sibling to child
+	//if !s.leaf {
+	//siblingFirstChild := s.children[0]
+	//child.children = append(child.children, siblingFirstChild)
+	//s.children = s.children[1:]
+	//}
+	//s.save()
+	//} else if p != nil {
+	//node.mergeChildren(index - 1)
+	//} else {
+	//node.mergeChildren(index)
+	//}
 
-	child.save()
-	node.save()
+	//child.save()
+	//node.save()
 }
 
 // TODO: Return error
@@ -430,8 +458,8 @@ func splitFullPage(node, child *Page) {
 }
 
 func (p *Page) childIndex(c *Page) (int, bool) {
-	for i, child := range p.children {
-		if child == c {
+	for i, child := range p.Children {
+		if child == c.ID() {
 			return i, true
 		}
 	}
@@ -440,10 +468,7 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 }
 
 func (p *Page) save() error {
-
-	//var op errors.Op = "(*Page).save"
-
-	return nil
+	return p.repo.Save(p)
 }
 
 func (p *Page) deletePage() error {
@@ -458,23 +483,6 @@ func (p *Page) deletePage() error {
 }
 
 func (p *Page) load() error {
-	//var op errors.Op = "(*Page).load"
-
-	//data, err := io.ReadAll(p.reader)
-	//if err != nil {
-	//return errors.Wrap(op, errors.EInternal, err)
-	//}
-	//buf := bytes.NewBuffer(data)
-	//ps := PageSerialized{}
-
-	//dec := gob.NewDecoder(buf)
-	//err = dec.Decode(&ps)
-	//if err != nil {
-	//return errors.Wrap(op, errors.EInternal, err)
-	//}
-
-	//ps.ToDeserialized(p)
-
 	return nil
 }
 
@@ -486,38 +494,13 @@ func (p Page) String() string {
 	} else {
 		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
 	}
-	fmt.Fprintf(&sb, "t:\t\t%d\n", p.t)
-	fmt.Fprintf(&sb, "Loaded:\t\t%v\n", p.loaded)
-	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.leaf)
-	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.children))
+	fmt.Fprintf(&sb, "t:\t\t%d\n", p.T)
+	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.Leaf)
+	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.Children))
 	fmt.Fprintf(&sb, "Docs:\t")
-	for _, r := range p.docs {
+	for _, r := range p.Docs {
 		fmt.Fprintf(&sb, "%v ", r)
 	}
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
-}
-
-func newPage(t int, leaf bool) *Page {
-	id := uuid.New().String()
-
-	p := &Page{
-		Name:   id,
-		leaf:   leaf,
-		t:      t,
-		loaded: true,
-	}
-
-	return p
-}
-
-func newPageWithID(t int, id string) *Page {
-	p := &Page{
-		Name:   id,
-		leaf:   false,
-		t:      t,
-		loaded: true,
-	}
-
-	return p
 }

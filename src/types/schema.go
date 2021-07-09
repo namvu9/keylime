@@ -19,6 +19,10 @@ func (s Schema) ID() string {
 // Validate a document against the current schema. An error
 // is returned if validation fails.
 func (s Schema) Validate(doc Document) error {
+	if len(s.fields) == 0 {
+		return nil
+	}
+
 	var ve = make(ValidationError)
 
 	// validate the fields in doc
@@ -64,7 +68,6 @@ func (s Schema) RevComplement(doc Document) []string {
 	}
 
 	return out
-
 }
 
 // Intersection return the set of fields present in both the
@@ -196,7 +199,6 @@ func (s *SchemaBuilder) Build() (Schema, ValidationError) {
 			}
 		}
 
-		// TODO: TEST
 		if schemaField.Type.Is(Object) && schemaField.Schema == nil {
 			errors[name] = append(errors[name], fmt.Errorf("Field of type Object must have a schema"))
 		}

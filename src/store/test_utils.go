@@ -4,42 +4,47 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/namvu9/keylime/src/repository"
 	record "github.com/namvu9/keylime/src/types"
 )
 
 type util struct {
-	t *testing.T
+	t    *testing.T
+	repo repository.Repository
 }
 
-func (u util) with(name string, node *Page, fn func(namedUtil)) {
-	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), node})
+func (u util) with(name string, id string, fn func(namedUtil)) {
+	item, _ := u.repo.Get(id)
+	page, _ := item.(*Page)
+
+	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), page})
 }
 
 func (u util) hasNDocs(name string, n int, node *Page) {
-	if len(node.docs) != n {
-		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.docs), n)
+	if len(node.Docs) != n {
+		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.Docs), n)
 	}
 }
 
 func (u util) hasNChildren(name string, n int, node *Page) {
-	if len(node.children) != n {
-		u.t.Errorf("len(%s.children), Got=%d; Want=%d", name, len(node.children), n)
+	if len(node.Children) != n {
+		u.t.Errorf("len(%s.children), Got=%d; Want=%d", name, len(node.Children), n)
 	}
 }
 
 func (u util) hasKeys(name string, keys []string, node *Page) {
 	var nKeys []string
-	for _, k := range node.docs {
+	for _, k := range node.Docs {
 		nKeys = append(nKeys, k.Key)
 	}
 	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, nKeys, keys)
 
-	if len(node.docs) != len(keys) {
+	if len(node.Docs) != len(keys) {
 		u.t.Errorf(errMsg)
 		return
 	}
 
-	for i, r := range node.docs {
+	for i, r := range node.Docs {
 		if r.Key != keys[i] {
 			u.t.Errorf(errMsg)
 		}
@@ -53,16 +58,16 @@ func (u util) hasChildren(name string, children []*Page, node *Page) {
 	}
 
 	gotIDs := []string{}
-	for _, child := range node.children {
-		gotIDs = append(gotIDs, fmt.Sprintf("%p", child))
+	for _, child := range node.Children {
+		gotIDs = append(gotIDs, fmt.Sprintf("%s", child))
 	}
 
 	errorMsg := fmt.Sprintf("%s.children, Got=%v; Want=%v", name, gotIDs, wantIDs)
-	if len(node.children) != len(children) {
+	if len(node.Children) != len(children) {
 		u.t.Errorf(errorMsg)
 	} else {
 		for i, child := range children {
-			if child != node.children[i] {
+			if child.ID() != node.Children[i] {
 				u.t.Errorf(errorMsg)
 				break
 			}
@@ -77,7 +82,8 @@ type namedUtil struct {
 }
 
 func (nu namedUtil) withChild(i int, fn func(namedUtil)) {
-	child := nu.node.children[i]
+	child, _ := nu.node.child(i)
+
 	u := namedUtil{nu.u, fmt.Sprintf("[%s, child %d]", nu.name, i), child}
 	fn(u)
 }
@@ -104,47 +110,47 @@ func (nu namedUtil) hasChildren(children ...*Page) {
 
 func newPageWithKeys(t int, keys []string) *Page {
 	return &Page{
-		t:       t,
-		docs: makeDocs(keys...),
-		loaded:  true,
+		T: t,
 	}
 }
 
 func makePageWithBufferedStorage(bs interface{}) func(t int, records []record.Document, children ...*Page) *Page {
 	return func(t int, records []record.Document, children ...*Page) *Page {
-		root := newPage(t, false)
-		root.docs = records
-		root.children = children
+		//root := newPage(t, false)
+		////root.docs = records
+		//root.children = children
 
-		for _, child := range children {
-			child.t = t
-			child.loaded = true
-		}
+		//for _, child := range children {
+		//child.t = t
+		//child.loaded = true
+		//}
 
-		if len(children) == 0 {
-			root.leaf = true
-		}
+		//if len(children) == 0 {
+		//root.leaf = true
+		//}
 
-		return root
+		//return root
 
+		return nil
 	}
 }
 
 func makePage(t int, records []record.Document, children ...*Page) *Page {
-	root := newPage(t, false)
-	root.docs = records
-	root.children = children
+	//root := newPage(t, false)
+	//root.docs = records
+	//root.children = children
 
-	for _, child := range children {
-		child.t = t
-		child.loaded = true
-	}
+	//for _, child := range children {
+	//child.t = t
+	//child.loaded = true
+	//}
 
-	if len(children) == 0 {
-		root.leaf = true
-	}
+	//if len(children) == 0 {
+	//root.leaf = true
+	//}
 
-	return root
+	//return root
+	return nil
 }
 
 func makeDocs(keys ...string) []record.Document {
@@ -157,33 +163,31 @@ func makeDocs(keys ...string) []record.Document {
 }
 
 type Info struct {
-	records []record.Document
+	docs []DocRef
 	pages   []*Page
 }
 
 // Iterates over a collection in order of key precedence
 func (info *Info) validate(p *Page, root bool) {
-	if !root && len(p.docs) < p.t-1 || len(p.docs) > 2*p.t-1 {
-		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.Name, len(p.docs)))
+	if !root && len(p.Docs) < p.T-1 || len(p.Docs) > 2*p.T-1 {
+		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.Name, len(p.Docs)))
 	}
 
-	if !p.leaf {
-		if len(p.children) != len(p.docs)+1 {
-			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.Name, len(p.children)-1, len(p.docs))
+	if !p.Leaf {
+		if len(p.Children) != len(p.Docs)+1 {
+			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.Name, len(p.Children)-1, len(p.Docs))
 		}
-		for i, child := range p.children {
-			if !child.loaded {
-				child.load()
-			}
+		for i := range p.Children {
+			child, _ := p.child(i)
 			info.validate(child, false)
-			if i < len(p.docs) {
-				r := p.docs[i]
-				info.records = append(info.records, r)
+			if i < len(p.Docs) {
+				r := p.Docs[i]
+				info.docs = append(info.docs, r)
 			}
 		}
 	} else {
-		for _, r := range p.docs {
-			info.records = append(info.records, r)
+		for _, r := range p.Docs {
+			info.docs = append(info.docs, r)
 		}
 	}
 

@@ -4,6 +4,7 @@ package queries
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 
 	"github.com/namvu9/keylime/src/errors"
@@ -21,7 +22,16 @@ func Interpret(ctx context.Context, s types.Store, input string) (interface{}, e
 		return nil, fmt.Errorf("Unknown command: %s", op.Command)
 	}
 
-	return handler(ctx, s, *op)
+	log.Printf("Running command %s\n", op.Command)
+
+	res, err := handler(ctx, s, *op)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Done running command %s\n", op.Command)
+
+	return res, err
 }
 
 type cmdHandler func(context.Context, types.Store, Operation) (interface{}, error)
@@ -166,6 +176,6 @@ func handleInfo(ctx context.Context, s types.Store, op Operation) (interface{}, 
 		return nil, err
 	}
 
-	c.Info(ctx)
-	return nil, nil
+	info := c.Info(ctx)
+	return info, nil
 }

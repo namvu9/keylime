@@ -3,15 +3,16 @@ package store
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
 // Index represents a B-tree that indexes records by key
-// TODO: Replace bufWriter, storage with repo
 type Index struct {
 	RootID string
 	Height int
@@ -34,39 +35,41 @@ func (ki *Index) Root() (*Page, error) {
 	return page, nil
 }
 
-func (ki *Index) insert(ctx context.Context, doc types.Document) (*types.Document, error) {
+func (ki *Index) insert(ctx context.Context, ref DocRef) error {
+	log.Printf("Index: inserting %s\n", ref)
 	const op errors.Op = "(*KeyIndex).Insert"
 	root, err := ki.Root()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if root.full() {
-		newRoot := ki.newPage(false)
-		newRoot.children = []*Page{root}
+		newRoot, err := ki.newPage(false)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("CREATED NEW ROOT")
+
+		newRoot.Children = []string{root.ID()}
 		newRoot.splitChild(0)
 		newRoot.save()
 
-		ki.RootID = newRoot.Name
+		ki.RootID = newRoot.ID()
 		ki.Height++
 
 		newRoot.save()
 		ki.save()
 	}
 
-	page, err := root.iter(byKey(doc.Key)).forEach(splitFullPage).Get()
+	page, err := root.iter(byKey(ref.Key)).forEach(splitFullPage).Get()
 	if err != nil {
-		return nil, errors.Wrap(op, errors.EInternal, err)
+		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if idx, ok := page.keyIndex(doc.Key); ok {
-		oldDoc := page.docs[idx]
-		page.insert(doc)
-		return &oldDoc, nil
-	}
-
-	page.insert(doc)
-	return nil, nil
+	page.insert(ref)
+	log.Printf("Index: done inserting %s\n", ref)
+	return nil
 }
 
 func (ki *Index) remove(ctx context.Context, key string) error {
@@ -85,7 +88,7 @@ func (ki *Index) remove(ctx context.Context, key string) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	if root.empty() && !root.leaf {
+	if root.empty() && !root.Leaf {
 		oldRoot := root
 
 		newRoot, err := root.child(0)
@@ -104,7 +107,7 @@ func (ki *Index) remove(ctx context.Context, key string) error {
 	return nil
 }
 
-func (ki *Index) get(ctx context.Context, key string) (*types.Document, error) {
+func (ki *Index) get(ctx context.Context, key string) (*DocRef, error) {
 	const op errors.Op = "(*KeyIndex).Get"
 	root, err := ki.Root()
 	if err != nil {
@@ -121,115 +124,96 @@ func (ki *Index) get(ctx context.Context, key string) (*types.Document, error) {
 		return nil, errors.NewKeyNotFoundError(op, key)
 	}
 
-	return &node.docs[i], nil
+	return &node.Docs[i], nil
 }
 
-func newIndex(t int) *Index {
-	ki := &Index{
-		T: t,
+func newIndex(t int, r repository.Repository) Index {
+	return Index{
+		T:    t,
+		repo: repository.WithFactory(r, PageFactory{t, r}),
+	}
+}
+
+type PageFactory struct {
+	t    int
+	repo repository.Repository
+}
+
+func (pf PageFactory) New() types.Identifier {
+	id := uuid.New().String()
+
+	p := &Page{
+		Name:   id,
+		T:      pf.t,
+		repo:   repository.WithFactory(pf.repo, pf),
 	}
 
-	root := ki.repo.New()
-	ki.RootID = root.ID()
-
-	return ki
-}
-
-func (ki *Index) newPage(leaf bool) *Page {
-	p := newPage(ki.T, leaf)
 	return p
 }
 
-func (ki *Index) save() error {
-	//var op errors.Op = "(*KeyIndex).Save"
+func (pf PageFactory) Restore(item types.Identifier) error {
+	log.Println("Restoring page", item.ID(), pf.repo.Scope())
+	page, ok := item.(*Page)
+	if !ok {
+		return fmt.Errorf("Could not restore Page")
+	}
 
-	//buf := new(bytes.Buffer)
-	//enc := gob.NewEncoder(buf)
-	//enc.Encode(ki)
-
-	//_, err := ki.storage.Write(buf.Bytes())
-	//if err != nil {
-	//return errors.Wrap(op, errors.EIO, err)
-	//}
+	page.repo = repository.WithFactory(pf.repo, pf)
+	log.Println("Done restoring page", item.ID(), pf.repo.Scope())
 
 	return nil
 }
 
-func (ki *Index) create() error {
+func (ki *Index) newPage(leaf bool) (*Page, error) {
+	page, ok := ki.repo.New().(*Page)
+	if !ok {
+		return nil, fmt.Errorf("Index: Could not create new page")
+	}
+
+	return page, nil
+}
+
+func (ki *Index) save() error {
+	return nil
+}
+
+func (i *Index) create() error {
+	log.Printf("Creating index in scope %s\n", i.repo.Scope())
 	//var op errors.Op = "(*KeyIndex).Create"
 
-	//buf := new(bytes.Buffer)
-	//enc := gob.NewEncoder(buf)
-	//enc.Encode(ki)
+	rootPage := i.repo.New().(*Page)
+	rootPage.Leaf = true
+	i.RootID = rootPage.ID()
 
-	//_, err := ki.storage.Write(buf.Bytes())
-	//if err != nil {
-	//return errors.Wrap(op, errors.EIO, err)
-	//}
-
-	//err = ki.root.save()
-	//if err != nil {
-	//return errors.Wrap(op, errors.EInternal, err)
-	//}
-
-	//return ki.bufWriter.flush()
-	return nil
-}
-func (ki *Index) read() error {
-	//const op errors.Op = "(*KeyIndex).read"
-
-	//data, err := io.ReadAll(ki.storage)
-	//if err != nil {
-	//return errors.Wrap(op, errors.EIO, err)
-	//}
-
-	//dec := gob.NewDecoder(bytes.NewBuffer(data))
-	//err = dec.Decode(ki)
-	//if err != nil {
-	//return errors.Wrap(op, errors.EIO, err)
-	//}
-
-	return nil
+	return i.repo.Save(rootPage)
 }
 
-func (ki *Index) Load() error {
-	var op errors.Op = "(*KeyIndex).Load"
+func (i *Index) New() (*Page, error) {
+	item := i.repo.New()
 
-	err := ki.read()
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
+	page, ok := item.(*Page)
+	if !ok {
+		return nil, fmt.Errorf("Index: Could not create page")
 	}
 
-	return ki.loadRoot()
+	return page, nil
 }
 
-func (ki *Index) loadRoot() error {
-	//var op errors.Op = "(*KeyIndex).loadRoot"
-	//ki.root = newPageWithID(ki.T, ki.RootID)
+func (index *Index) Info() string {
+	root, _ := index.Root()
 
-	//err := ki.root.load()
-	//if err != nil {
-	//return errors.Wrap(op, errors.EInternal, err)
-	//}
-
-	return nil
-}
-
-func (ki *Index) Info() {
+	var sb strings.Builder
 	in := Info{}
-	//in.validate(ki.root, true)
 
-	fmt.Println("<KeyIndex>")
-	fmt.Println("Height:", ki.Height)
-	fmt.Println("T:", ki.T)
-	fmt.Println("Pages:", len(in.pages))
+	in.validate(root, true)
 
-	keys := []string{}
-	for _, r := range in.records {
-		keys = append(keys, r.Key)
-	}
+	sb.WriteString("<Index>\n")
+	sb.WriteString(fmt.Sprintf("Height: %d\n", index.Height))
+	sb.WriteString(fmt.Sprintf("T: %d\n", index.T))
+	sb.WriteString(fmt.Sprintf("Pages: %d\n", len(in.pages)))
+	sb.WriteString(fmt.Sprintf("Docs: %d\n", len(in.docs)))
 
-	fmt.Printf("Docs: %d\n", len(in.records))
+	return sb.String()
 }
 
 func (ki Index) String() string {

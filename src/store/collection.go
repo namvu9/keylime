@@ -3,42 +3,48 @@ package store
 import (
 	"context"
 	"fmt"
-	"sync"
+	"log"
+	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
 	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
-//A collection is a named container for a group of records
-type collection struct {
-	Name   string
+//A Collection is a named container for a group of records
+type Collection struct {
 	Schema types.Schema
+	Name   string
 	Index  Index
 	Blocks Blocklist
 
-	repo repository.Repository
+	repo   repository.Repository
 }
 
-func (c *collection) ID() string {
+func (c *Collection) ID() string {
 	return c.Name
 }
 
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
-func (c *collection) Get(ctx context.Context, k string) (types.Document, error) {
-	err := c.load()
+func (c *Collection) Get(ctx context.Context, k string) (*types.Document, error) {
+	ref, err := c.Index.get(ctx, k)
 	if err != nil {
-		return types.NewDoc(k), err
+		return nil, err
 	}
 
-	r, err := c.Index.get(ctx, k)
+	block, err := c.Blocks.Get(ref.BlockID)
 	if err != nil {
-		return *r, err
+		return nil, err
 	}
 
-	doc := c.Schema.WithDefaults(*r)
-	return doc, nil
+	doc, err := block.Get(k)
+	if err != nil {
+		return nil, err
+	}
+
+	fullDoc := c.Schema.WithDefaults(*doc)
+	return &fullDoc, nil
 }
 
 type Fields = map[string]interface{}
@@ -46,23 +52,8 @@ type Fields = map[string]interface{}
 // Set the value associated with key `k` in collection `c`.
 // If a record with that key already exists in the
 // collection, an error is returned.
-func (c *collection) Set(ctx context.Context, k string, fields Fields) error {
-	err := c.load()
-	if err != nil {
-		return err
-	}
-
-	err = c.set(ctx, k, fields)
-	if err != nil {
-		return err
-	}
-
-	return c.commit()
-}
-
-// TODO: Test that Insertion of the same doc is idempotent
-// with respect to the key
-func (c *collection) set(ctx context.Context, k string, fields Fields) error {
+func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
+	log.Printf("Setting %s = %v in %s\n", k, fields, c.ID())
 	wrapError := errors.WrapWith("(*Collection).Set", errors.EInternal)
 	doc := types.NewDoc(k).Set(fields)
 
@@ -71,181 +62,111 @@ func (c *collection) set(ctx context.Context, k string, fields Fields) error {
 		return wrapError(err)
 	}
 
-	if old, err := c.Index.insert(ctx, doc); err != nil {
+	docRef, err := c.Blocks.insert(ctx, doc)
+	if err != nil {
 		return err
-	} else if old != nil {
-		return c.Blocks.update(ctx, doc)
 	}
 
-	return c.Blocks.insert(ctx, doc)
-}
-
-func (c *collection) commit() error {
-	errChan := make(chan error, 2)
-	var wg sync.WaitGroup
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		if err := c.Index.save(); err != nil {
-			errChan <- err
-			return
-		}
-
-		//if err := c.index.bufWriter.flush(); err != nil {
-		//errChan <- err
-		//}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if err := c.Blocks.save(); err != nil {
-			errChan <- err
-			return
-		}
-
-		if err := c.Blocks.repo.Flush(); err != nil {
-			errChan <- err
-		}
-	}()
-
-	wg.Wait()
-
-	if len(errChan) != 0 {
-		return <-errChan
+	if err := c.Index.insert(ctx, *docRef); err != nil {
+		return err
 	}
 
+	err = c.repo.Flush()
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Done setting %s in %s\n", k, c.ID())
 	return nil
 }
 
-func (c *collection) GetLast(ctx context.Context, n int) ([]types.Document, error) {
-	err := c.load()
-	if err != nil {
-		return []types.Document{}, err
-	}
-
-	// TODO: return error from oi
-	return c.Blocks.Get(n, false), nil
-}
-
-func (c *collection) GetFirst(ctx context.Context, n int) ([]types.Document, error) {
-	err := c.load()
-	if err != nil {
-		return []types.Document{}, err
-	}
-
-	// TODO: return error from oi
-	return c.Blocks.Get(n, true), nil
-}
-
-func (c *collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
-	err := c.load()
+func (c *Collection) commit() error {
+	err := c.repo.Save(c)
 	if err != nil {
 		return err
 	}
 
-	err = c.update(ctx, k, fields)
+	return c.repo.Flush()
+}
+
+func (c *Collection) GetLast(ctx context.Context, n int) ([]types.Document, error) {
+	return c.Blocks.GetN(n, false), nil
+}
+
+func (c *Collection) GetFirst(ctx context.Context, n int) ([]types.Document, error) {
+	// TODO: return error from oi
+	return c.Blocks.GetN(n, true), nil
+}
+
+func (c *Collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
+	// Retrieve record
+	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
+	ref, err := c.Index.get(ctx, k)
+	if err != nil {
+		return wrapError(err)
+	}
+
+	block, err := c.Blocks.Get(ID(ref.BlockID))
 	if err != nil {
 		return err
+	}
+
+	doc, err := block.Get(k)
+	if err != nil {
+		return err
+	}
+
+	err = block.Update(doc.Update(fields))
+	if err != nil {
+		return wrapError(err)
+	}
+
+	err = c.repo.Save(block)
+	if err != nil {
+		wrapError(err)
 	}
 
 	return c.commit()
 }
 
-func (c *collection) update(ctx context.Context, k string, fields map[string]interface{}) error {
-	// Retrieve record
-	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
-	r, err := c.Index.get(ctx, k)
-	if err != nil {
-		return wrapError(err)
-	}
-
-	clone := r.Update(fields)
-	err = c.Schema.Validate(clone)
-	if err != nil {
-		return wrapError(err)
-	}
-
-	_, err = c.Index.insert(ctx, clone)
-	if err != nil {
-		wrapError(err)
-	}
-
-	err = c.Blocks.update(ctx, clone)
-	if err != nil {
-		wrapError(err)
-	}
-
-	return nil
-}
-
 // TODO: If this fails, clean up
-func (c *collection) Create(ctx context.Context, s *types.Schema) error {
+func (c *Collection) Create(ctx context.Context, s *types.Schema) error {
+	log.Printf("Creating collection %s\n", c.ID())
 	var op errors.Op = "(*Collection).Create"
-
-	//_, err := c.storage.Write(nil)
-	//if err != nil {
-	//return errors.Wrap(op, errors.EIO, err)
-	//}
 
 	if s != nil {
 		c.Schema = *s
 	}
 
-	err := c.Index.create()
+	c.Blocks = newBlocklist(200, c.repo)
+	err := c.Blocks.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	c.Blocks = newOrderIndex(200, c.repo)
-	err = c.Blocks.create()
+	c.Index = newIndex(50, c.repo)
+	err = c.Index.create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.save()
+	err = c.repo.Save(c)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	fmt.Println("CREATED collection", c.Blocks.Head)
+	err = c.repo.Flush()
+	if err != nil {
+		return errors.Wrap(op, errors.EInternal, err)
+	}
 
-	return nil
-}
-
-func (c *collection) load() error {
-
-	//var op errors.Op = "(*Collection).Load"
-	//c.PrimaryIndex.storage = c.storage
-	//c.PrimaryIndex.bufWriter = newWriteBuffer(c.storage)
-	//fmt.Println("C", c.PrimaryIndex.RootPage)
-	//err := c.PrimaryIndex.Load()
-	//if err != nil {
-	//return errors.Wrap(op, errors.EInternal, err)
-	//}
-
-	c.Blocks.repo = c.repo
-
+	log.Printf("Done creating collection %s\n", c.ID())
 	return nil
 }
 
 // Delete record with key `k`. An error is returned of no
 // such record exists
-func (c *collection) Delete(ctx context.Context, k string) error {
-	err := c.load()
-	if err != nil {
-		return err
-	}
-
-	err = c.remove(ctx, k)
-	if err != nil {
-		return err
-	}
-
-	return c.commit()
-}
-
-func (c *collection) remove(ctx context.Context, k string) error {
+func (c *Collection) Delete(ctx context.Context, k string) error {
 	var op errors.Op = "(*Collection).Delete"
 
 	err := c.Index.remove(ctx, k)
@@ -268,46 +189,39 @@ func (c *collection) remove(ctx context.Context, k string) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	return err
+	return c.commit()
 }
 
-func (c *collection) save() error {
-	wrapError := errors.WrapWith("(*Collection).Save", errors.EIO)
-
-	err := c.repo.SaveCommit(c)
-	if err != nil {
-		return wrapError(err)
+func (c *Collection) Info(ctx context.Context) string {
+	if ok, err := c.repo.Exists(c.ID()); !ok && err == nil {
+		return fmt.Sprintf("Collection %s does not exist", c.ID())
+	} else if err != nil {
+		return fmt.Sprintf("Error: %s", err)
 	}
 
-	fmt.Println("SAVED COLLECTION")
+	var sb strings.Builder
+	sb.WriteString("\n---------------\n")
+	sb.WriteString(fmt.Sprintf("Collection: %s\n", c.ID()))
+	sb.WriteString("---------------\n")
 
+	sb.WriteString(c.Schema.String())
+	sb.WriteString("\n")
+	sb.WriteString(c.Index.Info())
+	sb.WriteString("\n")
+	sb.WriteString(c.Blocks.Info())
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (c *Collection) load() error {
+	c.Index.repo = repository.WithFactory(c.repo, PageFactory{c.Index.T, c.repo})
+	c.Blocks.repo = repository.WithFactory(c.repo, &BlockFactory{200, c.repo})
 	return nil
 }
 
-func (c *collection) Info(ctx context.Context) {
-	fmt.Println()
-	fmt.Println("---------------")
-	fmt.Println("Collection:", c.Name)
-	fmt.Println("---------------")
-
-	fmt.Println(c.Schema)
-	c.Index.Info()
-	fmt.Println()
-	c.Blocks.Info()
-	fmt.Println()
-}
-
-func (c *collection) exists() bool {
-	//if ok, err := c.storage.Exists(); !ok || err != nil {
-	//return false
-	//}
-
-	return true
-}
-
-func newCollection(name string, r repository.Repository) *collection {
-	//t := 50
-	c := &collection{
+func newCollection(name string, r repository.Repository) *Collection {
+	c := &Collection{
 		Name: name,
 		repo: repository.WithScope(r, name),
 	}
