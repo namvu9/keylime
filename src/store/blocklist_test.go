@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
 func TestInsertOrderIndex(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Normal insert", func(t *testing.T) {
-		repo, reporter := newMockRepo()
+		repo, reporter := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 		doc := types.NewDoc("k")
 
@@ -27,7 +28,7 @@ func TestInsertOrderIndex(t *testing.T) {
 			t.Errorf("Want %s Got %s", headNode.Identifier, oi.Head)
 		}
 
-		if _, ok := reporter.writes[string(headNode.Identifier)]; !ok {
+		if _, ok := reporter.Writes[string(headNode.Identifier)]; !ok {
 			t.Errorf("Head node was not written")
 		}
 
@@ -37,7 +38,7 @@ func TestInsertOrderIndex(t *testing.T) {
 	})
 
 	t.Run("Insertion into full node", func(t *testing.T) {
-		repo, reporter := newMockRepo()
+		repo, reporter := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 		oldHead, _ := oi.Get(oi.Head)
 		oldHead.Docs = []types.Document{types.NewDoc("nil"), types.NewDoc("HAHA")}
@@ -63,18 +64,18 @@ func TestInsertOrderIndex(t *testing.T) {
 			t.Errorf("Old head does not reference new head")
 		}
 
-		if _, ok := reporter.writes[string(oldHead.Identifier)]; !ok {
+		if _, ok := reporter.Writes[string(oldHead.Identifier)]; !ok {
 			t.Errorf("Old head was not written")
 		}
 
-		if _, ok := reporter.writes[string(oi.Head)]; !ok {
+		if _, ok := reporter.Writes[string(oi.Head)]; !ok {
 			t.Errorf("New head was not written")
 		}
 	})
 }
 
 func TestDeleteOrderIndex(t *testing.T) {
-	repo, reporter := newMockRepo()
+	repo, reporter := repository.NewMockRepo()
 	oi := newBlocklist(2, repo)
 	doc := types.NewDoc("k")
 
@@ -96,13 +97,13 @@ func TestDeleteOrderIndex(t *testing.T) {
 	}
 
 	oi.repo.Flush()
-	if _, ok := reporter.writes[headNode.ID()]; !ok {
+	if _, ok := reporter.Writes[headNode.ID()]; !ok {
 		t.Errorf("Node was not written")
 	}
 }
 
 func TestUpdateOrderIndex(t *testing.T) {
-	repo, reporter := newMockRepo()
+	repo, reporter := repository.NewMockRepo()
 	oi := newBlocklist(2, repo)
 	doc := types.NewDoc("k")
 
@@ -119,7 +120,7 @@ func TestUpdateOrderIndex(t *testing.T) {
 	oi.update(context.Background(), doc)
 
 	oi.repo.Flush()
-	if _, ok := reporter.writes[headNode.ID()]; !ok {
+	if _, ok := reporter.Writes[headNode.ID()]; !ok {
 		t.Errorf("Node was not written")
 	}
 
@@ -128,7 +129,7 @@ func TestUpdateOrderIndex(t *testing.T) {
 func TestGetOrderIndex(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Desc: n < records in index", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 
 		d := types.NewDoc("d")
@@ -161,7 +162,7 @@ func TestGetOrderIndex(t *testing.T) {
 	})
 
 	t.Run("Desc: n > records in index", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 
 		d := types.NewDoc("d")
@@ -194,7 +195,7 @@ func TestGetOrderIndex(t *testing.T) {
 	})
 
 	t.Run("Asc: n < records in index", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 
 		d := types.NewDoc("d")
@@ -227,7 +228,7 @@ func TestGetOrderIndex(t *testing.T) {
 	})
 
 	t.Run("Asc: n > records in index", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 
 		d := types.NewDoc("d")
@@ -262,16 +263,16 @@ func TestGetOrderIndex(t *testing.T) {
 
 // Make sure both the indexes and the root nodes are saved
 func TestCreateIndex(t *testing.T) {
-	repo, _ := newMockRepo()
-	t.Run("Key Index", func(t *testing.T) {
-		ki := newIndex(10, repo)
+	//repo, reporter := repository.NewMockRepo()
+	//t.Run("Key Index", func(t *testing.T) {
+		////ki := index.New(10, repo)
 
-		err := ki.create()
-		if err != nil {
-			t.Errorf("Unexpected error %s", err)
-		}
+		//err := ki.create()
+		//if err != nil {
+			//t.Errorf("Unexpected error %s", err)
+		//}
 
-		//if _, ok := reporter.writes["key_index"]; !ok {
+		//if _, ok := reporter.Writes["key_index"]; !ok {
 		//t.Errorf("Did not write key_index")
 		//}
 
@@ -279,14 +280,14 @@ func TestCreateIndex(t *testing.T) {
 		//t.Errorf("Expected RootPage (%s) and root ID (%s) to be equal", ki.RootID, ki.root.ID)
 		//}
 
-		//if _, ok := reporter.writes[ki.root.ID]; !ok {
+		//if _, ok := reporter.Writes[ki.root.ID]; !ok {
 		//t.Errorf("Did not write root node")
 		//}
 
-	})
+	//})
 
-	t.Run("Order index", func(t *testing.T) {
-		repo, reporter := newMockRepo()
+	t.Run("Block list", func(t *testing.T) {
+		repo, reporter := repository.NewMockRepo()
 		oi := newBlocklist(10, repo)
 
 		err := oi.create()
@@ -298,11 +299,11 @@ func TestCreateIndex(t *testing.T) {
 			t.Errorf("Expected head (%s) and tail (%s) to be equal", oi.Head, oi.Tail)
 		}
 
-		if _, ok := reporter.writes["order_index"]; !ok {
+		if _, ok := reporter.Writes["order_index"]; !ok {
 			t.Errorf("Did not write order_index")
 		}
 
-		if _, ok := reporter.writes[string(oi.Head)]; !ok {
+		if _, ok := reporter.Writes[string(oi.Head)]; !ok {
 			t.Errorf("Did not write Head/Tail node")
 		}
 	})

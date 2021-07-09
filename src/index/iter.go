@@ -1,13 +1,13 @@
-package store
+package index
 
 import (
 	"github.com/namvu9/keylime/src/errors"
 )
 
-type iterFunc func(*Page) (*Page, error)
-type handleFunc func(*Page, *Page)
+type iterFunc func(*Node) (*Node, error)
+type handleFunc func(*Node, *Node)
 
-func (next iterFunc) done(p *Page) bool {
+func (next iterFunc) done(p *Node) bool {
 	if p.Leaf {
 		return true
 	}
@@ -21,7 +21,7 @@ func (next iterFunc) done(p *Page) bool {
 }
 
 type collectionIterator struct {
-	node    *Page
+	node    *Node
 	next    iterFunc
 	handler handleFunc
 	err     *errors.Error
@@ -39,7 +39,7 @@ func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 	return ci
 }
 
-func (ci *collectionIterator) Get() (*Page, error) {
+func (ci *collectionIterator) Get() (*Node, error) {
 	for !ci.next.done(ci.node) {
 		nextPage, err := ci.next(ci.node)
 		if err != nil {
@@ -58,20 +58,20 @@ func (ci *collectionIterator) Get() (*Page, error) {
 
 // maxPage returns an iterator that terminates at the page
 // containing the largest key in the tree rooted at `p`.
-func (p *Page) maxPage() *collectionIterator {
+func (p *Node) maxPage() *collectionIterator {
 	return p.iter(byMaxPage)
 }
 
 // minPage returns an iterator that terminates at the page
 // containing the smallest key in the tree rooted at `p`
-func (p *Page) minPage() *collectionIterator {
+func (p *Node) minPage() *collectionIterator {
 	return p.iter(byMinPage)
 }
 
 // iter returns an iterator that traverses a `Collection`
 // of `Pages`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
-func (p *Page) iter(next iterFunc) *collectionIterator {
+func (p *Node) iter(next iterFunc) *collectionIterator {
 	return &collectionIterator{
 		next: next,
 		node: p,
@@ -79,7 +79,7 @@ func (p *Page) iter(next iterFunc) *collectionIterator {
 }
 
 func byKey(k string) iterFunc {
-	return func(p *Page) (*Page, error) {
+	return func(p *Node) (*Node, error) {
 		index, exists := p.keyIndex(k)
 
 		if exists {
@@ -90,10 +90,10 @@ func byKey(k string) iterFunc {
 	}
 }
 
-func byMinPage(p *Page) (*Page, error) {
+func byMinPage(p *Node) (*Node, error) {
 	return p.child(0)
 }
 
-func byMaxPage(p *Page) (*Page, error) {
+func byMaxPage(p *Node) (*Node, error) {
 	return p.child(len(p.Children) - 1)
 }

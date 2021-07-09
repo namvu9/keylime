@@ -1,4 +1,4 @@
-package store
+package index
 
 import (
 	"context"
@@ -21,13 +21,17 @@ type Index struct {
 	repo repository.Repository
 }
 
-func (ki *Index) Root() (*Page, error) {
+func (i *Index) SetRepo(r repository.Repository) {
+	i.repo = repository.WithFactory(r, PageFactory{t: 200, repo: r})
+}
+
+func (ki *Index) Root() (*Node, error) {
 	item, err := ki.repo.Get(ki.RootID)
 	if err != nil {
 		return nil, err
 	}
 
-	page, ok := item.(*Page)
+	page, ok := item.(*Node)
 	if !ok {
 		return nil, fmt.Errorf("Could not load Index root page")
 	}
@@ -35,31 +39,33 @@ func (ki *Index) Root() (*Page, error) {
 	return page, nil
 }
 
-func (ki *Index) insert(ctx context.Context, ref DocRef) error {
+func (i *Index) Insert(ctx context.Context, key string, value string) error {
+	return i.insert(ctx, Record{key, value})
+}
+
+func (index *Index) insert(ctx context.Context, ref Record) error {
 	log.Printf("Index: inserting %s\n", ref)
 	const op errors.Op = "(*KeyIndex).Insert"
-	root, err := ki.Root()
+	root, err := index.Root()
 	if err != nil {
 		return err
 	}
 
 	if root.full() {
-		newRoot, err := ki.newPage(false)
+		newRoot, err := index.New(false)
 		if err != nil {
 			return err
 		}
-
-		fmt.Println("CREATED NEW ROOT")
 
 		newRoot.Children = []string{root.ID()}
 		newRoot.splitChild(0)
 		newRoot.save()
 
-		ki.RootID = newRoot.ID()
-		ki.Height++
+		index.RootID = newRoot.ID()
+		index.Height++
 
 		newRoot.save()
-		ki.save()
+		index.Save()
 	}
 
 	page, err := root.iter(byKey(ref.Key)).forEach(splitFullPage).Get()
@@ -67,14 +73,19 @@ func (ki *Index) insert(ctx context.Context, ref DocRef) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	page.insert(ref)
+	err = page.insert(ref)
+	if err != nil {
+		return err
+	}
+
 	log.Printf("Index: done inserting %s\n", ref)
 	return nil
 }
 
-func (ki *Index) remove(ctx context.Context, key string) error {
+func (index *Index) Delete(ctx context.Context, key string) error {
 	const op errors.Op = "(*KeyIndex).remove"
-	root, err := ki.Root()
+
+	root, err := index.Root()
 	if err != nil {
 		return err
 	}
@@ -96,18 +107,18 @@ func (ki *Index) remove(ctx context.Context, key string) error {
 			return errors.Wrap(op, errors.EInternal, err)
 		}
 
-		ki.RootID = newRoot.ID()
-		ki.Height--
+		index.RootID = newRoot.ID()
+		index.Height--
 
 		oldRoot.deletePage()
 		newRoot.save()
-		ki.save()
+		index.Save()
 	}
 
 	return nil
 }
 
-func (ki *Index) get(ctx context.Context, key string) (*DocRef, error) {
+func (ki *Index) Get(ctx context.Context, key string) (*Record, error) {
 	const op errors.Op = "(*KeyIndex).Get"
 	root, err := ki.Root()
 	if err != nil {
@@ -127,13 +138,6 @@ func (ki *Index) get(ctx context.Context, key string) (*DocRef, error) {
 	return &node.Docs[i], nil
 }
 
-func newIndex(t int, r repository.Repository) Index {
-	return Index{
-		T:    t,
-		repo: repository.WithFactory(r, PageFactory{t, r}),
-	}
-}
-
 type PageFactory struct {
 	t    int
 	repo repository.Repository
@@ -142,10 +146,10 @@ type PageFactory struct {
 func (pf PageFactory) New() types.Identifier {
 	id := uuid.New().String()
 
-	p := &Page{
-		Name:   id,
-		T:      pf.t,
-		repo:   repository.WithFactory(pf.repo, pf),
+	p := &Node{
+		Name: id,
+		T:    pf.t,
+		repo: repository.WithFactory(pf.repo, pf),
 	}
 
 	return p
@@ -153,7 +157,7 @@ func (pf PageFactory) New() types.Identifier {
 
 func (pf PageFactory) Restore(item types.Identifier) error {
 	log.Println("Restoring page", item.ID(), pf.repo.Scope())
-	page, ok := item.(*Page)
+	page, ok := item.(*Node)
 	if !ok {
 		return fmt.Errorf("Could not restore Page")
 	}
@@ -164,37 +168,29 @@ func (pf PageFactory) Restore(item types.Identifier) error {
 	return nil
 }
 
-func (ki *Index) newPage(leaf bool) (*Page, error) {
-	page, ok := ki.repo.New().(*Page)
-	if !ok {
-		return nil, fmt.Errorf("Index: Could not create new page")
-	}
-
-	return page, nil
-}
-
-func (ki *Index) save() error {
+func (ki *Index) Save() error {
 	return nil
 }
 
-func (i *Index) create() error {
+func (i *Index) Create() error {
 	log.Printf("Creating index in scope %s\n", i.repo.Scope())
-	//var op errors.Op = "(*KeyIndex).Create"
 
-	rootPage := i.repo.New().(*Page)
+	rootPage := i.repo.New().(*Node)
 	rootPage.Leaf = true
 	i.RootID = rootPage.ID()
 
 	return i.repo.Save(rootPage)
 }
 
-func (i *Index) New() (*Page, error) {
+func (i *Index) New(leaf bool) (*Node, error) {
 	item := i.repo.New()
 
-	page, ok := item.(*Page)
+	page, ok := item.(*Node)
 	if !ok {
 		return nil, fmt.Errorf("Index: Could not create page")
 	}
+
+	page.Leaf = leaf
 
 	return page, nil
 }
@@ -222,4 +218,11 @@ func (ki Index) String() string {
 	fmt.Fprintf(&sb, "Height:\t%d\n", ki.Height)
 	fmt.Fprintf(&sb, "\n")
 	return sb.String()
+}
+
+func New(t int, r repository.Repository) Index {
+	return Index{
+		T:    t,
+		repo: repository.WithFactory(r, PageFactory{t, r}),
+	}
 }

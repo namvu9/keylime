@@ -1,4 +1,4 @@
-package store
+package index
 
 import "testing"
 
@@ -6,7 +6,7 @@ func TestMaxPage(t *testing.T) {
 	max := makePage(2, makeDocs("11"))
 	for _, test := range []struct {
 		name string
-		p    *Page
+		p    *Node
 	}{
 		{"from root",
 			makePage(2, makeDocs("7"),
@@ -34,7 +34,7 @@ func TestMinPage(t *testing.T) {
 	min := makePage(2, makeDocs("11"))
 	for _, test := range []struct {
 		name string
-		p    *Page
+		p    *Node
 	}{
 		{"from root",
 			makePage(2, makeDocs("7"),

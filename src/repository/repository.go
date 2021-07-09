@@ -25,6 +25,7 @@ type Codec interface {
 
 type Opener interface {
 	Open(name string) (io.ReadWriter, error)
+	Delete(name string) error
 }
 
 type Storage interface {
@@ -54,11 +55,18 @@ type Repository struct {
 	codec   Codec
 	factory Factory
 
-	items  map[string]map[string]types.Identifier
-	buffer map[string]map[string]types.Identifier
+	items        map[string]map[string]types.Identifier
+	buffer       map[string]map[string]types.Identifier
+	deleteBuffer map[string]map[string]types.Identifier
 }
 
 func (r Repository) Delete(item types.Identifier) error {
+	deletes, ok := r.deleteBuffer[r.scope]
+	if !ok {
+		return fmt.Errorf("scope %s has not been registered", r.scope)
+	}
+	deletes[item.ID()] = item
+
 	return nil
 }
 
@@ -108,9 +116,13 @@ func (r Repository) New() types.Identifier {
 func (r Repository) Flush() error {
 	defer func() {
 		for id, item := range r.buffer[r.scope] {
-			delete(r.buffer, id)
+			delete(r.buffer[r.scope], id)
 
 			r.items[r.scope][id] = item
+		}
+
+		for id := range r.deleteBuffer[r.scope] {
+			delete(r.deleteBuffer[r.scope], id)
 		}
 	}()
 
@@ -136,6 +148,22 @@ func (r Repository) Flush() error {
 		}
 
 		items[id] = item
+
+		log.Printf("repository.Repository: wrote %s to scope %s\n", id, r.scope)
+	}
+
+	for id := range r.deleteBuffer[r.scope] {
+		items, ok := r.items[r.scope]
+		if !ok {
+			return fmt.Errorf("Current scope %s does not exist", r.scope)
+		}
+
+		err := r.storage.Delete(path.Join(r.scope, id))
+		if err != nil {
+			return err
+		}
+
+		delete(items, id)
 
 		log.Printf("repository.Repository: wrote %s to scope %s\n", id, r.scope)
 	}
@@ -209,12 +237,19 @@ func New(scope string, c Codec, s Storage, opts ...Option) Repository {
 	items := make(map[string]map[string]types.Identifier)
 	items[scope] = make(map[string]types.Identifier)
 
+	buffer := make(map[string]map[string]types.Identifier)
+	buffer[scope] = make(map[string]types.Identifier)
+
+	deleteBuffer := make(map[string]map[string]types.Identifier)
+	deleteBuffer[scope] = make(map[string]types.Identifier)
+
 	return Repository{
-		scope:   scope,
-		items:   items,
-		factory: NoOpFactory{},
-		codec:   c,
-		storage: s,
-		buffer:  make(map[string]map[string]types.Identifier),
+		scope:        scope,
+		items:        items,
+		factory:      NoOpFactory{},
+		codec:        c,
+		storage:      s,
+		buffer:       buffer,
+		deleteBuffer: deleteBuffer,
 	}
 }

@@ -11,7 +11,9 @@ type FStorage struct {
 	offset   int64
 }
 
-func (fs *FStorage) Delete() error { return nil }
+func (fs *FStorage) Delete(path string) error {
+	return os.Remove(path)
+}
 
 func (fs *FStorage) Read(dst []byte) (int, error) {
 	f, err := os.Open(fs.location)
@@ -71,3 +73,10 @@ func NewFS(baseDir string) *FStorage {
 		offset:   0,
 	}
 }
+
+
+func NewMockRepo() (Repository, *IOReporter) {
+	reporter := newIOReporter()
+	return New("", NoOpCodec{}, reporter), reporter
+}
+

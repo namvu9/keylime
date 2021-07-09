@@ -3,10 +3,9 @@ package store
 // Config represnts the configuration used to initialize the
 // store
 type Config struct {
-	Name    string
 	BaseDir string
-	T       int
-	Port    int
+	Port    string
+	Host    string
 }
 
 type Option func(*Store)

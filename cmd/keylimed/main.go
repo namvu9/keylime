@@ -29,8 +29,9 @@ func prettify(v interface{}) (string, error) {
 
 func readConfig() (*store.Config, error) {
 	cfg := &store.Config{
-		T:       200,
 		BaseDir: "./testdata",
+		Host:    "localhost",
+		Port:    "1337",
 	}
 
 	return cfg, nil
@@ -43,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:1337")
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", cfg.Host, cfg.Port))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -11,5 +11,4 @@ func init() {
 	gob.Register(&Blocklist{})
 	gob.Register(&Block{})
 	gob.Register(&Collection{})
-	gob.Register(&Page{})
 }

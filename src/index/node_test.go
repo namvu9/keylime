@@ -1,4 +1,6 @@
-package store
+package index
+
+import "testing"
 
 //import (
 //"fmt"
@@ -776,245 +778,245 @@ package store
 //})
 //}
 
-//func TestHandleSparsePage(t *testing.T) {
-//makeBufPage := makePageWithBufferedStorage(nil)
+func TestHandleSparsePage(t *testing.T) {
+	//makeBufPage := makePageWithBufferedStorage(nil)
 
-//t.Run("Left sibling has t keys", func(t *testing.T) {
-//u := util{t}
+	t.Run("Left sibling has t keys", func(t *testing.T) {
+		//u := util{t}
 
-//root := makeBufPage(2, makeDocs("c"),
-//makeBufPage(2, makeDocs("a", "b")),
-//makeBufPage(2, makeDocs("d")),
-//)
+		//root := makeBufPage(2, makeDocs("c"),
+		//makeBufPage(2, makeDocs("a", "b")),
+		//makeBufPage(2, makeDocs("d")),
+		//)
 
-//handleSparsePage(root, root.children[1])
+		//handleSparsePage(root, root.Children[1])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasKeys("b")
-//nu.hasNChildren(2)
-//})
+		//u.with("Root", root, func(nu namedUtil) {
+		//nu.hasKeys("b")
+		//nu.hasNChildren(2)
+		//})
 
-//u.with("Right child", root.children[1], func(nu namedUtil) {
-//nu.hasKeys("c", "d")
-//})
+		//u.with("Right child", root.children[1], func(nu namedUtil) {
+		//nu.hasKeys("c", "d")
+		//})
 
-////if got := len(bs.writeBuf); got != 3 {
-////t.Errorf("Got=%d, Want=3", got)
-////}
+		//if got := len(bs.writeBuf); got != 3 {
+		//t.Errorf("Got=%d, Want=3", got)
+		//}
 
-////if bs.writeBuf[root.ID] == nil {
-////t.Errorf("Root not written")
-////}
+		//if bs.writeBuf[root.ID] == nil {
+		//t.Errorf("Root not written")
+		//}
 
-////if bs.writeBuf[root.children[0].ID] == nil {
-////t.Errorf("Left child not written")
-////}
+		//if bs.writeBuf[root.children[0].ID] == nil {
+		//t.Errorf("Left child not written")
+		//}
 
-////if bs.writeBuf[root.children[1].ID] == nil {
-////t.Errorf("Right child not written")
-////}
-//})
+		//if bs.writeBuf[root.children[1].ID] == nil {
+		//t.Errorf("Right child not written")
+		//}
+	})
 
-//t.Run("Left internal node sibling has t keys", func(t *testing.T) {
-//u := util{t}
+	t.Run("Left internal node sibling has t keys", func(t *testing.T) {
+		//u := util{t}
 
-//movedChild := makeBufPage(2, makeDocs())
-//root := makeBufPage(2, makeDocs("c"),
-//makeBufPage(2, makeDocs("a", "b"),
-//makeBufPage(2, makeDocs()),
-//makeBufPage(2, makeDocs()),
-//movedChild,
-//),
-//makeBufPage(2, makeDocs("d"),
-//makeBufPage(2, makeDocs()),
-//makeBufPage(2, makeDocs()),
-//),
-//)
+		//movedChild := makeBufPage(2, makeDocs())
+		//root := makeBufPage(2, makeDocs("c"),
+		//makeBufPage(2, makeDocs("a", "b"),
+		//makeBufPage(2, makeDocs()),
+		//makeBufPage(2, makeDocs()),
+		//movedChild,
+		//),
+		//makeBufPage(2, makeDocs("d"),
+		//makeBufPage(2, makeDocs()),
+		//makeBufPage(2, makeDocs()),
+		//),
+		//)
 
-//handleSparsePage(root, root.children[1])
+		//handleSparsePage(root, root.children[1])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(1)
-//nu.hasKeys("b")
-//nu.hasNChildren(2)
-//})
+		//u.with("Root", root, func(nu namedUtil) {
+		//nu.hasNDocs(1)
+		//nu.hasKeys("b")
+		//nu.hasNChildren(2)
+		//})
 
-//u.with("Right child", root.children[1], func(nu namedUtil) {
-//nu.hasNChildren(3)
-//nu.hasKeys("c", "d")
-//if nu.node.children[0] != movedChild {
-//t.Errorf("Right child expected movedChild as its first child")
-//}
-//})
-//})
+		//u.with("Right child", root.children[1], func(nu namedUtil) {
+		//nu.hasNChildren(3)
+		//nu.hasKeys("c", "d")
+		//if nu.node.children[0] != movedChild {
+		//t.Errorf("Right child expected movedChild as its first child")
+		//}
+		//})
+		//})
 
-//t.Run("Right sibling has t keys", func(t *testing.T) {
-//u := util{t}
-//root := makeBufPage(2, makeDocs("c"),
-//makeBufPage(2, makeDocs("a")),
-//makeBufPage(2, makeDocs("d", "e")),
-//)
+		//t.Run("Right sibling has t keys", func(t *testing.T) {
+		//u := util{t}
+		//root := makeBufPage(2, makeDocs("c"),
+		//makeBufPage(2, makeDocs("a")),
+		//makeBufPage(2, makeDocs("d", "e")),
+		//)
 
-//handleSparsePage(root, root.children[0])
+		//handleSparsePage(root, root.children[0])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(1)
-//nu.hasKeys("d")
-//nu.hasNChildren(2)
-//})
+		//u.with("Root", root, func(nu namedUtil) {
+		//nu.hasNDocs(1)
+		//nu.hasKeys("d")
+		//nu.hasNChildren(2)
+		//})
 
-//u.with("Left child", root.children[0], func(nu namedUtil) {
-//nu.hasKeys("a", "c")
-//})
+		//u.with("Left child", root.children[0], func(nu namedUtil) {
+		//nu.hasKeys("a", "c")
+		//})
 
-////if got := len(bs.writeBuf); got != 3 {
-////t.Errorf("Got=%d, Want=3", got)
-////}
+		//if got := len(bs.writeBuf); got != 3 {
+		//t.Errorf("Got=%d, Want=3", got)
+		//}
 
-////if bs.writeBuf[root.ID] == nil {
-////t.Errorf("Root not written")
-////}
+		//if bs.writeBuf[root.ID] == nil {
+		//t.Errorf("Root not written")
+		//}
 
-////if bs.writeBuf[root.children[0].ID] == nil {
-////t.Errorf("Left child not written")
-////}
+		//if bs.writeBuf[root.children[0].ID] == nil {
+		//t.Errorf("Left child not written")
+		//}
 
-////if bs.writeBuf[root.children[1].ID] == nil {
-////t.Errorf("Right child not written")
-////}
-//})
+		//if bs.writeBuf[root.children[1].ID] == nil {
+		//t.Errorf("Right child not written")
+		//}
+	})
 
-//t.Run("Right internal node sibling has t keys", func(t *testing.T) {
-//u := util{t}
-//movedChild := makePage(2, makeDocs())
-//root := makePage(2, makeDocs("c"),
-//makePage(2, makeDocs("a"),
-//makePage(2, makeDocs()),
-//makePage(2, makeDocs()),
-//),
-//makePage(2, makeDocs("d", "e"),
-//movedChild,
-//makePage(2, makeDocs()),
-//makePage(2, makeDocs()),
-//),
-//)
+	t.Run("Right internal node sibling has t keys", func(t *testing.T) {
+		//u := util{t}
+		//movedChild := makePage(2, makeDocs())
+		//root := makePage(2, makeDocs("c"),
+		//makePage(2, makeDocs("a"),
+		//makePage(2, makeDocs()),
+		//makePage(2, makeDocs()),
+		//),
+		//makePage(2, makeDocs("d", "e"),
+		//movedChild,
+		//makePage(2, makeDocs()),
+		//makePage(2, makeDocs()),
+		//),
+		//)
 
-//handleSparsePage(root, root.children[0])
+		//handleSparsePage(root, root.children[0])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(1)
-//nu.hasKeys("d")
-//nu.hasNChildren(2)
-//})
+		//u.with("Root", root, func(nu namedUtil) {
+		//nu.hasNDocs(1)
+		//nu.hasKeys("d")
+		//nu.hasNChildren(2)
+		//})
 
-//u.with("Left child", root.children[0], func(nu namedUtil) {
-//nu.hasKeys("a", "c")
-//nu.hasNChildren(3)
-//if nu.node.children[2] != movedChild {
-//t.Errorf("LeftChild, expected movedChild as last child")
-//}
-//})
-//})
+		//u.with("Left child", root.children[0], func(nu namedUtil) {
+		//nu.hasKeys("a", "c")
+		//nu.hasNChildren(3)
+		//if nu.node.children[2] != movedChild {
+		//t.Errorf("LeftChild, expected movedChild as last child")
+		//}
+		//})
+	})
 
-//t.Run("Both siblings are sparse", func(t *testing.T) {
-//u := util{t}
+	t.Run("Both siblings are sparse", func(t *testing.T) {
+		//u := util{t}
 
-//mergedPage := makeBufPage(2, makeDocs("a"))
-//deletedPage := makeBufPage(2, makeDocs("c"))
+		//mergedPage := makeBufPage(2, makeDocs("a"))
+		//deletedPage := makeBufPage(2, makeDocs("c"))
 
-//root := makeBufPage(2, makeDocs("b", "d"),
-//mergedPage,
-//deletedPage,
-//makeBufPage(2, makeDocs("e")),
-//)
+		//root := makeBufPage(2, makeDocs("b", "d"),
+		//mergedPage,
+		//deletedPage,
+		//makeBufPage(2, makeDocs("e")),
+		//)
 
-//handleSparsePage(root, root.children[1])
+		//handleSparsePage(root, root.children[1])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(1)
-//nu.hasNChildren(2)
-//})
+		//u.with("Root", root, func(nu namedUtil) {
+		//nu.hasNDocs(1)
+		//nu.hasNChildren(2)
+		//})
 
-//u.with("Merged node", root.children[0], func(nu namedUtil) {
-//nu.hasKeys("a", "b", "c")
-//})
+		//u.with("Merged node", root.children[0], func(nu namedUtil) {
+		//nu.hasKeys("a", "b", "c")
+		//})
 
-////if got := len(bs.writeBuf); got != 2 {
-////t.Errorf("Got=%d Want=2", got)
-////}
+		//if got := len(bs.writeBuf); got != 2 {
+		//t.Errorf("Got=%d Want=2", got)
+		//}
 
-////if bs.writeBuf[root.ID] == nil {
-////t.Errorf("Root not written")
-////}
-////if bs.writeBuf[mergedPage.ID] == nil {
-////t.Errorf("Merged page not written")
-////}
+		//if bs.writeBuf[root.ID] == nil {
+		//t.Errorf("Root not written")
+		//}
+		//if bs.writeBuf[mergedPage.ID] == nil {
+		//t.Errorf("Merged page not written")
+		//}
 
-////if got := len(bs.deleteBuf); got != 1 {
-////t.Errorf("Got=%d Want=1", got)
-////}
-////if bs.deleteBuf[deletedPage.ID] == nil {
-////t.Errorf("Deleted page not deleted")
-////}
+		//if got := len(bs.deleteBuf); got != 1 {
+		//t.Errorf("Got=%d Want=1", got)
+		//}
+		//if bs.deleteBuf[deletedPage.ID] == nil {
+		//t.Errorf("Deleted page not deleted")
+		//}
 
-//})
+	})
 
-//t.Run("Both siblings are sparse; no right sibling", func(t *testing.T) {
-//u := util{t}
-//root := makePage(2, makeDocs("b", "d"),
-//makePage(2, makeDocs("a")),
-//makePage(2, makeDocs("c")),
-//makePage(2, makeDocs("e")),
-//)
+	t.Run("Both siblings are sparse; no right sibling", func(t *testing.T) {
+		//u := util{t}
+		//root := makePage(2, makeDocs("b", "d"),
+		//makePage(2, makeDocs("a")),
+		//makePage(2, makeDocs("c")),
+		//makePage(2, makeDocs("e")),
+		//)
 
-//handleSparsePage(root, root.children[2])
+		//handleSparsePage(root, root.children[2])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(1)
-//nu.hasNChildren(2)
-//})
+		//u.with("Root", root, func(nu namedUtil) {
+		//nu.hasNDocs(1)
+		//nu.hasNChildren(2)
+		//})
 
-//u.with("Merged node", root.children[1], func(nu namedUtil) {
-//nu.hasKeys("c", "d", "e")
-//})
-//})
+		//u.with("Merged node", root.children[1], func(nu namedUtil) {
+		//nu.hasKeys("c", "d", "e")
+		//})
+	})
 
-//t.Run("Both siblings are sparse; no left sibling", func(t *testing.T) {
-//u := util{t}
-//root := makePage(2, makeDocs("b", "d"),
-//makePage(2, makeDocs("a")),
-//makePage(2, makeDocs("c")),
-//makePage(2, makeDocs("e")),
-//)
+	//t.Run("Both siblings are sparse; no left sibling", func(t *testing.T) {
+	//u := util{t}
+	//root := makePage(2, makeDocs("b", "d"),
+	//makePage(2, makeDocs("a")),
+	//makePage(2, makeDocs("c")),
+	//makePage(2, makeDocs("e")),
+	//)
 
-//handleSparsePage(root, root.children[0])
+	//handleSparsePage(root, root.children[0])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(1)
-//nu.hasNChildren(2)
-//})
+	//u.with("Root", root, func(nu namedUtil) {
+	//nu.hasNDocs(1)
+	//nu.hasNChildren(2)
+	//})
 
-//u.with("Merged node", root.children[0], func(nu namedUtil) {
-//nu.hasKeys("a", "b", "c")
-//})
-//})
+	//u.with("Merged node", root.children[0], func(nu namedUtil) {
+	//nu.hasKeys("a", "b", "c")
+	//})
+	//})
 
-//t.Run("Target key is moved from child to parent", func(t *testing.T) {
-//u := util{t}
-//root := makePage(2, makeDocs("b"),
-//makePage(2, makeDocs("a")),
-//makePage(2, makeDocs("c")),
-//)
+	//t.Run("Target key is moved from child to parent", func(t *testing.T) {
+	//u := util{t}
+	//root := makePage(2, makeDocs("b"),
+	//makePage(2, makeDocs("a")),
+	//makePage(2, makeDocs("c")),
+	//)
 
-//handleSparsePage(root, root.children[1])
+	//handleSparsePage(root, root.children[1])
 
-//u.with("Root", root, func(nu namedUtil) {
-//nu.hasNDocs(0)
-//nu.hasNChildren(1)
-//})
+	//u.with("Root", root, func(nu namedUtil) {
+	//nu.hasNDocs(0)
+	//nu.hasNChildren(1)
+	//})
 
-//u.with("Merged node", root.children[0], func(nu namedUtil) {
-//nu.hasKeys("a", "b", "c")
-//})
-//})
-//}
+	//u.with("Merged node", root.children[0], func(nu namedUtil) {
+	//nu.hasKeys("a", "b", "c")
+	//})
+	//})
+}

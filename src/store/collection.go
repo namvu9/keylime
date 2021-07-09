@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/namvu9/keylime/src/errors"
+	"github.com/namvu9/keylime/src/index"
 	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
@@ -15,7 +16,7 @@ import (
 type Collection struct {
 	Schema types.Schema
 	Name   string
-	Index  Index
+	Index  index.Index
 	Blocks Blocklist
 
 	repo   repository.Repository
@@ -28,12 +29,12 @@ func (c *Collection) ID() string {
 // Get the value associated with the key `k`, if a record
 // with that key exists. Otherwise, nil is returned
 func (c *Collection) Get(ctx context.Context, k string) (*types.Document, error) {
-	ref, err := c.Index.get(ctx, k)
+	ref, err := c.Index.Get(ctx, k)
 	if err != nil {
 		return nil, err
 	}
 
-	block, err := c.Blocks.Get(ref.BlockID)
+	block, err := c.Blocks.Get(ID(ref.Value))
 	if err != nil {
 		return nil, err
 	}
@@ -62,12 +63,12 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 		return wrapError(err)
 	}
 
-	docRef, err := c.Blocks.insert(ctx, doc)
+	blockID, err := c.Blocks.insert(ctx, doc)
 	if err != nil {
 		return err
 	}
 
-	if err := c.Index.insert(ctx, *docRef); err != nil {
+	if err := c.Index.Insert(ctx, k, blockID); err != nil {
 		return err
 	}
 
@@ -101,12 +102,12 @@ func (c *Collection) GetFirst(ctx context.Context, n int) ([]types.Document, err
 func (c *Collection) Update(ctx context.Context, k string, fields map[string]interface{}) error {
 	// Retrieve record
 	wrapError := errors.WrapWith("(*Collection).Update", errors.EInternal)
-	ref, err := c.Index.get(ctx, k)
+	ref, err := c.Index.Get(ctx, k)
 	if err != nil {
 		return wrapError(err)
 	}
 
-	block, err := c.Blocks.Get(ID(ref.BlockID))
+	block, err := c.Blocks.Get(ID(ref.Value))
 	if err != nil {
 		return err
 	}
@@ -144,8 +145,8 @@ func (c *Collection) Create(ctx context.Context, s *types.Schema) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	c.Index = newIndex(50, c.repo)
-	err = c.Index.create()
+	c.Index = index.New(50, c.repo)
+	err = c.Index.Create()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -169,12 +170,12 @@ func (c *Collection) Create(ctx context.Context, s *types.Schema) error {
 func (c *Collection) Delete(ctx context.Context, k string) error {
 	var op errors.Op = "(*Collection).Delete"
 
-	err := c.Index.remove(ctx, k)
+	err := c.Index.Delete(ctx, k)
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.Index.save()
+	err = c.Index.Save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -215,7 +216,7 @@ func (c *Collection) Info(ctx context.Context) string {
 }
 
 func (c *Collection) load() error {
-	c.Index.repo = repository.WithFactory(c.repo, PageFactory{c.Index.T, c.repo})
+	c.Index.SetRepo(c.repo)
 	c.Blocks.repo = repository.WithFactory(c.repo, &BlockFactory{200, c.repo})
 	return nil
 }

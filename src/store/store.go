@@ -95,7 +95,6 @@ func (dc DefaultCodec) Decode(r io.Reader, dst interface{}) error {
 func New(cfg *Config, opts ...Option) *Store {
 	s := &Store{
 		baseDir: cfg.BaseDir,
-		t:       cfg.T,
 		repo:    repository.New(cfg.BaseDir, DefaultCodec{}, repository.NewFS(cfg.BaseDir)),
 	}
 

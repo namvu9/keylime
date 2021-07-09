@@ -49,46 +49,40 @@ func (bl *Blocklist) Get(id ID) (*Block, error) {
 
 // TODO: Bug, document will be inserted at the head of the
 // list regardless of whether it already exists
-func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (*DocRef, error) {
+func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (ref string, err error) {
 	log.Printf("Block list: inserting %s in scope %s\n", doc.Key, bl.repo.Scope())
 	headNode, err := bl.Get(bl.Head)
 	if err != nil {
-		return nil, err
+		return ref, err
 	}
 
 	if headNode.Full() {
 		fmt.Println("FULL")
 		newHead, err := bl.New()
 		if err != nil {
-			return nil, err
+			return ref, err
 		}
 
 		err = bl.setHeadNode(newHead)
 		if err != nil {
-			return nil, err
+			return ref, err
 		}
 
 		err = newHead.Insert(doc)
 		if err != nil {
-			return nil, err
+			return ref, err
 		}
 
-		return &DocRef{
-			Key:     doc.Key,
-			BlockID: ID(newHead.ID()),
-		}, nil
+		return newHead.ID(), nil
 	}
 
 	err = headNode.Insert(doc)
 	if err != nil {
-		return nil, err
+		return ref, err
 	}
 
 	log.Printf("Block list: done inserting %s\n", doc.Key)
-	return &DocRef{
-		Key:     doc.Key,
-		BlockID: bl.Head,
-	}, nil
+	return string(bl.Head), nil
 }
 
 func (bl *Blocklist) setHeadNode(node *Block) error {
@@ -212,7 +206,7 @@ func (bl *Blocklist) update(ctx context.Context, r types.Document) error {
 	return fmt.Errorf("Key not found: %s", r.Key)
 }
 
-func (bl *Blocklist) New() (*Block, error){
+func (bl *Blocklist) New() (*Block, error) {
 	item := bl.repo.New()
 	node, ok := item.(*Block)
 	if !ok {

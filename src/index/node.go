@@ -1,4 +1,4 @@
-package store
+package index
 
 import (
 	"fmt"
@@ -8,47 +8,47 @@ import (
 	"github.com/namvu9/keylime/src/repository"
 )
 
-type DocRef struct {
-	Key     string
-	BlockID ID
+type Record struct {
+	Key   string
+	Value string
 }
 
-func (d DocRef) IsLessThan(other DocRef) bool {
+func (d Record) IsLessThan(other Record) bool {
 	return strings.Compare(d.Key, other.Key) < 0
 }
 
-func (d DocRef) IsEqualTo(other DocRef) bool {
+func (d Record) IsEqualTo(other Record) bool {
 	return d.Key == other.Key
 }
 
-// A Page is an implementation of a node in a B-tree.
-type Page struct {
+// A Node is an implementation of a node in a B-tree.
+type Node struct {
 	Name     string
 	Children []string
-	Docs     []DocRef
+	Docs     []Record
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
 	repo repository.Repository
 }
 
-func (p *Page) ID() string {
-	return p.Name
+func (n *Node) ID() string {
+	return n.Name
 }
 
-func (p *Page) child(i int) (*Page, error) {
+func (n *Node) child(i int) (*Node, error) {
 	const op errors.Op = "(*Page).Child"
 
-	if got := len(p.Children); i >= got {
+	if got := len(n.Children); i >= got {
 		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("OutOfBounds %d (length %d)", i, got))
 	}
 
-	item, err := p.repo.Get(p.Children[i])
+	item, err := n.repo.Get(n.Children[i])
 	if err != nil {
 		return nil, err
 	}
 
-	child, ok := item.(*Page)
+	child, ok := item.(*Node)
 	if !ok {
 		return nil, fmt.Errorf("(*Page).child: Could not load page")
 	}
@@ -58,7 +58,7 @@ func (p *Page) child(i int) (*Page, error) {
 
 // Delete record with key `k` from page `p` if it exists.
 // Returns an error otherwise.
-func (p *Page) remove(k string) error {
+func (p *Node) remove(k string) error {
 	const op errors.Op = "(*page).Delete"
 	index, exists := p.keyIndex(k)
 	if !exists {
@@ -66,7 +66,7 @@ func (p *Page) remove(k string) error {
 	}
 
 	if p.Leaf {
-		//p.docs = append(p.docs[:index], p.docs[index+1:]...)
+		p.Docs = append(p.Docs[:index], p.Docs[index+1:]...)
 		p.save()
 		return nil
 	}
@@ -126,60 +126,60 @@ func (p *Page) remove(k string) error {
 }
 
 // insert key `k` into node `b` in sorted order. Panics if node is full. Returns the index at which the key was inserted
-func (p *Page) insert(d DocRef) error {
-	out := []DocRef{}
+func (n *Node) insert(d Record) error {
+	out := []Record{}
 
-	for i, key := range p.Docs {
+	for i, key := range n.Docs {
 		if d.Key == key.Key {
-			p.Docs[i] = d
-			p.save()
+			n.Docs[i] = d
+			n.save()
 			return nil
 		}
 
 		if d.IsLessThan(key) {
-			if p.full() {
+			if n.full() {
 				panic(fmt.Errorf("Cannot insert key into full node: %s", key.Key))
 			}
 
 			out = append(out, d)
-			p.Docs = append(out, p.Docs[i:]...)
-			p.save()
+			n.Docs = append(out, n.Docs[i:]...)
+			n.save()
 			return nil
 		}
 
-		out = append(out, p.Docs[i])
+		out = append(out, n.Docs[i])
 	}
 
-	if p.full() {
+	if n.full() {
 		panic(fmt.Sprintf("Cannot insert key into full node: %s", d.Key))
 	}
 
-	p.Docs = append(out, d)
-	return p.save()
+	n.Docs = append(out, d)
+	return n.save()
 }
 
 // full reports whether the number of records contained in a
 // node equals 2*`b.T`-1
-func (p *Page) full() bool {
+func (p *Node) full() bool {
 	return len(p.Docs) == 2*p.T-1
 }
 
 // sparse reports whether the number of records contained in
 // the node is less than or equal to `b`.T-1
-func (p *Page) sparse() bool {
+func (p *Node) sparse() bool {
 	return len(p.Docs) <= p.T-1
 }
 
 // empty reports whether the node is empty (i.e., has no
 // records).
-func (p *Page) empty() bool {
+func (p *Node) empty() bool {
 	return len(p.Docs) == 0
 }
 
-func (p *Page) newPage(leaf bool) (*Page, error){
+func (p *Node) newPage(leaf bool) (*Node, error) {
 	item := p.repo.New()
 
-	page, ok := item.(*Page)
+	page, ok := item.(*Node)
 	if !ok {
 		return nil, fmt.Errorf("Could not create new page")
 	}
@@ -192,7 +192,7 @@ func (p *Page) newPage(leaf bool) (*Page, error){
 // keyIndex returns the index of key k in node b if it
 // exists. Otherwise, it returns the index of the subtree
 // where the key could be possibly be found
-func (p *Page) keyIndex(k string) (index int, exists bool) {
+func (p *Node) keyIndex(k string) (index int, exists bool) {
 	for i, kv := range p.Docs {
 		if k == kv.Key {
 			return i, true
@@ -207,7 +207,7 @@ func (p *Page) keyIndex(k string) (index int, exists bool) {
 }
 
 // Panics if child is not full
-func (p *Page) splitChild(index int) error {
+func (p *Node) splitChild(index int) error {
 	const op errors.Op = "(*Page).splitChild"
 
 	fullChild, err := p.child(index)
@@ -254,13 +254,11 @@ func (p *Page) splitChild(index int) error {
 	return nil
 }
 
-func (p *Page) setRecord(index int, d DocRef) {
+func (p *Node) setRecord(index int, d Record) {
 	p.Docs[index] = d
 }
 
-func (p *Page) insertChildren(index int, children ...string) {
-	// Check whether index + len(children) leads to node
-	// overflow
+func (p *Node) insertChildren(index int, children ...string) {
 	nExistingChildren := len(p.Children)
 	nChildren := len(children)
 
@@ -272,7 +270,7 @@ func (p *Page) insertChildren(index int, children ...string) {
 	p.Children = tmp
 }
 
-func (p *Page) predecessorPage(k string) (*Page, error) {
+func (p *Node) predecessorPage(k string) (*Node, error) {
 	const op errors.Op = "(*Page).predecessorPage"
 	if p.Leaf {
 		return nil, errors.Wrap(op, errors.EInternal, fmt.Errorf("Leaf has no predecessor page"))
@@ -296,7 +294,7 @@ func (p *Page) predecessorPage(k string) (*Page, error) {
 	return page, nil
 }
 
-func (p *Page) successorPage(k string) (*Page, error) {
+func (p *Node) successorPage(k string) (*Node, error) {
 	const op errors.Op = "(*Page).successorPage"
 
 	if p.Leaf {
@@ -317,7 +315,7 @@ func (p *Page) successorPage(k string) (*Page, error) {
 }
 
 // TODO: return error
-func (p *Page) prevChildSibling(index int) *Page {
+func (p *Node) prevChildSibling(index int) *Node {
 	if index <= 0 {
 		return nil
 	}
@@ -329,7 +327,7 @@ func (p *Page) prevChildSibling(index int) *Page {
 	return child
 }
 
-func (p *Page) nextChildSibling(index int) *Page {
+func (p *Node) nextChildSibling(index int) *Node {
 	if index >= len(p.Children)-1 {
 		return nil
 	}
@@ -342,7 +340,7 @@ func (p *Page) nextChildSibling(index int) *Page {
 }
 
 // TODO: TEST
-func (p *Page) mergeWith(median DocRef, other *Page) {
+func (p *Node) mergeWith(median Record, other *Node) {
 	p.Docs = append(p.Docs, median)
 	p.Docs = append(p.Docs, other.Docs...)
 	p.Children = append(p.Children, other.Children...)
@@ -354,11 +352,11 @@ func (p *Page) mergeWith(median DocRef, other *Page) {
 // index `i` as the median key and removing the key from `b` in
 // the process. The original sibling node (i+1) is scheduled
 // for deletion.
-func (p *Page) mergeChildren(i int) {
+func (p *Node) mergeChildren(i int) {
 	var (
-		pivotDoc = p.Docs[i]
+		pivotDoc      = p.Docs[i]
 		leftChild, _  = p.child(i)
-		rightChild, _ = p.child(i+1)
+		rightChild, _ = p.child(i + 1)
 	)
 
 	leftChild.mergeWith(pivotDoc, rightChild)
@@ -374,7 +372,7 @@ func (p *Page) mergeChildren(i int) {
 }
 
 // TODO: return error
-func partitionMedian(nums []DocRef) (DocRef, []DocRef, []DocRef) {
+func partitionMedian(nums []Record) (Record, []Record, []Record) {
 	if nDocs := len(nums); nDocs%2 == 0 || nDocs < 3 {
 		panic("Cannot partition an even number of records")
 	}
@@ -383,10 +381,10 @@ func partitionMedian(nums []DocRef) (DocRef, []DocRef, []DocRef) {
 }
 
 // TODO: return error
-func handleSparsePage(node, child *Page) {
-	//if !child.sparse() {
-	//return
-	//}
+func handleSparsePage(node, child *Node) {
+	if !child.sparse() {
+		return
+	}
 
 	//index, ok := node.childIndex(child)
 	//if !ok {
@@ -444,7 +442,7 @@ func handleSparsePage(node, child *Page) {
 }
 
 // TODO: Return error
-func splitFullPage(node, child *Page) {
+func splitFullPage(node, child *Node) {
 	if !child.full() {
 		return
 	}
@@ -457,7 +455,7 @@ func splitFullPage(node, child *Page) {
 	node.splitChild(index)
 }
 
-func (p *Page) childIndex(c *Page) (int, bool) {
+func (p *Node) childIndex(c *Node) (int, bool) {
 	for i, child := range p.Children {
 		if child == c.ID() {
 			return i, true
@@ -467,26 +465,15 @@ func (p *Page) childIndex(c *Page) (int, bool) {
 	return 0, false
 }
 
-func (p *Page) save() error {
+func (p *Node) save() error {
 	return p.repo.Save(p)
 }
 
-func (p *Page) deletePage() error {
-	//var op errors.Op = "(*Page).deletePage"
-
-	//err := p.writer.Delete(p)
-	//if err != nil {
-	//return errors.Wrap(op, errors.EIO, err)
-	//}
-
-	return nil
+func (p *Node) deletePage() error {
+	return p.repo.Delete(p)
 }
 
-func (p *Page) load() error {
-	return nil
-}
-
-func (p Page) String() string {
+func (p Node) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "-----\nPage\n-----\n")
 	if p.Name != "" {
