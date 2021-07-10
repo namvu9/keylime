@@ -14,39 +14,26 @@ import (
 
 // Index represents a B-tree that indexes records by key
 type Index struct {
-	RootID string
-	Height int
-	T      int
+	RootID  string
+	Height  int
+	Records int // Number of records in the tree
+	T       int
 
 	repo repository.Repository
 }
 
-func (i *Index) SetRepo(r repository.Repository) {
-	i.repo = repository.WithFactory(r, NodeFactory{t: 200, repo: r})
+func (index *Index) SetRepo(r repository.Repository) {
+	index.repo = repository.WithFactory(r, NodeFactory{t: 200, repo: r})
 }
 
-func (ki *Index) Root() (*Node, error) {
-	item, err := ki.repo.Get(ki.RootID)
-	if err != nil {
-		return nil, err
-	}
-
-	node, ok := item.(*Node)
-	if !ok {
-		return nil, fmt.Errorf("Could not load Index root node")
-	}
-
-	return node, nil
-}
-
-func (i *Index) Insert(ctx context.Context, key string, value string, hash string) error {
-	return i.insert(ctx, Record{key, value, hash})
+func (index *Index) Insert(ctx context.Context, key string, value string, hash string) error {
+	return index.insert(ctx, Record{key, value, hash})
 }
 
 func (index *Index) insert(ctx context.Context, ref Record) error {
 	log.Printf("Index: inserting %s\n", ref)
 	const op errors.Op = "(*KeyIndex).Insert"
-	root, err := index.Root()
+	root, err := index.root()
 	if err != nil {
 		return err
 	}
@@ -67,7 +54,7 @@ func (index *Index) insert(ctx context.Context, ref Record) error {
 		newRoot.save()
 	}
 
-	root, err = index.Root()
+	root, err = index.root()
 	if err != nil {
 		return err
 	}
@@ -82,6 +69,8 @@ func (index *Index) insert(ctx context.Context, ref Record) error {
 		return err
 	}
 
+	index.Records++
+
 	log.Printf("Index: done inserting %s\n", ref)
 	return nil
 }
@@ -89,7 +78,7 @@ func (index *Index) insert(ctx context.Context, ref Record) error {
 func (index *Index) Delete(ctx context.Context, key string) error {
 	const op errors.Op = "(*KeyIndex).remove"
 
-	root, err := index.Root()
+	root, err := index.root()
 	if err != nil {
 		return err
 	}
@@ -117,13 +106,14 @@ func (index *Index) Delete(ctx context.Context, key string) error {
 		oldRoot.deleteNode()
 		newRoot.save()
 	}
+	index.Records--
 
 	return nil
 }
 
-func (ki *Index) Get(ctx context.Context, key string) (*Record, error) {
+func (index *Index) Get(ctx context.Context, key string) (*Record, error) {
 	const op errors.Op = "(*KeyIndex).Get"
-	root, err := ki.Root()
+	root, err := index.root()
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +129,69 @@ func (ki *Index) Get(ctx context.Context, key string) (*Record, error) {
 	}
 
 	return &node.Records[i], nil
+}
+
+func (index *Index) Create() error {
+	log.Printf("Creating index in scope %s\n", index.repo.Scope())
+
+	rootNode := index.repo.New().(*Node)
+	rootNode.Leaf = true
+	index.RootID = rootNode.ID()
+
+	return index.repo.Save(rootNode)
+}
+
+func (index *Index) New(leaf bool) (*Node, error) {
+	item := index.repo.New()
+
+	node, ok := item.(*Node)
+	if !ok {
+		return nil, fmt.Errorf("Index: Could not create node")
+	}
+
+	node.Leaf = leaf
+
+	return node, nil
+}
+
+func (index *Index) Info() string {
+	var sb strings.Builder
+
+	sb.WriteString("<Index>\n")
+	sb.WriteString(fmt.Sprintf("Height: %d\n", index.Height))
+	sb.WriteString(fmt.Sprintf("T: %d\n", index.T))
+	sb.WriteString(fmt.Sprintf("Docs: %d\n", index.Records))
+
+	return sb.String()
+}
+
+func (index Index) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "\n-----\nKeyIndex\n-----\n")
+	fmt.Fprintf(&sb, "Height:\t%d\n", index.Height)
+	fmt.Fprintf(&sb, "\n")
+	return sb.String()
+}
+
+func (index *Index) root() (*Node, error) {
+	item, err := index.repo.Get(index.RootID)
+	if err != nil {
+		return nil, err
+	}
+
+	node, ok := item.(*Node)
+	if !ok {
+		return nil, fmt.Errorf("Could not load Index root node")
+	}
+
+	return node, nil
+}
+
+func New(t int, r repository.Repository) Index {
+	return Index{
+		T:    t,
+		repo: repository.WithFactory(r, NodeFactory{t, r}),
+	}
 }
 
 type NodeFactory struct {
@@ -169,59 +222,4 @@ func (pf NodeFactory) Restore(item types.Identifier) error {
 	log.Println("Done restoring node", item.ID(), pf.repo.Scope())
 
 	return nil
-}
-
-func (i *Index) Create() error {
-	log.Printf("Creating index in scope %s\n", i.repo.Scope())
-
-	rootNode := i.repo.New().(*Node)
-	rootNode.Leaf = true
-	i.RootID = rootNode.ID()
-
-	return i.repo.Save(rootNode)
-}
-
-func (i *Index) New(leaf bool) (*Node, error) {
-	item := i.repo.New()
-
-	node, ok := item.(*Node)
-	if !ok {
-		return nil, fmt.Errorf("Index: Could not create node")
-	}
-
-	node.Leaf = leaf
-
-	return node, nil
-}
-
-func (index *Index) Info() string {
-	root, _ := index.Root()
-
-	var sb strings.Builder
-	in := Info{}
-
-	in.validate(root, true)
-
-	sb.WriteString("<Index>\n")
-	sb.WriteString(fmt.Sprintf("Height: %d\n", index.Height))
-	sb.WriteString(fmt.Sprintf("T: %d\n", index.T))
-	sb.WriteString(fmt.Sprintf("Nodes: %d\n", len(in.nodes)))
-	sb.WriteString(fmt.Sprintf("Docs: %d\n", len(in.docs)))
-
-	return sb.String()
-}
-
-func (ki Index) String() string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n-----\nKeyIndex\n-----\n")
-	fmt.Fprintf(&sb, "Height:\t%d\n", ki.Height)
-	fmt.Fprintf(&sb, "\n")
-	return sb.String()
-}
-
-func New(t int, r repository.Repository) Index {
-	return Index{
-		T:    t,
-		repo: repository.WithFactory(r, NodeFactory{t, r}),
-	}
 }

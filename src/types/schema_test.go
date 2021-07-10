@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -162,7 +163,7 @@ func TestSchemaValidation(t *testing.T) {
 			invalidFields: []string{"name"},
 		},
 		{
-			fields: map[string]interface{}{},
+			fields:        map[string]interface{}{},
 			invalidFields: []string{"name", "age"},
 		},
 	} {
@@ -344,7 +345,7 @@ func TestSchemaWithDefaults(t *testing.T) {
 	rCopy := schema.WithDefaults(r)
 
 	//if r == rCopy {
-		//t.Errorf("Expected schema.WithDefaults to return a copy, but got identical struct")
+	//t.Errorf("Expected schema.WithDefaults to return a copy, but got identical struct")
 	//}
 
 	def["age"] = 8
@@ -364,6 +365,40 @@ func TestSchemaWithDefaults(t *testing.T) {
 	if name != "Nam" {
 		t.Errorf("Want 'Nam', Got %s", name)
 	}
+}
+
+func TestSchemaString(t *testing.T) {
+	miniSchema, _ := NewSchemaBuilder().AddField("age", Number).Build()
+
+	sb := NewSchemaBuilder()
+
+	sb.AddField("name", String)
+	sb.AddField("age", Number, Optional, WithDefault(4))
+	sb.AddField("nums", Array, WithElementType(Number))
+	sb.AddField("nams", Array, WithElementType(Number), WithRange(1, 10), Optional)
+	sb.AddField("map", Map) 
+	sb.AddField("yesNo", Boolean)
+	sb.AddField("mini", Object, WithSchema(&miniSchema))
+
+	schema, _ := sb.Build()
+
+	var strb strings.Builder
+	strb.WriteString("{\n")
+	strb.WriteString("  age: Number? = 4,\n")
+	strb.WriteString("  map: Map,\n")
+	strb.WriteString("  mini:   {\n    age: Number\n  },\n")
+	strb.WriteString("  name: String,\n")
+	strb.WriteString("  nams: []Number(1,10)?,\n")
+	strb.WriteString("  nums: []Number,\n")
+	strb.WriteString("  yesNo: Boolean")
+	strb.WriteString("\n}")
+
+	want := strb.String()
+
+	if schema.String() != want {
+		t.Errorf("Want\n%s\ngot\n%s", want, schema.String())
+	}
+
 }
 
 func equal(a, b interface{}) bool {

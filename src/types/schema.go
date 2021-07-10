@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -116,44 +117,80 @@ func (s Schema) WithDefaults(r Document) Document {
 
 func (s Schema) String() string {
 	if len(s.fields) == 0 {
-		return ""
+		return "{}"
 	}
 	return s.StringIndent(0)
 }
 
 func (s Schema) StringIndent(n int) string {
 	var sb strings.Builder
-	sb.WriteString("Schema:")
 
-	for name, field := range s.fields {
-		prefix := strings.Repeat("  ", n)
+	sb.WriteString(fmt.Sprintf("%s{\n", strings.Repeat("  ", n)))
 
-		sb.WriteString(fmt.Sprintf("%s\n- %s\n", prefix, name))
-		sb.WriteString(fmt.Sprintf("%s* Type: %s\n", prefix, field.Type))
-		sb.WriteString(fmt.Sprintf("%s* Required: %v\n", prefix, field.Required))
-		if field.DefaultValue != nil {
-			sb.WriteString(fmt.Sprintf("%s* Default: %v\n", prefix, field.DefaultValue))
+	var names []string
+
+	for name := range s.fields {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	i := 0
+	for _, name := range names {
+		field := s.fields[name]
+
+		prefix := strings.Repeat("  ", n+1)
+
+		sb.WriteString(fmt.Sprintf("%s%s: ", prefix, name))
+
+		if !field.Type.Is(Object) && !field.Type.Is(Array) {
+			sb.WriteString(fmt.Sprintf("%s", string(field.Type)))
 		}
 
-
-		if field.Min != nil {
-			sb.WriteString(fmt.Sprintf("%s* Min: %d\n", prefix, *field.Min))
-		}
-
-		if field.Max != nil {
-			sb.WriteString(fmt.Sprintf("%s* Max: %d\n", prefix, *field.Max))
-		}
-
-		if field.ElementType != nil {
-			sb.WriteString(fmt.Sprintf("%s* Element type: %s\n", prefix, string(*field.ElementType)))
+		if field.Type.Is(Array) {
+			sb.WriteString("[]")
 		}
 
 		if field.Schema != nil {
-			sb.WriteString(fmt.Sprintf("%s* %s\n", prefix, field.Schema.StringIndent(n+1)))
+			sb.WriteString(fmt.Sprintf("%s", field.Schema.StringIndent(n+1)))
 		}
 
+
+		if field.ElementType != nil {
+			sb.WriteString(string(*field.ElementType))
+		}
+
+		if field.Min != nil || field.Max != nil {
+			sb.WriteString("(")
+			if field.Min != nil {
+				sb.WriteString(fmt.Sprint(*field.Min))
+			}
+
+			if field.Max != nil {
+				sb.WriteString(fmt.Sprintf(",%d", *field.Max))
+			}
+			sb.WriteString(")")
+		}
+
+
+		if !field.Required {
+			sb.WriteString("?")
+		}
+
+		if field.DefaultValue != nil {
+			sb.WriteString(" = ")
+
+			sb.WriteString(fmt.Sprint(field.DefaultValue))
+		}
+
+		if i < len(s.fields)-1 {
+			sb.WriteString(",\n")
+		}
+
+		i++
 	}
 
+	sb.WriteString(fmt.Sprintf("\n%s}", strings.Repeat("  ", n)))
 	return sb.String()
 
 }
@@ -343,6 +380,26 @@ func (sf SchemaField) Default() interface{} {
 	return sf.DefaultValue
 }
 
+func (s *Schema) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(s.fields)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (s *Schema) GobDecode(data []byte) error {
+	var (
+		buf = bytes.NewBuffer(data)
+		dec = gob.NewDecoder(buf)
+	)
+
+	return dec.Decode(&s.fields)
+}
+
 type ValidationError map[string]FieldValidationError
 
 func (ve ValidationError) Error() string {
@@ -366,24 +423,4 @@ func (fve FieldValidationError) Error() string {
 		sb.WriteString(fmt.Sprintf("* %s\n", e))
 	}
 	return sb.String()
-}
-
-func (s *Schema) GobEncode() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(s.fields)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-}
-
-func (s *Schema) GobDecode(data []byte) error {
-	var (
-		buf = bytes.NewBuffer(data)
-		dec = gob.NewDecoder(buf)
-	)
-
-	return dec.Decode(&s.fields)
 }

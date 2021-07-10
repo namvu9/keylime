@@ -42,7 +42,6 @@ type Parser struct {
 	tokens []Token
 }
 
-// TODO: TEST
 func (p *Parser) Parse() (Operation, error) {
 	for token := p.tokens[p.index]; token.Type != "EOF"; token = p.Next() {
 		switch token.Value {

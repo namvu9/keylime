@@ -8,25 +8,11 @@ import (
 	"github.com/namvu9/keylime/src/repository"
 )
 
-type Record struct {
-	Key   string
-	Value string
-	Hash  string
-}
-
-func (d Record) IsLessThan(other Record) bool {
-	return strings.Compare(d.Key, other.Key) < 0
-}
-
-func (d Record) IsEqualTo(other Record) bool {
-	return d.Key == other.Key
-}
-
 // A Node is an implementation of a node in a B-tree.
 type Node struct {
 	Name     string
 	Children []string
-	Records     []Record
+	Records  []Record
 	Leaf     bool
 	T        int // Minimum degree `t` represents the minimum branching factor of a node (except the root node).
 
@@ -57,8 +43,6 @@ func (n *Node) child(i int) (*Node, error) {
 	return child, nil
 }
 
-// Delete record with key `k` from Node `p` if it exists.
-// Returns an error otherwise.
 func (p *Node) remove(k string) error {
 	const op errors.Op = "(*Node).Delete"
 	index, exists := p.keyIndex(k)
@@ -158,20 +142,14 @@ func (n *Node) insert(d Record) error {
 	return n.save()
 }
 
-// full reports whether the number of records contained in a
-// node equals 2*`b.T`-1
 func (p *Node) full() bool {
 	return len(p.Records) == 2*p.T-1
 }
 
-// sparse reports whether the number of records contained in
-// the node is less than or equal to `b`.T-1
 func (p *Node) sparse() bool {
 	return len(p.Records) <= p.T-1
 }
 
-// empty reports whether the node is empty (i.e., has no
-// records).
 func (p *Node) empty() bool {
 	return len(p.Records) == 0
 }
@@ -206,7 +184,6 @@ func (p *Node) keyIndex(k string) (index int, exists bool) {
 	return len(p.Records), false
 }
 
-// Panics if child is not full
 func (n *Node) splitChild(index int) error {
 	const op errors.Op = "(*Node).splitChild"
 
@@ -371,6 +348,43 @@ func (p *Node) mergeChildren(i int) {
 	rightChild.deleteNode()
 }
 
+func (p *Node) childIndex(c *Node) (int, bool) {
+	for i, child := range p.Children {
+		if child == c.ID() {
+			return i, true
+		}
+	}
+
+	return 0, false
+}
+
+func (p *Node) save() error {
+	return p.repo.Save(p)
+}
+
+func (p *Node) deleteNode() error {
+	return p.repo.Delete(p)
+}
+
+func (p Node) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "-----\nNode\n-----\n")
+	if p.Name != "" {
+		fmt.Fprintf(&sb, "ID:\t\t%s\n", p.Name)
+	} else {
+		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
+	}
+	fmt.Fprintf(&sb, "t:\t\t%d\n", p.T)
+	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.Leaf)
+	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.Children))
+	fmt.Fprintf(&sb, "Docs:\t")
+	for _, r := range p.Records {
+		fmt.Fprintf(&sb, "%v ", r)
+	}
+	fmt.Fprintf(&sb, "\n")
+	return sb.String()
+}
+
 // TODO: return error
 func partitionMedian(nums []Record) (Record, []Record, []Record) {
 	if nDocs := len(nums); nDocs%2 == 0 || nDocs < 3 {
@@ -455,39 +469,16 @@ func splitFullNode(node, child *Node) {
 	node.splitChild(index)
 }
 
-func (p *Node) childIndex(c *Node) (int, bool) {
-	for i, child := range p.Children {
-		if child == c.ID() {
-			return i, true
-		}
-	}
-
-	return 0, false
+type Record struct {
+	Key   string
+	Value string
+	Hash  string
 }
 
-func (p *Node) save() error {
-	return p.repo.Save(p)
+func (d Record) IsLessThan(other Record) bool {
+	return strings.Compare(d.Key, other.Key) < 0
 }
 
-func (p *Node) deleteNode() error {
-	return p.repo.Delete(p)
-}
-
-func (p Node) String() string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "-----\nNode\n-----\n")
-	if p.Name != "" {
-		fmt.Fprintf(&sb, "ID:\t\t%s\n", p.Name)
-	} else {
-		fmt.Fprint(&sb, "ID:\t\t<NONE>\n")
-	}
-	fmt.Fprintf(&sb, "t:\t\t%d\n", p.T)
-	fmt.Fprintf(&sb, "Leaf:\t\t%v\n", p.Leaf)
-	fmt.Fprintf(&sb, "Children:\t%v\n", len(p.Children))
-	fmt.Fprintf(&sb, "Docs:\t")
-	for _, r := range p.Records {
-		fmt.Fprintf(&sb, "%v ", r)
-	}
-	fmt.Fprintf(&sb, "\n")
-	return sb.String()
+func (d Record) IsEqualTo(other Record) bool {
+	return d.Key == other.Key
 }

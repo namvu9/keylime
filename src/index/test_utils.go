@@ -143,35 +143,3 @@ func (nu namedUtil) hasKeys(keys ...string) {
 func (nu namedUtil) hasChildren(children ...*Node) {
 	nu.u.hasChildren(nu.name, children, nu.node)
 }
-
-type Info struct {
-	docs []Record
-	nodes   []*Node
-}
-
-// Iterates over a collection in order of key precedence
-func (info *Info) validate(p *Node, root bool) {
-	if !root && len(p.Records) < p.T-1 || len(p.Records) > 2*p.T-1 {
-		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.Name, len(p.Records)))
-	}
-
-	if !p.Leaf {
-		if len(p.Children) != len(p.Records)+1 {
-			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.Name, len(p.Children)-1, len(p.Records))
-		}
-		for i := range p.Children {
-			child, _ := p.child(i)
-			info.validate(child, false)
-			if i < len(p.Records) {
-				r := p.Records[i]
-				info.docs = append(info.docs, r)
-			}
-		}
-	} else {
-		for _, r := range p.Records {
-			info.docs = append(info.docs, r)
-		}
-	}
-
-	info.nodes = append(info.nodes, p)
-}

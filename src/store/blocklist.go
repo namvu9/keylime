@@ -13,18 +13,14 @@ import (
 
 type ID string
 
-// Blocklist indexes records by their order with respect to
-// some attribute
 type Blocklist struct {
 	Head      ID
 	Tail      ID
 	BlockSize int // Number of records inside each node
+	Blocks    int // Number of blocks
+	Docs      int // Number of docs
 
 	repo repository.Repository
-}
-
-func (*Blocklist) ID() string {
-	return "order_index"
 }
 
 func (bl *Blocklist) GetBlock(id ID) (*Block, error) {
@@ -70,6 +66,7 @@ func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (ref string
 			return ref, err
 		}
 
+		bl.Blocks++
 		return newHead.ID(), nil
 	}
 
@@ -78,6 +75,7 @@ func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (ref string
 		return ref, err
 	}
 
+	bl.Docs++
 	log.Printf("Block list: done inserting %s\n", doc.Key)
 	return string(bl.Head), nil
 }
@@ -102,7 +100,7 @@ func (bl *Blocklist) setHeadNode(node *Block) error {
 		return err
 	}
 
-	return bl.repo.Save(bl)
+	return nil
 }
 
 func (bl *Blocklist) remove(ctx context.Context, k string) error {
@@ -111,7 +109,7 @@ func (bl *Blocklist) remove(ctx context.Context, k string) error {
 		for i, record := range block.Docs {
 			if record.Key == k {
 				block.Docs[i].Deleted = true
-				fmt.Println("DELETING", block.Docs)
+				bl.Docs--
 				return block.save()
 			}
 		}
@@ -137,11 +135,20 @@ func (bl *Blocklist) create() error {
 	bl.Head = block.Identifier
 	bl.Tail = block.Identifier
 
+	bl.Blocks++
+
 	log.Printf("Done creating block list in scope %s\n", bl.repo.Scope())
 	return nil
 }
 
 func (bl *Blocklist) GetN(n int, asc bool) []types.Document {
+	if asc {
+		log.Printf("(*Blocklist).GetN: first %d\n", n)
+	} else {
+		log.Printf("(*Blocklist).GetN: last %d\n", n)
+	}
+	defer log.Println("(*Blocklist).GetN: Done")
+
 	out := []types.Document{}
 
 	var node *Block
@@ -190,7 +197,6 @@ func (bl *Blocklist) update(ctx context.Context, r types.Document) error {
 		for i, record := range block.Docs {
 			if r.Key == record.Key {
 				block.Docs[i] = r
-				fmt.Println("UPDATING R", r)
 				return block.save()
 			}
 		}
@@ -213,28 +219,12 @@ func (bl *Blocklist) New() (*Block, error) {
 
 func (bl *Blocklist) Info() string {
 	var sb strings.Builder
-	nDocs := 0
-	nNodes := 0
-
-	node, err := bl.GetBlock(bl.Head)
-	if err != nil {
-		return ""
-	}
-	for node != nil {
-		nNodes++
-		for _, r := range node.Docs {
-			if !r.Deleted {
-				nDocs++
-			}
-		}
-
-		node, _ = bl.GetBlock(node.Next)
-	}
 
 	sb.WriteString("<Block list>\n")
 	sb.WriteString(fmt.Sprintf("Block size: %d\n", bl.BlockSize))
-	sb.WriteString(fmt.Sprintf("Nodes: %d\n", nNodes))
-	sb.WriteString(fmt.Sprintf("Docs: %d\n", nDocs))
+	sb.WriteString(fmt.Sprintf("Blocks: %d\n", bl.Blocks))
+	sb.WriteString(fmt.Sprintf("Docs: %d", bl.Docs))
+
 	return sb.String()
 }
 

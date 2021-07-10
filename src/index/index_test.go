@@ -300,15 +300,15 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete from leaf", func(t *testing.T) {
 		repo, _ := repository.NewMockRepo()
-		ki := New(2, repo)
-		root, _ := ki.New(true)
+		idx := New(2, repo)
+		root, _ := idx.New(true)
 		root.insert(Record{Key: "1"})
 		root.insert(Record{Key: "2"})
 		root.insert(Record{Key: "3"})
 
-		ki.RootID = root.ID()
+		idx.RootID = root.ID()
 
-		ki.Delete(ctx, "2")
+		idx.Delete(ctx, "2")
 
 		u := util{t, repo}
 		u.with("leaf", root.ID(), func(nu namedUtil) {
