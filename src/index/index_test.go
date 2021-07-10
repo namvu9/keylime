@@ -11,10 +11,10 @@ import (
 	"github.com/namvu9/keylime/src/repository"
 )
 
-func newMockRepo() (repository.Repository, *repository.IOReporter) {
+func newMockRepo(t int) (repository.Repository, *repository.IOReporter) {
 	repo, reporter := repository.NewMockRepo()
 
-	return repository.WithFactory(repo, PageFactory{t: 200, repo: repo}), reporter
+	return repository.WithFactory(repo, NodeFactory{t: t, repo: repo}), reporter
 }
 
 func TestMain(m *testing.M) {
@@ -29,14 +29,14 @@ func TestGet(t *testing.T) {
 
 	root, _ := index.New(false)
 	childA, _ := index.New(true)
-	childA.Docs = []Record{
+	childA.Records = []Record{
 		{Key: "a"},
 		{Key: "b"},
 		{Key: "c"},
 	}
 
 	childB, _ := index.New(true)
-	childB.Docs = []Record{
+	childB.Records = []Record{
 		{Key: "h"},
 		{Key: "i"},
 		{Key: "j"},
@@ -75,7 +75,7 @@ func TestGet(t *testing.T) {
 }
 func TestInsert(t *testing.T) {
 	t.Run("Index is saved if root changes", func(t *testing.T) {
-		repo, reporter := newMockRepo()
+		repo, reporter := newMockRepo(2)
 		u := util{t, repo}
 		index := New(2, repo)
 
@@ -122,35 +122,35 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("Insertion into tree with full root and full target leaf", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := newMockRepo(2)
 		u := util{t, repo}
 		index := New(2, repo)
 
 		root, _ := index.New(false)
-		root.Docs = []Record{
+		root.Records = []Record{
 			{Key: "k"},
 			{Key: "o"},
 			{Key: "s"},
 		}
 
 		childA, _ := index.New(true)
-		childA.Docs = []Record{
+		childA.Records = []Record{
 			{Key: "a"},
 			{Key: "b"},
 			{Key: "c"},
 		}
 		childB, _ := index.New(true)
-		childB.Docs = []Record{
+		childB.Records = []Record{
 			{Key: "l"},
 			{Key: "m"},
 		}
 		childC, _ := index.New(true)
-		childC.Docs = []Record{
+		childC.Records = []Record{
 			{Key: "p"},
 			{Key: "q"},
 		}
 		childD, _ := index.New(true)
-		childD.Docs = []Record{
+		childD.Records = []Record{
 			{Key: "x"},
 			{Key: "y"},
 		}
@@ -207,22 +207,22 @@ func TestInsert(t *testing.T) {
 
 	})
 }
+
 func TestDelete(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Index is saved if root becomes empty", func(t *testing.T) {
-		repo, reporter := newMockRepo()
-		u := util{t, repo}
+		repo, reporter := newMockRepo(2)
 		index := New(2, repo)
 
 		child, _ := index.New(true)
-		child.Docs = append(child.Docs, Record{Key: "2"})
+		child.Records = append(child.Records, Record{Key: "2"})
 
 		deleteMe, _ := index.New(true)
-		deleteMe.Docs = append(deleteMe.Docs, Record{Key: "8"})
+		deleteMe.Records = append(deleteMe.Records, Record{Key: "8"})
 
 		oldRoot, _ := index.New(false)
-		oldRoot.Docs = append(oldRoot.Docs, Record{Key: "5"})
+		oldRoot.Records = append(oldRoot.Records, Record{Key: "5"})
 		oldRoot.Children = []string{
 			child.ID(),
 			deleteMe.ID(),
@@ -234,14 +234,13 @@ func TestDelete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		u.with("Root", oldRoot.ID(), func(nu namedUtil) {
-			nu.hasNChildren(1)
-			nu.hasNDocs(0)
-		})
-
 		repo.Flush()
-		if len(reporter.Writes) != 2 {
+
+		if oldRoot.ID() == index.RootID {
+			t.Error("Expected new Root ID")
+		}
+
+		if len(reporter.Writes) != 1 {
 			t.Errorf("Want=2 Got=%d", len(reporter.Writes))
 		}
 
@@ -250,7 +249,6 @@ func TestDelete(t *testing.T) {
 		}
 
 		if len(reporter.Deletes) != 2 {
-			fmt.Println(reporter.Deletes, oldRoot.ID(), deleteMe.ID(), index.RootID)
 			t.Errorf("Want=2 Got=%d", len(reporter.Deletes))
 		}
 
@@ -263,7 +261,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("Delete missing key", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := newMockRepo(2)
 		index := New(2, repo)
 
 		root, err := index.New(false)
@@ -280,7 +278,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("Delete key from tree with a single key", func(t *testing.T) {
-		repo, _ := newMockRepo()
+		repo, _ := newMockRepo(2)
 		index := New(2, repo)
 		u := util{t, repo}
 
@@ -323,7 +321,7 @@ func TestDelete(t *testing.T) {
 func BenchmarkInsertKeyIndex(b *testing.B) {
 	for _, t := range []int{2, 20, 50, 100, 200, 500, 1000, 2000} {
 		b.Run(fmt.Sprintf("t=%d, b.N=%d", t, b.N), func(b *testing.B) {
-			repo, _ := newMockRepo()
+			repo, _ := newMockRepo(2)
 			index := New(2, repo)
 			ctx := context.Background()
 

@@ -67,6 +67,8 @@ func (r Repository) Delete(item types.Identifier) error {
 	}
 	deletes[item.ID()] = item
 
+	delete(r.buffer[r.scope], item.ID())
+
 	return nil
 }
 
@@ -176,7 +178,9 @@ func (r Repository) Save(i types.Identifier) error {
 		return fmt.Errorf("ID must not be empty")
 	}
 
-	r.buffer[r.scope][i.ID()] = i
+	if _, ok := r.deleteBuffer[r.scope][i.ID()]; !ok {
+		r.buffer[r.scope][i.ID()] = i
+	}
 
 	return nil
 }

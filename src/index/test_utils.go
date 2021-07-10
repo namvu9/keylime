@@ -5,8 +5,36 @@ import (
 	"testing"
 
 	"github.com/namvu9/keylime/src/repository"
-	record "github.com/namvu9/keylime/src/types"
 )
+
+type NodeMaker func([]Record, ...*Node) *Node
+
+func TreeFactory(repo repository.Repository) NodeMaker {
+	return func(r []Record, children ...*Node) *Node {
+		n, _ := repo.New().(*Node)
+		n.Records = r
+
+		for _, child := range children {
+			n.Children = append(n.Children, child.ID())
+		}
+
+		if len(children) == 0 {
+			n.Leaf = true
+		}
+
+		return n
+	}
+}
+
+func MakeRecords(keys ...string) []Record {
+	var out []Record
+	for _, key := range keys {
+		out = append(out, Record{Key: key})
+	}
+
+	return out
+}
+
 
 type util struct {
 	t    *testing.T
@@ -14,15 +42,23 @@ type util struct {
 }
 
 func (u util) with(name string, id string, fn func(namedUtil)) {
-	item, _ := u.repo.Get(id)
-	page, _ := item.(*Node)
+	item, err := u.repo.Get(id)
+	if err != nil {
+		u.t.Fatal(err)
+	}
+
+	page, ok := item.(*Node)
+	if !ok {
+		fmt.Println("><>>", id, name)
+		u.t.Fatal(ok)
+	}
 
 	fn(namedUtil{u, fmt.Sprintf("[%s]: %s", u.t.Name(), name), page})
 }
 
 func (u util) hasNDocs(name string, n int, node *Node) {
-	if len(node.Docs) != n {
-		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.Docs), n)
+	if len(node.Records) != n {
+		u.t.Errorf("len(%s.records), Got=%d; Want=%d", name, len(node.Records), n)
 	}
 }
 
@@ -34,17 +70,17 @@ func (u util) hasNChildren(name string, n int, node *Node) {
 
 func (u util) hasKeys(name string, keys []string, node *Node) {
 	var nKeys []string
-	for _, k := range node.Docs {
+	for _, k := range node.Records {
 		nKeys = append(nKeys, k.Key)
 	}
 	errMsg := fmt.Sprintf("%s.records.keys, Got=%v; Want=%v", name, nKeys, keys)
 
-	if len(node.Docs) != len(keys) {
+	if len(node.Records) != len(keys) {
 		u.t.Errorf(errMsg)
 		return
 	}
 
-	for i, r := range node.Docs {
+	for i, r := range node.Records {
 		if r.Key != keys[i] {
 			u.t.Errorf(errMsg)
 		}
@@ -108,88 +144,34 @@ func (nu namedUtil) hasChildren(children ...*Node) {
 	nu.u.hasChildren(nu.name, children, nu.node)
 }
 
-func newPageWithKeys(t int, keys []string) *Node {
-	return &Node{
-		T: t,
-	}
-}
-
-func makePageWithBufferedStorage(bs interface{}) func(t int, records []record.Document, children ...*Node) *Node {
-	return func(t int, records []record.Document, children ...*Node) *Node {
-		//root := newPage(t, false)
-		////root.docs = records
-		//root.children = children
-
-		//for _, child := range children {
-		//child.t = t
-		//child.loaded = true
-		//}
-
-		//if len(children) == 0 {
-		//root.leaf = true
-		//}
-
-		//return root
-
-		return nil
-	}
-}
-
-func makePage(t int, records []record.Document, children ...*Node) *Node {
-	//root := newPage(t, false)
-	//root.docs = records
-	//root.children = children
-
-	//for _, child := range children {
-	//child.t = t
-	//child.loaded = true
-	//}
-
-	//if len(children) == 0 {
-	//root.leaf = true
-	//}
-
-	//return root
-	return nil
-}
-
-func makeDocs(keys ...string) []record.Document {
-	out := []record.Document{}
-	for _, key := range keys {
-		out = append(out, record.NewDoc(key))
-	}
-
-	return out
-}
-
 type Info struct {
 	docs []Record
-	pages   []*Node
+	nodes   []*Node
 }
 
 // Iterates over a collection in order of key precedence
 func (info *Info) validate(p *Node, root bool) {
-	if !root && len(p.Docs) < p.T-1 || len(p.Docs) > 2*p.T-1 {
-		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.Name, len(p.Docs)))
+	if !root && len(p.Records) < p.T-1 || len(p.Records) > 2*p.T-1 {
+		panic(fmt.Sprintf("Constraint violation: %s len_records = %d\n", p.Name, len(p.Records)))
 	}
 
 	if !p.Leaf {
-		if len(p.Children) != len(p.Docs)+1 {
-			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.Name, len(p.Children)-1, len(p.Docs))
+		if len(p.Children) != len(p.Records)+1 {
+			fmt.Printf("%s: Constraint violation: number of records should be len(children) - (%d) 1, but got %d\n", p.Name, len(p.Children)-1, len(p.Records))
 		}
 		for i := range p.Children {
 			child, _ := p.child(i)
 			info.validate(child, false)
-			if i < len(p.Docs) {
-				r := p.Docs[i]
+			if i < len(p.Records) {
+				r := p.Records[i]
 				info.docs = append(info.docs, r)
 			}
 		}
 	} else {
-		for _, r := range p.Docs {
+		for _, r := range p.Records {
 			info.docs = append(info.docs, r)
 		}
 	}
 
-	info.pages = append(info.pages, p)
+	info.nodes = append(info.nodes, p)
 }

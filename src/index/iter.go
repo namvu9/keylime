@@ -12,12 +12,12 @@ func (next iterFunc) done(p *Node) bool {
 		return true
 	}
 
-	nextPage, err := next(p)
+	nextNode, err := next(p)
 	if err != nil {
 		return true
 	}
 
-	return nextPage == p
+	return nextNode == p
 }
 
 type collectionIterator struct {
@@ -41,13 +41,13 @@ func (ci *collectionIterator) forEach(fn handleFunc) *collectionIterator {
 
 func (ci *collectionIterator) Get() (*Node, error) {
 	for !ci.next.done(ci.node) {
-		nextPage, err := ci.next(ci.node)
+		nextNode, err := ci.next(ci.node)
 		if err != nil {
 			return nil, err
 		}
 
 		if ci.handler != nil {
-			ci.handler(ci.node, nextPage)
+			ci.handler(ci.node, nextNode)
 		}
 
 		ci.node, _ = ci.next(ci.node)
@@ -56,20 +56,20 @@ func (ci *collectionIterator) Get() (*Node, error) {
 	return ci.node, nil
 }
 
-// maxPage returns an iterator that terminates at the page
+// maxNode returns an iterator that terminates at the node
 // containing the largest key in the tree rooted at `p`.
-func (p *Node) maxPage() *collectionIterator {
-	return p.iter(byMaxPage)
+func (p *Node) maxNode() *collectionIterator {
+	return p.iter(byMaxNode)
 }
 
-// minPage returns an iterator that terminates at the page
+// minNode returns an iterator that terminates at the node
 // containing the smallest key in the tree rooted at `p`
-func (p *Node) minPage() *collectionIterator {
-	return p.iter(byMinPage)
+func (p *Node) minNode() *collectionIterator {
+	return p.iter(byMinNode)
 }
 
 // iter returns an iterator that traverses a `Collection`
-// of `Pages`, rooted at `p`. The traversal order is
+// of `Nodes`, rooted at `p`. The traversal order is
 // determined by the `next` callback.
 func (p *Node) iter(next iterFunc) *collectionIterator {
 	return &collectionIterator{
@@ -90,10 +90,10 @@ func byKey(k string) iterFunc {
 	}
 }
 
-func byMinPage(p *Node) (*Node, error) {
+func byMinNode(p *Node) (*Node, error) {
 	return p.child(0)
 }
 
-func byMaxPage(p *Node) (*Node, error) {
+func byMaxNode(p *Node) (*Node, error) {
 	return p.child(len(p.Children) - 1)
 }

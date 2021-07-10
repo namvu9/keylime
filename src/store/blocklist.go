@@ -27,7 +27,7 @@ func (*Blocklist) ID() string {
 	return "order_index"
 }
 
-func (bl *Blocklist) Get(id ID) (*Block, error) {
+func (bl *Blocklist) GetBlock(id ID) (*Block, error) {
 	if id == "" {
 		return nil, fmt.Errorf("No ID provided")
 	}
@@ -47,17 +47,14 @@ func (bl *Blocklist) Get(id ID) (*Block, error) {
 	return v, nil
 }
 
-// TODO: Bug, document will be inserted at the head of the
-// list regardless of whether it already exists
 func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (ref string, err error) {
 	log.Printf("Block list: inserting %s in scope %s\n", doc.Key, bl.repo.Scope())
-	headNode, err := bl.Get(bl.Head)
+	headNode, err := bl.GetBlock(bl.Head)
 	if err != nil {
 		return ref, err
 	}
 
 	if headNode.Full() {
-		fmt.Println("FULL")
 		newHead, err := bl.New()
 		if err != nil {
 			return ref, err
@@ -86,7 +83,7 @@ func (bl *Blocklist) insert(ctx context.Context, doc types.Document) (ref string
 }
 
 func (bl *Blocklist) setHeadNode(node *Block) error {
-	headNode, err := bl.Get(bl.Head)
+	headNode, err := bl.GetBlock(bl.Head)
 	if err != nil {
 		return err
 	}
@@ -109,23 +106,20 @@ func (bl *Blocklist) setHeadNode(node *Block) error {
 }
 
 func (bl *Blocklist) remove(ctx context.Context, k string) error {
-	node, _ := bl.Get(bl.Head)
-	for node != nil {
-		for i, record := range node.Docs {
+	block, _ := bl.GetBlock(bl.Head)
+	for block != nil {
+		for i, record := range block.Docs {
 			if record.Key == k {
-				node.Docs[i].Deleted = true
-				return node.save()
+				block.Docs[i].Deleted = true
+				fmt.Println("DELETING", block.Docs)
+				return block.save()
 			}
 		}
 
-		node, _ = bl.Get(node.Next)
+		block, _ = bl.GetBlock(block.Next)
 	}
 
 	return fmt.Errorf("Key not found: %s", k)
-}
-
-func (bl *Blocklist) save() error {
-	return bl.repo.Save(bl)
 }
 
 func (bl *Blocklist) create() error {
@@ -152,9 +146,9 @@ func (bl *Blocklist) GetN(n int, asc bool) []types.Document {
 
 	var node *Block
 	if asc {
-		node, _ = bl.Get(bl.Tail)
+		node, _ = bl.GetBlock(bl.Tail)
 	} else {
-		node, _ = bl.Get(bl.Head)
+		node, _ = bl.GetBlock(bl.Head)
 	}
 
 	for node != nil {
@@ -168,7 +162,7 @@ func (bl *Blocklist) GetN(n int, asc bool) []types.Document {
 				}
 			}
 
-			node, _ = bl.Get(node.Prev)
+			node, _ = bl.GetBlock(node.Prev)
 		} else {
 			for i := len(node.Docs) - 1; i >= 0; i-- {
 				if len(out) == n {
@@ -182,7 +176,7 @@ func (bl *Blocklist) GetN(n int, asc bool) []types.Document {
 				}
 			}
 
-			node, _ = bl.Get(node.Next)
+			node, _ = bl.GetBlock(node.Next)
 		}
 
 	}
@@ -191,16 +185,17 @@ func (bl *Blocklist) GetN(n int, asc bool) []types.Document {
 }
 
 func (bl *Blocklist) update(ctx context.Context, r types.Document) error {
-	node, _ := bl.Get(bl.Head)
-	for node != nil {
-		for i, record := range node.Docs {
+	block, _ := bl.GetBlock(bl.Head)
+	for block != nil {
+		for i, record := range block.Docs {
 			if r.Key == record.Key {
-				node.Docs[i] = r
-				return node.save()
+				block.Docs[i] = r
+				fmt.Println("UPDATING R", r)
+				return block.save()
 			}
 		}
 
-		node, _ = bl.Get(node.Next)
+		block, _ = bl.GetBlock(block.Next)
 	}
 
 	return fmt.Errorf("Key not found: %s", r.Key)
@@ -221,7 +216,7 @@ func (bl *Blocklist) Info() string {
 	nDocs := 0
 	nNodes := 0
 
-	node, err := bl.Get(bl.Head)
+	node, err := bl.GetBlock(bl.Head)
 	if err != nil {
 		return ""
 	}
@@ -233,7 +228,7 @@ func (bl *Blocklist) Info() string {
 			}
 		}
 
-		node, _ = bl.Get(node.Next)
+		node, _ = bl.GetBlock(node.Next)
 	}
 
 	sb.WriteString("<Block list>\n")
@@ -265,7 +260,7 @@ type Block struct {
 
 func (b *Block) Get(k string) (*types.Document, error) {
 	for _, doc := range b.Docs {
-		if doc.Key == k {
+		if doc.Key == k && !doc.Deleted {
 			return &doc, nil
 		}
 	}

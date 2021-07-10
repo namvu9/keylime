@@ -2,23 +2,33 @@ package store
 
 import (
 	"context"
+	"io/ioutil"
+	"log"
+	"os"
 	"testing"
 
 	"github.com/namvu9/keylime/src/repository"
 	"github.com/namvu9/keylime/src/types"
 )
 
-func TestInsertOrderIndex(t *testing.T) {
+func TestMain(m *testing.M) {
+	log.SetOutput(ioutil.Discard)
+	os.Exit(m.Run())
+}
+
+func TestInsertBlockList(t *testing.T) {
 	ctx := context.Background()
+
 	t.Run("Normal insert", func(t *testing.T) {
 		repo, reporter := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
 		doc := types.NewDoc("k")
 
+		oi.create()
 		oi.insert(ctx, doc)
 		oi.repo.Flush()
 
-		headNode, _ := oi.Get(oi.Head)
+		headNode, _ := oi.GetBlock(oi.Head)
 
 		if got := len(headNode.Docs); got != 1 {
 			t.Errorf("n records, want %d got %d", 1, got)
@@ -40,7 +50,8 @@ func TestInsertOrderIndex(t *testing.T) {
 	t.Run("Insertion into full node", func(t *testing.T) {
 		repo, reporter := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
-		oldHead, _ := oi.Get(oi.Head)
+		oi.create()
+		oldHead, _ := oi.GetBlock(oi.Head)
 		oldHead.Docs = []types.Document{types.NewDoc("nil"), types.NewDoc("HAHA")}
 
 		r := types.NewDoc("o")
@@ -55,7 +66,7 @@ func TestInsertOrderIndex(t *testing.T) {
 			t.Errorf("Expected old head to be new tail")
 		}
 
-		newHead, _ := oi.Get(oi.Head)
+		newHead, _ := oi.GetBlock(oi.Head)
 		if newHead.Next != oi.Tail {
 			t.Errorf("New head does not reference old head")
 		}
@@ -74,12 +85,13 @@ func TestInsertOrderIndex(t *testing.T) {
 	})
 }
 
-func TestDeleteOrderIndex(t *testing.T) {
+func TestDeleteBlockList(t *testing.T) {
 	repo, reporter := repository.NewMockRepo()
 	oi := newBlocklist(2, repo)
 	doc := types.NewDoc("k")
+	oi.create()
 
-	headNode, err := oi.Get(oi.Head)
+	headNode, err := oi.GetBlock(oi.Head)
 	oi.insert(context.Background(), doc)
 
 	if headNode.Docs[0].Deleted {
@@ -102,12 +114,13 @@ func TestDeleteOrderIndex(t *testing.T) {
 	}
 }
 
-func TestUpdateOrderIndex(t *testing.T) {
+func TestUpdateBlockList(t *testing.T) {
 	repo, reporter := repository.NewMockRepo()
 	oi := newBlocklist(2, repo)
+	oi.create()
 	doc := types.NewDoc("k")
 
-	headNode, err := oi.Get(oi.Head)
+	headNode, err := oi.GetBlock(oi.Head)
 	if err != nil {
 		t.Error(err)
 	}
@@ -126,25 +139,34 @@ func TestUpdateOrderIndex(t *testing.T) {
 
 }
 
-func TestGetOrderIndex(t *testing.T) {
+func newMockRepo(blockSize int) (repository.Repository, *repository.IOReporter) {
+	repo, reporter := repository.NewMockRepo()
+
+	return repository.WithFactory(repo, &BlockFactory{capacity: blockSize, repo: repo}), reporter
+}
+
+func TestGetBlockList(t *testing.T) {
 	ctx := context.Background()
+
 	t.Run("Desc: n < records in index", func(t *testing.T) {
-		repo, _ := repository.NewMockRepo()
-		oi := newBlocklist(2, repo)
+		repo, _ := newMockRepo(2)
+		bl := newBlocklist(2, repo)
+
+		bl.create()
 
 		d := types.NewDoc("d")
 		d.Deleted = true
 
-		oi.insert(ctx, types.NewDoc("a"))
-		oi.insert(ctx, types.NewDoc("b"))
-		oi.insert(ctx, types.NewDoc("c"))
-		oi.insert(ctx, d)
-		oi.insert(ctx, types.NewDoc("e"))
+		bl.insert(ctx, types.NewDoc("a"))
+		bl.insert(ctx, types.NewDoc("b"))
+		bl.insert(ctx, types.NewDoc("c"))
+		bl.insert(ctx, d)
+		bl.insert(ctx, types.NewDoc("e"))
 
-		res := oi.GetN(4, false)
+		res := bl.GetN(4, false)
 
 		if len(res) != 4 {
-			t.Errorf("Want %d Got %d", 4, len(res))
+			t.Fatalf("Want %d Got %d", 4, len(res))
 		}
 
 		if got := res[0].Key; got != "e" {
@@ -164,6 +186,7 @@ func TestGetOrderIndex(t *testing.T) {
 	t.Run("Desc: n > records in index", func(t *testing.T) {
 		repo, _ := repository.NewMockRepo()
 		oi := newBlocklist(2, repo)
+		oi.create()
 
 		d := types.NewDoc("d")
 		d.Deleted = true
@@ -195,8 +218,9 @@ func TestGetOrderIndex(t *testing.T) {
 	})
 
 	t.Run("Asc: n < records in index", func(t *testing.T) {
-		repo, _ := repository.NewMockRepo()
+		repo, _ := newMockRepo(2)
 		oi := newBlocklist(2, repo)
+		oi.create()
 
 		d := types.NewDoc("d")
 		d.Deleted = true
@@ -228,8 +252,9 @@ func TestGetOrderIndex(t *testing.T) {
 	})
 
 	t.Run("Asc: n > records in index", func(t *testing.T) {
-		repo, _ := repository.NewMockRepo()
+		repo, _ := newMockRepo(2)
 		oi := newBlocklist(2, repo)
+		oi.create()
 
 		d := types.NewDoc("d")
 		d.Deleted = true
@@ -261,31 +286,7 @@ func TestGetOrderIndex(t *testing.T) {
 	})
 }
 
-// Make sure both the indexes and the root nodes are saved
-func TestCreateIndex(t *testing.T) {
-	//repo, reporter := repository.NewMockRepo()
-	//t.Run("Key Index", func(t *testing.T) {
-		////ki := index.New(10, repo)
-
-		//err := ki.create()
-		//if err != nil {
-			//t.Errorf("Unexpected error %s", err)
-		//}
-
-		//if _, ok := reporter.Writes["key_index"]; !ok {
-		//t.Errorf("Did not write key_index")
-		//}
-
-		//if ki.RootID != ki.root.ID {
-		//t.Errorf("Expected RootPage (%s) and root ID (%s) to be equal", ki.RootID, ki.root.ID)
-		//}
-
-		//if _, ok := reporter.Writes[ki.root.ID]; !ok {
-		//t.Errorf("Did not write root node")
-		//}
-
-	//})
-
+func TestCreateBlocklist(t *testing.T) {
 	t.Run("Block list", func(t *testing.T) {
 		repo, reporter := repository.NewMockRepo()
 		oi := newBlocklist(10, repo)
@@ -295,12 +296,10 @@ func TestCreateIndex(t *testing.T) {
 			t.Errorf("Unexpected error %s", err)
 		}
 
+		oi.repo.Flush()
+
 		if oi.Head != oi.Tail {
 			t.Errorf("Expected head (%s) and tail (%s) to be equal", oi.Head, oi.Tail)
-		}
-
-		if _, ok := reporter.Writes["order_index"]; !ok {
-			t.Errorf("Did not write order_index")
 		}
 
 		if _, ok := reporter.Writes[string(oi.Head)]; !ok {

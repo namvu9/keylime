@@ -115,6 +115,9 @@ func (s Schema) WithDefaults(r Document) Document {
 }
 
 func (s Schema) String() string {
+	if len(s.fields) == 0 {
+		return ""
+	}
 	return s.StringIndent(0)
 }
 

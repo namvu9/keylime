@@ -19,7 +19,7 @@ type Collection struct {
 	Index  index.Index
 	Blocks Blocklist
 
-	repo   repository.Repository
+	repo repository.Repository
 }
 
 func (c *Collection) ID() string {
@@ -34,7 +34,7 @@ func (c *Collection) Get(ctx context.Context, k string) (*types.Document, error)
 		return nil, err
 	}
 
-	block, err := c.Blocks.Get(ID(ref.Value))
+	block, err := c.Blocks.GetBlock(ID(ref.Value))
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (c *Collection) Set(ctx context.Context, k string, fields Fields) error {
 		return err
 	}
 
-	if err := c.Index.Insert(ctx, k, blockID); err != nil {
+	if err := c.Index.Insert(ctx, k, blockID, doc.Hash()); err != nil {
 		return err
 	}
 
@@ -107,7 +107,7 @@ func (c *Collection) Update(ctx context.Context, k string, fields map[string]int
 		return wrapError(err)
 	}
 
-	block, err := c.Blocks.Get(ID(ref.Value))
+	block, err := c.Blocks.GetBlock(ID(ref.Value))
 	if err != nil {
 		return err
 	}
@@ -115,6 +115,10 @@ func (c *Collection) Update(ctx context.Context, k string, fields map[string]int
 	doc, err := block.Get(k)
 	if err != nil {
 		return err
+	}
+
+	if ref.Hash != doc.Hash() {
+		return fmt.Errorf("Hashes did not match: Want=%s Got=%s", ref.Hash, doc.Hash())
 	}
 
 	err = block.Update(doc.Update(fields))
@@ -175,17 +179,7 @@ func (c *Collection) Delete(ctx context.Context, k string) error {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
 
-	err = c.Index.Save()
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
-
 	err = c.Blocks.remove(ctx, k)
-	if err != nil {
-		return errors.Wrap(op, errors.EInternal, err)
-	}
-
-	err = c.Blocks.save()
 	if err != nil {
 		return errors.Wrap(op, errors.EInternal, err)
 	}
@@ -205,7 +199,10 @@ func (c *Collection) Info(ctx context.Context) string {
 	sb.WriteString(fmt.Sprintf("Collection: %s\n", c.ID()))
 	sb.WriteString("---------------\n")
 
-	sb.WriteString(c.Schema.String())
+	schema := c.Schema.String()
+	if schema != "" {
+		sb.WriteString(schema)
+	}
 	sb.WriteString("\n")
 	sb.WriteString(c.Index.Info())
 	sb.WriteString("\n")

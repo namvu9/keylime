@@ -1,59 +1,76 @@
 package index
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
-func TestMaxPage(t *testing.T) {
-	max := makePage(2, makeDocs("11"))
+func TestMaxNode(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		p    *Node
+		keys []string
 	}{
-		{"from root",
-			makePage(2, makeDocs("7"),
-				makePage(2, makeDocs("5")),
-				makePage(2, makeDocs("9"),
-					makePage(2, makeDocs("8")),
-					max,
-				),
-			),
-		},
-
-		{"from leaf", max},
+		{"from root", []string{"7", "5", "8", "9"}},
+		{"from leaf", []string{"11"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			n, _ := test.p.maxPage().Get()
+			repo, _ := newMockRepo(2)
+			index := New(2, repo)
+			u := util{t, repo}
 
-			if n != max {
-				t.Errorf("Got=%v, Want=%v", n.Name, max.Name)
+			root, _ := index.New(true)
+			index.RootID = root.ID()
+
+			for _, key := range test.keys {
+				index.insert(context.Background(), Record{Key: key})
 			}
+
+			u.with("root", index.RootID, func(nu namedUtil) {
+				n, err := nu.node.maxNode().Get()
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				_, ok := n.keyIndex(test.keys[len(test.keys)-1])
+				if !ok {
+					t.Errorf("maxNode did not return node with largest key")
+				}
+			})
 		})
 	}
 }
 
-func TestMinPage(t *testing.T) {
-	min := makePage(2, makeDocs("11"))
+func TestMinNode(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		p    *Node
+		keys []string
 	}{
-		{"from root",
-			makePage(2, makeDocs("7"),
-				makePage(2, makeDocs("5"),
-					min,
-					makePage(2, makeDocs("8")),
-				),
-				makePage(2, makeDocs("9")),
-			),
-		},
-
-		{"from leaf", min},
+		{"from root", []string{"5", "7", "8", "9"}},
+		{"from leaf", []string{"11"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			n, _ := test.p.minPage().Get()
+			repo, _ := newMockRepo(2)
+			index := New(2, repo)
+			u := util{t, repo}
 
-			if n != min {
-				t.Errorf("Got=%v, Want=%v", n.Name, min.Name)
+			root, _ := index.New(true)
+			index.RootID = root.ID()
+
+			for _, key := range test.keys {
+				index.insert(context.Background(), Record{Key: key})
 			}
+
+			u.with("root", index.RootID, func(nu namedUtil) {
+				n, err := nu.node.minNode().Get()
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				_, ok := n.keyIndex(test.keys[0])
+				if !ok {
+					t.Errorf("minNode did not return node with smallest key")
+				}
+			})
 		})
 	}
 }

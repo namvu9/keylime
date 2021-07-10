@@ -1,6 +1,9 @@
 package types
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -17,6 +20,17 @@ type Document struct {
 	CreatedAt    time.Time
 	LastModified time.Time
 	Deleted      bool
+}
+
+func (d Document) Hash() string {
+	s := sha256.New()
+	enc := gob.NewEncoder(s)
+	
+	for _, field := range d.Fields {
+		enc.Encode(field.Value)
+	}
+
+	return base64.StdEncoding.EncodeToString(s.Sum(nil))
 }
 
 // Set the values of one or more fields whose type are
