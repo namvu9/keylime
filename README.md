@@ -46,4 +46,19 @@ KL> GET name, email FROM user1 IN users;
 
 # Get the last 5 documents inserted into the collection
 KL> LAST 5 IN users;
+[
+  {
+    "Key": "user1",
+    "Fields": {
+      "age": {
+        "Type": "Number",
+        "Value": 4
+      }
+    },
+    "CreatedAt": "2021-07-10T18:45:43.452380469+02:00",
+    "LastModified": "2021-07-10T18:45:43.452381617+02:00",
+    "Deleted": false
+  },
+  ...
+]
 ```
