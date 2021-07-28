@@ -45,5 +45,5 @@ KL> GET user1 IN users;
 KL> GET name, email FROM user1 IN users;
 
 # Get the last 5 documents inserted into the collection
-KL> LAST 5 IN ussers;
+KL> LAST 5 IN users;
 ```
