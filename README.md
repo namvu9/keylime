@@ -1,6 +1,6 @@
 # keylime
 
-Keylime is a simple key-value store that I wrote as a learning experience in building a (very) simple database from scratch.
+Keylime is a simple key-document store that I wrote as a learning experience in building a (very) simple database from scratch.
 At a high level, the store consists of one or more named collections, each of which contains a group of documents. The documents
 are indexed using a B-tree to minimize the number of I/O operations needed to find a document with a specific key.
 
